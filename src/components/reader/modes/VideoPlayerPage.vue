@@ -1,21 +1,41 @@
 <script setup lang="ts">
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { ChevronLeft, Link, Keyboard, ArrowUp, Copy, Check } from 'lucide-vue-next';
-import { storeToRefs } from 'pinia';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import type { ChapterItem, ChapterGroup } from '@/types';
-import { useAppConfigStore, groupChapters, useScriptBridgeStore } from '@/stores';
-import type { ReaderBookInfo } from '../types';
-import type { VideoCategoryGroup } from '../video/types';
+import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  ChevronLeft,
+  Link,
+  Keyboard,
+  ArrowUp,
+  Copy,
+  Check,
+} from "lucide-vue-next";
+import { storeToRefs } from "pinia";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
+import type { ChapterItem, ChapterGroup } from "@/types";
+import { isTauri } from "@/composables/useEnv";
+import {
+  useAppConfigStore,
+  groupChapters,
+  useScriptBridgeStore,
+} from "@/stores";
+import type { ReaderBookInfo } from "../types";
+import type { VideoCategoryGroup, VideoSource } from "../video/types";
 import {
   ensureFrontendNamespaceLoaded,
   getFrontendStorageItem,
   legacyLocalStorageEntries,
   legacyLocalStorageRemove,
   setFrontendStorageItem,
-} from '../../../composables/useFrontendStorage';
-import { parseVideoSource } from '../video/types';
-import VideoMode from './VideoMode.vue';
+} from "../../../composables/useFrontendStorage";
+import { invokeWithTimeout } from "../../../composables/useInvoke";
+import { parseVideoSource } from "../video/types";
+import VideoMode from "./VideoMode.vue";
 
 const props = defineProps<{
   /** chapterContent 拿到的播放地址（空则展示 loading/error 状态） */
@@ -37,19 +57,22 @@ const props = defineProps<{
   /** 将线路标签显示在视频下方（书架模式），而非目录侧边栏 */
   inlineGroupTabs?: boolean;
   /** 各集播放进度（key = chapter.url） */
-  episodeProgress?: Record<string, { time: number; duration: number; lastPlayedAt: number }>;
+  episodeProgress?: Record<
+    string,
+    { time: number; duration: number; lastPlayedAt: number }
+  >;
 }>();
 
 const emit = defineEmits<{
-  (e: 'close'): void;
-  (e: 'goto-chapter', index: number): void;
-  (e: 'prev-chapter'): void;
-  (e: 'next-chapter'): void;
-  (e: 'progress', time: number, duration: number): void;
-  (e: 'ended'): void;
-  (e: 'retry'): void;
+  (e: "close"): void;
+  (e: "goto-chapter", index: number): void;
+  (e: "prev-chapter"): void;
+  (e: "next-chapter"): void;
+  (e: "progress", time: number, duration: number): void;
+  (e: "ended"): void;
+  (e: "retry"): void;
   /** 切换线路分组时通知父组件 */
-  (e: 'switch-group', groupIndex: number): void;
+  (e: "switch-group", groupIndex: number): void;
 }>();
 
 // 播放器 ref（完整 expose 类型）
@@ -77,7 +100,7 @@ const logStartedAt = ref(Date.now());
 const logCopied = ref(false);
 
 async function copyLogs() {
-  const text = loadingLogs.value.join('\n');
+  const text = loadingLogs.value.join("\n");
   if (!text) {
     return;
   }
@@ -104,8 +127,8 @@ const groups = computed<ChapterGroup[]>(() => {
 
 const hasGroups = computed(() => groups.value.length > 1);
 const activeGroupIndex = ref(props.initialGroupIndex ?? 0);
-const sortOrder = ref<'asc' | 'desc'>('asc');
-const STORAGE_NAMESPACE = 'reader.video-page';
+const sortOrder = ref<"asc" | "desc">("asc");
+const STORAGE_NAMESPACE = "reader.video-page";
 
 /** 前端存储 key，用于记忆标签和排序 */
 function vpStorageKey(suffix: string) {
@@ -114,22 +137,36 @@ function vpStorageKey(suffix: string) {
 }
 
 function saveVpTabState() {
-  setFrontendStorageItem(STORAGE_NAMESPACE, vpStorageKey('group'), String(activeGroupIndex.value));
-  setFrontendStorageItem(STORAGE_NAMESPACE, vpStorageKey('sort'), sortOrder.value);
+  setFrontendStorageItem(
+    STORAGE_NAMESPACE,
+    vpStorageKey("group"),
+    String(activeGroupIndex.value),
+  );
+  setFrontendStorageItem(
+    STORAGE_NAMESPACE,
+    vpStorageKey("sort"),
+    sortOrder.value,
+  );
 }
 
 function restoreVpTabState() {
   try {
-    const savedGroup = getFrontendStorageItem(STORAGE_NAMESPACE, vpStorageKey('group'));
+    const savedGroup = getFrontendStorageItem(
+      STORAGE_NAMESPACE,
+      vpStorageKey("group"),
+    );
     if (savedGroup !== null) {
       const idx = Number(savedGroup);
       if (idx >= 0 && idx < groups.value.length) {
         activeGroupIndex.value = idx;
       }
     }
-    const savedSort = getFrontendStorageItem(STORAGE_NAMESPACE, vpStorageKey('sort'));
-    if (savedSort === 'desc') {
-      sortOrder.value = 'desc';
+    const savedSort = getFrontendStorageItem(
+      STORAGE_NAMESPACE,
+      vpStorageKey("sort"),
+    );
+    if (savedSort === "desc") {
+      sortOrder.value = "desc";
     }
   } catch {
     /* ignore */
@@ -162,11 +199,11 @@ onMounted(() => {
 function onGroupTabClick(idx: number) {
   activeGroupIndex.value = idx;
   saveVpTabState();
-  emit('switch-group', idx);
+  emit("switch-group", idx);
 }
 
 function toggleVpSort() {
-  sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+  sortOrder.value = sortOrder.value === "asc" ? "desc" : "asc";
   saveVpTabState();
 }
 
@@ -202,7 +239,7 @@ const displayEpisodes = computed(() => {
   } else {
     list = props.chapters;
   }
-  return sortOrder.value === 'desc' ? [...list].toReversed() : list;
+  return sortOrder.value === "desc" ? [...list].toReversed() : list;
 });
 const hasEpisodeList = computed(() => displayEpisodes.value.length >= 1);
 
@@ -212,31 +249,38 @@ function resolveChapterIndex(chapter: ChapterItem) {
     return byRef;
   }
   return props.chapters.findIndex(
-    (item) => item.url === chapter.url && (item.group || '') === (chapter.group || ''),
+    (item) =>
+      item.url === chapter.url && (item.group || "") === (chapter.group || ""),
   );
 }
 
 function emitGotoChapter(chapter: ChapterItem) {
   const index = resolveChapterIndex(chapter);
   if (index >= 0) {
-    emit('goto-chapter', index);
+    emit("goto-chapter", index);
   }
 }
 
 const activeChapter = computed(() => props.chapters[props.activeChapterIndex]);
 
-const videoTitle = computed(() => props.bookInfo?.name || activeChapter.value?.name || '视频播放');
-const sourceName = computed(
-  () => props.bookInfo?.sourceName || props.bookInfo?.fileName || props.fileName || '未知书源',
+const videoTitle = computed(
+  () => props.bookInfo?.name || activeChapter.value?.name || "视频播放",
 );
-const pageUrl = computed(() => activeChapter.value?.url || '');
+const sourceName = computed(
+  () =>
+    props.bookInfo?.sourceName ||
+    props.bookInfo?.fileName ||
+    props.fileName ||
+    "未知书源",
+);
+const pageUrl = computed(() => activeChapter.value?.url || "");
 
 function formatTime(ts?: number) {
   if (!ts) {
-    return '';
+    return "";
   }
   const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 // ── URL 处理 ──────────────────────────────────────────────────────────────
@@ -247,7 +291,7 @@ function formatTime(ts?: number) {
  * 分类覆盖内容：用户选择分类后通过 runChapterContent(url, selectedCategories)
  * 获取的新内容。若存在则覆盖 props.content。
  */
-const categoryContent = ref('');
+const categoryContent = ref("");
 const categoryFetching = ref(false);
 
 /** 当前用户选中的分类选项（{ [groupId]: optionId }） */
@@ -255,9 +299,24 @@ const selectedCategories = ref<Record<string, string>>({});
 
 /** 实际展示/播放内容（分类覆盖 > 原始内容） */
 const activeContent = computed(() => categoryContent.value || props.content);
+
+const proxyContent = ref<string | null>(null);
+const proxyLoading = ref(false);
+const proxyError = ref("");
+let activeProxyPort: number | null = null;
+let proxyGeneration = 0;
+
+const playbackContent = computed(
+  () => proxyContent.value ?? activeContent.value,
+);
+const playerError = computed(() => props.error || proxyError.value);
 const showPlayerLoading = computed(
   () =>
-    props.loading || (!props.error && !activeContent.value.trim() && !contentLoadFinished.value),
+    props.loading ||
+    proxyLoading.value ||
+    (!playerError.value &&
+      !activeContent.value.trim() &&
+      !contentLoadFinished.value),
 );
 
 const loadingLogs = computed(() =>
@@ -266,8 +325,8 @@ const loadingLogs = computed(() =>
     .slice(-120)
     .map((log) => {
       const d = new Date(log.time);
-      const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-      const source = log.source ? `[${log.source}] ` : '';
+      const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+      const source = log.source ? `[${log.source}] ` : "";
       return `${time} ${source}${log.message}`;
     }),
 );
@@ -316,7 +375,7 @@ watch(
       }
     });
   },
-  { flush: 'post' },
+  { flush: "post" },
 );
 
 /** 尝试从 content 中提取视频流 URL；视频书源的 content 返回值就是实际播放地址 */
@@ -326,6 +385,127 @@ const videoSource = computed(() => {
   }
   return parseVideoSource(activeContent.value);
 });
+
+type ProxyPlaybackType = Exclude<NonNullable<VideoSource["type"]>, "proxy">;
+
+interface VideoProxySession {
+  url: string;
+  port: number;
+}
+
+function guessProxyPlaybackType(source: VideoSource): ProxyPlaybackType {
+  if (source.proxyType) {
+    return source.proxyType;
+  }
+  const lower = source.url.toLowerCase();
+  if (lower.includes(".m3u8")) {
+    return "hls";
+  }
+  if (lower.includes(".mpd")) {
+    return "dash";
+  }
+  if (lower.includes(".flv")) {
+    return "flv";
+  }
+  return "mp4";
+}
+
+async function stopActiveVideoProxy() {
+  const port = activeProxyPort;
+  activeProxyPort = null;
+  if (port === null) {
+    return;
+  }
+  try {
+    await invokeWithTimeout<void>("stop_video_proxy", { port }, 5000);
+  } catch (err) {
+    console.warn("[VideoPlayerPage] stop video proxy failed:", err);
+  }
+}
+
+async function stopDetachedVideoProxy(port: number) {
+  try {
+    await invokeWithTimeout<void>("stop_video_proxy", { port }, 5000);
+  } catch {
+    // ignore stale proxy cleanup failures
+  }
+}
+
+watch(
+  activeContent,
+  async (content) => {
+    const generation = ++proxyGeneration;
+    proxyContent.value = null;
+    proxyError.value = "";
+    const trimmed = content.trim();
+    const source = trimmed ? parseVideoSource(content) : null;
+    const needsProxy = source?.type === "proxy";
+    proxyLoading.value = needsProxy;
+    await stopActiveVideoProxy();
+
+    if (generation !== proxyGeneration) {
+      return;
+    }
+
+    if (!trimmed || !source) {
+      proxyLoading.value = false;
+      return;
+    }
+
+    if (!needsProxy) {
+      proxyLoading.value = false;
+      return;
+    }
+
+    if (!isTauri) {
+      proxyLoading.value = false;
+      proxyError.value = "当前环境不支持本地视频代理，请在 Tauri 客户端播放";
+      return;
+    }
+
+    try {
+      const session = await invokeWithTimeout<VideoProxySession>(
+        "start_video_proxy",
+        {
+          url: source.url,
+          headers: source.headers ?? {},
+          concurrency: source.proxyConcurrency,
+        },
+        10000,
+      );
+      if (generation !== proxyGeneration) {
+        await stopDetachedVideoProxy(session.port);
+        return;
+      }
+      activeProxyPort = session.port;
+      // 将书源 headers 转为 X-Proxy-* 自定义头传给播放器。
+      // 播放器（xgplayer-mp4）会在每次 Range 请求时带上这些头，
+      // 本地代理读取后用于向上游夸克 CDN 发送正确的认证头，
+      // 从而避免浏览器直接访问上游（CORS 会拦截）。
+      const proxyHeaders = source.headers
+        ? Object.fromEntries(
+            Object.entries(source.headers).map(([k, v]) => [`X-Proxy-${k}`, v]),
+          )
+        : undefined;
+      const proxiedSource: VideoSource = {
+        ...source,
+        url: session.url,
+        type: guessProxyPlaybackType(source),
+        headers: proxyHeaders,
+      };
+      proxyContent.value = JSON.stringify(proxiedSource);
+    } catch (err) {
+      if (generation === proxyGeneration) {
+        proxyError.value = `启动本地视频代理失败: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    } finally {
+      if (generation === proxyGeneration) {
+        proxyLoading.value = false;
+      }
+    }
+  },
+  { immediate: true },
+);
 
 /** 当前内容声明的分类维度列表 */
 const availableCategories = computed<VideoCategoryGroup[]>(
@@ -368,8 +548,13 @@ async function fetchWithCategories() {
   }
   categoryFetching.value = true;
   try {
-    const raw = await _bridge.runChapterContent(props.fileName, chapter.url, undefined, params);
-    categoryContent.value = typeof raw === 'string' ? raw : String(raw ?? '');
+    const raw = await _bridge.runChapterContent(
+      props.fileName,
+      chapter.url,
+      undefined,
+      params,
+    );
+    categoryContent.value = typeof raw === "string" ? raw : String(raw ?? "");
   } catch {
     // 静默失败，保留旧内容
   } finally {
@@ -381,7 +566,10 @@ async function onSelectCategoryOption(groupId: string, optionId: string) {
   if (selectedCategories.value[groupId] === optionId) {
     return;
   }
-  selectedCategories.value = { ...selectedCategories.value, [groupId]: optionId };
+  selectedCategories.value = {
+    ...selectedCategories.value,
+    [groupId]: optionId,
+  };
   saveCategories();
   await fetchWithCategories();
 }
@@ -390,7 +578,7 @@ async function onSelectCategoryOption(groupId: string, optionId: string) {
 watch(
   () => props.activeChapterIndex,
   () => {
-    categoryContent.value = '';
+    categoryContent.value = "";
     // 保留 selectedCategories，让 fetchWithCategories 在新集重用
     void fetchWithCategories();
   },
@@ -404,14 +592,17 @@ watch(
       return;
     }
     // 若当前已有分类选择且没有已覆盖的内容，触发一次覆盖请求
-    if (Object.keys(selectedCategories.value).length > 0 && !categoryContent.value) {
+    if (
+      Object.keys(selectedCategories.value).length > 0 &&
+      !categoryContent.value
+    ) {
       void fetchWithCategories();
     }
   },
 );
 
 const videoSourceUrl = computed(() => {
-  const line = videoSource.value?.url ?? '';
+  const line = videoSource.value?.url ?? "";
   try {
     const url = new URL(line);
     return url.toString();
@@ -424,16 +615,21 @@ const videoSourceUrl = computed(() => {
 const videoSourceUrlShort = computed(() => {
   const raw = videoSourceUrl.value;
   if (!raw) {
-    return '';
+    return "";
   }
-  const stripped = raw.replace(/^https?:\/\//, '');
-  return stripped.length > 72 ? stripped.slice(0, 72) + '…' : stripped;
+  const stripped = raw.replace(/^https?:\/\//, "");
+  return stripped.length > 72 ? stripped.slice(0, 72) + "…" : stripped;
 });
 
 type DetailRow = { label: string; value: string; isUrl?: boolean };
 
-function pushRow(rows: DetailRow[], label: string, value: unknown, isUrl = false) {
-  if (value === undefined || value === null || value === '') {
+function pushRow(
+  rows: DetailRow[],
+  label: string,
+  value: unknown,
+  isUrl = false,
+) {
+  if (value === undefined || value === null || value === "") {
     return;
   }
   rows.push({ label, value: String(value), isUrl });
@@ -442,46 +638,52 @@ function pushRow(rows: DetailRow[], label: string, value: unknown, isUrl = false
 const detailRows = computed<DetailRow[]>(() => {
   const b = props.bookInfo;
   const rows: DetailRow[] = [];
-  pushRow(rows, '实际播放地址', videoSourceUrl.value, true);
-  pushRow(rows, '页面所在地址', pageUrl.value, true);
-  pushRow(rows, '当前选集', activeChapter.value?.name);
+  pushRow(rows, "实际播放地址", videoSourceUrl.value, true);
+  pushRow(rows, "页面所在地址", pageUrl.value, true);
+  pushRow(rows, "当前选集", activeChapter.value?.name);
   pushRow(
     rows,
-    '选集序号',
-    props.chapters.length ? `${props.activeChapterIndex + 1}/${props.chapters.length}` : '',
+    "选集序号",
+    props.chapters.length
+      ? `${props.activeChapterIndex + 1}/${props.chapters.length}`
+      : "",
   );
-  pushRow(rows, '视频标题', b?.name);
-  pushRow(rows, '作者', b?.author);
-  pushRow(rows, '书源名字', b?.sourceName);
-  pushRow(rows, '书源文件', b?.fileName || props.fileName);
-  pushRow(rows, '作品地址', b?.bookUrl, true);
-  pushRow(rows, '分类标签', b?.kind);
-  pushRow(rows, '状态', b?.status);
-  pushRow(rows, '最新章节', b?.lastChapter || b?.latestChapter);
-  pushRow(rows, '最新章节地址', b?.latestChapterUrl, true);
-  pushRow(rows, '字数', b?.wordCount);
-  pushRow(rows, '详情章节数', b?.chapterCount ? `${b.chapterCount} 章` : '');
-  pushRow(rows, '目录章节数', b?.totalChapters ? `${b.totalChapters} 章` : '');
-  pushRow(rows, '更新时间', b?.updateTime);
-  pushRow(rows, '加入时间', formatTime(b?.addedAt));
-  pushRow(rows, '最后阅读', formatTime(b?.lastReadAt));
-  pushRow(rows, '播放流类型', videoSource.value?.type);
+  pushRow(rows, "视频标题", b?.name);
+  pushRow(rows, "作者", b?.author);
+  pushRow(rows, "书源名字", b?.sourceName);
+  pushRow(rows, "书源文件", b?.fileName || props.fileName);
+  pushRow(rows, "作品地址", b?.bookUrl, true);
+  pushRow(rows, "分类标签", b?.kind);
+  pushRow(rows, "状态", b?.status);
+  pushRow(rows, "最新章节", b?.lastChapter || b?.latestChapter);
+  pushRow(rows, "最新章节地址", b?.latestChapterUrl, true);
+  pushRow(rows, "字数", b?.wordCount);
+  pushRow(rows, "详情章节数", b?.chapterCount ? `${b.chapterCount} 章` : "");
+  pushRow(rows, "目录章节数", b?.totalChapters ? `${b.totalChapters} 章` : "");
+  pushRow(rows, "更新时间", b?.updateTime);
+  pushRow(rows, "加入时间", formatTime(b?.addedAt));
+  pushRow(rows, "最后阅读", formatTime(b?.lastReadAt));
+  pushRow(rows, "播放流类型", videoSource.value?.type);
   pushRow(
     rows,
-    '清晰度数量',
-    videoSource.value?.qualities?.length ? `${videoSource.value.qualities.length} 个` : '',
+    "清晰度数量",
+    videoSource.value?.qualities?.length
+      ? `${videoSource.value.qualities.length} 个`
+      : "",
   );
   pushRow(
     rows,
-    '字幕数量',
-    videoSource.value?.subtitles?.length ? `${videoSource.value.subtitles.length} 个` : '',
+    "字幕数量",
+    videoSource.value?.subtitles?.length
+      ? `${videoSource.value.subtitles.length} 个`
+      : "",
   );
   pushRow(
     rows,
-    '请求头',
+    "请求头",
     videoSource.value?.headers && Object.keys(videoSource.value.headers).length
       ? JSON.stringify(videoSource.value.headers)
-      : '',
+      : "",
   );
   return rows;
 });
@@ -501,9 +703,9 @@ async function openExternalUrl(url: string) {
 // ── 播放结束处理（含 auto-next） ─────────────────────────────────────────
 
 function handleEnded() {
-  emit('ended');
+  emit("ended");
   if (videoAutoNext.value && props.hasNext) {
-    emit('next-chapter');
+    emit("next-chapter");
   }
 }
 
@@ -526,7 +728,11 @@ function handleEnded() {
 function onKeydown(e: KeyboardEvent) {
   // 忽略输入框内的按键
   const target = e.target as HTMLElement;
-  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+  if (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.isContentEditable
+  ) {
     return;
   }
 
@@ -534,9 +740,9 @@ function onKeydown(e: KeyboardEvent) {
   const step = videoSeekStepSecs.value;
 
   switch (e.key) {
-    case ' ':
-    case 'k':
-    case 'K':
+    case " ":
+    case "k":
+    case "K":
       e.preventDefault();
       if (videoRef?.isPaused?.()) {
         videoRef.play?.();
@@ -545,42 +751,42 @@ function onKeydown(e: KeyboardEvent) {
       }
       break;
 
-    case 'ArrowLeft':
+    case "ArrowLeft":
       e.preventDefault();
       if (e.shiftKey) {
         if (props.hasPrev) {
-          emit('prev-chapter');
+          emit("prev-chapter");
         }
       } else {
         videoRef?.seek?.(-step);
       }
       break;
 
-    case 'ArrowRight':
+    case "ArrowRight":
       e.preventDefault();
       if (e.shiftKey) {
         if (props.hasNext) {
-          emit('next-chapter');
+          emit("next-chapter");
         }
       } else {
         videoRef?.seek?.(step);
       }
       break;
 
-    case 'j':
-    case 'J':
+    case "j":
+    case "J":
       e.preventDefault();
       videoRef?.seek?.(-step);
       break;
 
-    case 'l':
-    case 'L':
+    case "l":
+    case "L":
       e.preventDefault();
       videoRef?.seek?.(step);
       break;
 
-    case 'f':
-    case 'F':
+    case "f":
+    case "F":
       e.preventDefault();
       if (videoRef?.isFullscreen?.()) {
         videoRef.exitFullscreen?.();
@@ -589,25 +795,25 @@ function onKeydown(e: KeyboardEvent) {
       }
       break;
 
-    case 'm':
-    case 'M': {
+    case "m":
+    case "M": {
       e.preventDefault();
       const vol = videoRef?.getVolume?.() ?? 1;
       videoRef?.setVolume?.(vol > 0 ? 0 : 1);
       break;
     }
 
-    case 'ArrowUp':
+    case "ArrowUp":
       e.preventDefault();
       videoRef?.setVolume?.(Math.min(1, (videoRef.getVolume?.() ?? 1) + 0.1));
       break;
 
-    case 'ArrowDown':
+    case "ArrowDown":
       e.preventDefault();
       videoRef?.setVolume?.(Math.max(0, (videoRef.getVolume?.() ?? 1) - 0.1));
       break;
 
-    case 'Escape':
+    case "Escape":
       if (videoRef?.isFullscreen?.()) {
         e.preventDefault();
         videoRef.exitFullscreen?.();
@@ -616,8 +822,12 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => document.addEventListener('keydown', onKeydown));
-onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
+onMounted(() => document.addEventListener("keydown", onKeydown));
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", onKeydown);
+  proxyGeneration += 1;
+  void stopActiveVideoProxy();
+});
 
 // ── 公开方法（供 ChapterReaderModal 获取播放进度） ────────────────────────
 
@@ -642,7 +852,9 @@ defineExpose({ getCurrentTime, getDuration });
         </template>
       </n-button>
       <div class="vp__topbar-titles">
-        <span class="vp__topbar-source" :title="sourceName">{{ sourceName }}</span>
+        <span class="vp__topbar-source" :title="sourceName">{{
+          sourceName
+        }}</span>
       </div>
 
       <!-- 快捷键说明 -->
@@ -705,15 +917,27 @@ defineExpose({ getCurrentTime, getDuration });
       <div class="vp__main">
         <div class="vp__content-titlebar">
           <div class="vp__info-heading">
-            <div class="vp__info-title" :title="videoTitle">{{ videoTitle }}</div>
+            <div class="vp__info-title" :title="videoTitle">
+              {{ videoTitle }}
+            </div>
             <div class="vp__info-meta">
-              <span v-if="bookInfo?.author" class="vp__info-author">{{ bookInfo.author }}</span>
-              <span v-if="bookInfo?.kind" class="vp__info-pill">{{ bookInfo.kind }}</span>
-              <span v-if="bookInfo?.status" class="vp__info-pill">{{ bookInfo.status }}</span>
+              <span v-if="bookInfo?.author" class="vp__info-author">{{
+                bookInfo.author
+              }}</span>
+              <span v-if="bookInfo?.kind" class="vp__info-pill">{{
+                bookInfo.kind
+              }}</span>
+              <span v-if="bookInfo?.status" class="vp__info-pill">{{
+                bookInfo.status
+              }}</span>
               <span class="vp__info-pill">{{ sourceName }}</span>
             </div>
           </div>
-          <div v-if="activeChapter" class="vp__info-episode" :title="activeChapter.name">
+          <div
+            v-if="activeChapter"
+            class="vp__info-episode"
+            :title="activeChapter.name"
+          >
             {{ activeChapter.name }}
           </div>
         </div>
@@ -723,25 +947,56 @@ defineExpose({ getCurrentTime, getDuration });
           <div v-if="showPlayerLoading" class="vp__player-placeholder">
             <n-spin :show="true" />
             <span>获取播放地址…</span>
-            <span v-if="!hasGroups" class="vp__loading-hint">正在加载线路列表，请稍候…</span>
+            <span v-if="!hasGroups" class="vp__loading-hint"
+              >正在加载线路列表，请稍候…</span
+            >
           </div>
-          <div v-else-if="error" class="vp__player-placeholder vp__player-placeholder--error">
-            <n-alert type="error" :title="error" style="width: 90%; max-width: 420px">
-              <p v-if="hasGroups" style="margin: 6px 0 8px; font-size: 0.875rem; opacity: 0.85">
+          <div
+            v-else-if="playerError"
+            class="vp__player-placeholder vp__player-placeholder--error"
+          >
+            <n-alert
+              type="error"
+              :title="playerError"
+              style="width: 90%; max-width: 420px"
+            >
+              <p
+                v-if="hasGroups"
+                style="margin: 6px 0 8px; font-size: 0.875rem; opacity: 0.85"
+              >
                 请尝试切换下方线路后重新播放
               </p>
-              <n-button type="error" size="small" style="margin-top: 4px" @click="emit('retry')">
+              <n-button
+                type="error"
+                size="small"
+                style="margin-top: 4px"
+                @click="emit('retry')"
+              >
                 重试
               </n-button>
             </n-alert>
           </div>
           <!-- 内容为空（脚本返回空地址）但未抛出错误时的兜底提示 -->
-          <div v-else-if="!content" class="vp__player-placeholder vp__player-placeholder--error">
-            <n-alert type="warning" title="无法获取播放地址" style="width: 90%; max-width: 420px">
-              <p v-if="hasGroups" style="margin: 6px 0 8px; font-size: 0.875rem; opacity: 0.85">
+          <div
+            v-else-if="!activeContent"
+            class="vp__player-placeholder vp__player-placeholder--error"
+          >
+            <n-alert
+              type="warning"
+              title="无法获取播放地址"
+              style="width: 90%; max-width: 420px"
+            >
+              <p
+                v-if="hasGroups"
+                style="margin: 6px 0 8px; font-size: 0.875rem; opacity: 0.85"
+              >
                 请尝试切换下方线路后重新播放
               </p>
-              <n-button size="small" style="margin-top: 4px" @click="emit('retry')">
+              <n-button
+                size="small"
+                style="margin-top: 4px"
+                @click="emit('retry')"
+              >
                 重试
               </n-button>
             </n-alert>
@@ -749,7 +1004,7 @@ defineExpose({ getCurrentTime, getDuration });
           <VideoMode
             v-else
             ref="videoModeRef"
-            :content="activeContent"
+            :content="playbackContent"
             :file-name="fileName"
             :book-url="bookInfo?.bookUrl ?? ''"
             :chapter-url="activeChapter?.url ?? ''"
@@ -759,13 +1014,19 @@ defineExpose({ getCurrentTime, getDuration });
             @next-chapter="emit('next-chapter')"
           />
           <!-- 分类切换中的加载遮罩 -->
-          <div v-if="categoryFetching && !loading && !error" class="vp__category-fetching">
+          <div
+            v-if="categoryFetching && !loading && !error"
+            class="vp__category-fetching"
+          >
             <n-spin :show="true" />
             <span>切换中…</span>
           </div>
         </div>
 
-        <div v-if="showPlayerLoading || loadingLogs.length" class="vp__load-log">
+        <div
+          v-if="showPlayerLoading || loadingLogs.length"
+          class="vp__load-log"
+        >
           <div class="vp__load-log-title">
             书源日志
             <n-button
@@ -780,12 +1041,21 @@ defineExpose({ getCurrentTime, getDuration });
                 <Check v-if="logCopied" :size="13" />
                 <Copy v-else :size="13" />
               </template>
-              {{ logCopied ? '已复制' : '复制' }}
+              {{ logCopied ? "已复制" : "复制" }}
             </n-button>
           </div>
-          <div ref="logScrollRef" class="vp__load-log-body app-scrollbar app-scrollbar--thin">
-            <div v-if="!loadingLogs.length" class="vp__load-log-empty">等待书源输出日志…</div>
-            <div v-for="(line, i) in loadingLogs" :key="`${i}-${line}`" class="vp__load-log-line">
+          <div
+            ref="logScrollRef"
+            class="vp__load-log-body app-scrollbar app-scrollbar--thin"
+          >
+            <div v-if="!loadingLogs.length" class="vp__load-log-empty">
+              等待书源输出日志…
+            </div>
+            <div
+              v-for="(line, i) in loadingLogs"
+              :key="`${i}-${line}`"
+              class="vp__load-log-line"
+            >
               {{ line }}
             </div>
           </div>
@@ -807,10 +1077,16 @@ defineExpose({ getCurrentTime, getDuration });
 
         <!-- 视频信息区 -->
         <div class="vp__info">
-          <p v-if="bookInfo?.intro" class="vp__info-intro">{{ bookInfo.intro }}</p>
+          <p v-if="bookInfo?.intro" class="vp__info-intro">
+            {{ bookInfo.intro }}
+          </p>
 
           <div class="vp__detail-list">
-            <div v-for="row in detailRows" :key="row.label" class="vp__detail-row">
+            <div
+              v-for="row in detailRows"
+              :key="row.label"
+              class="vp__detail-row"
+            >
               <span class="vp__detail-label">{{ row.label }}</span>
               <a
                 v-if="row.isUrl"
@@ -821,19 +1097,33 @@ defineExpose({ getCurrentTime, getDuration });
               >
                 <Link :size="12" :stroke-width="2.3" class="vp__detail-icon" />
                 <span>{{
-                  row.label === '实际播放地址' ? videoSourceUrlShort || row.value : row.value
+                  row.label === "实际播放地址"
+                    ? videoSourceUrlShort || row.value
+                    : row.value
                 }}</span>
               </a>
-              <span v-else class="vp__detail-value" :title="row.value">{{ row.value }}</span>
+              <span v-else class="vp__detail-value" :title="row.value">{{
+                row.value
+              }}</span>
             </div>
           </div>
         </div>
 
         <!-- 移动端选集区域（多集才显示，桌面端通过 CSS 隐藏） -->
-        <div v-if="hasEpisodeList || availableCategories.length > 0" class="vp__strip">
+        <div
+          v-if="hasEpisodeList || availableCategories.length > 0"
+          class="vp__strip"
+        >
           <!-- 通用分类面板（移动端） -->
-          <div v-if="availableCategories.length > 0" class="vp__strip-categories">
-            <div v-for="group in availableCategories" :key="group.id" class="vp__cat-group">
+          <div
+            v-if="availableCategories.length > 0"
+            class="vp__strip-categories"
+          >
+            <div
+              v-for="group in availableCategories"
+              :key="group.id"
+              class="vp__cat-group"
+            >
               <div class="vp__cat-group-label">{{ group.label }}</div>
               <div class="vp__cat-options app-scrollbar--hidden">
                 <button
@@ -843,12 +1133,15 @@ defineExpose({ getCurrentTime, getDuration });
                   :class="{
                     'vp__cat-btn--active':
                       selectedCategories[group.id] === opt.id ||
-                      (!selectedCategories[group.id] && group.defaultSelected === opt.id),
+                      (!selectedCategories[group.id] &&
+                        group.defaultSelected === opt.id),
                   }"
                   @click="onSelectCategoryOption(group.id, opt.id)"
                 >
                   {{ opt.label }}
-                  <span v-if="opt.badge" class="vp__cat-badge">{{ opt.badge }}</span>
+                  <span v-if="opt.badge" class="vp__cat-badge">{{
+                    opt.badge
+                  }}</span>
                 </button>
               </div>
             </div>
@@ -857,10 +1150,17 @@ defineExpose({ getCurrentTime, getDuration });
             <div class="vp__strip-header">
               <div class="vp__strip-label">
                 选集
-                <span class="vp__strip-count">{{ displayEpisodes.length }} 集</span>
+                <span class="vp__strip-count"
+                  >{{ displayEpisodes.length }} 集</span
+                >
               </div>
-              <n-button text size="tiny" class="vp__sort-btn" @click="toggleVpSort">
-                {{ sortOrder === 'asc' ? '正序' : '倒序' }}
+              <n-button
+                text
+                size="tiny"
+                class="vp__sort-btn"
+                @click="toggleVpSort"
+              >
+                {{ sortOrder === "asc" ? "正序" : "倒序" }}
                 <ArrowUp
                   :size="12"
                   :style="{
@@ -891,7 +1191,9 @@ defineExpose({ getCurrentTime, getDuration });
                 v-for="ch in displayEpisodes"
                 :key="`${ch.group || ''}-${ch.url}`"
                 class="vp__strip-btn"
-                :class="{ 'vp__strip-btn--active': ch.url === activeChapter?.url }"
+                :class="{
+                  'vp__strip-btn--active': ch.url === activeChapter?.url,
+                }"
                 @click="emitGotoChapter(ch)"
               >
                 {{ ch.name }}
@@ -909,10 +1211,20 @@ defineExpose({ getCurrentTime, getDuration });
       </div>
 
       <!-- 桌面端右侧选集侧边栏（单集且无分类时整体隐藏） -->
-      <div v-if="hasEpisodeList || availableCategories.length > 0" class="vp__sidebar">
+      <div
+        v-if="hasEpisodeList || availableCategories.length > 0"
+        class="vp__sidebar"
+      >
         <!-- 通用分类面板（桌面端侧边栏） -->
-        <div v-if="availableCategories.length > 0" class="vp__sidebar-categories">
-          <div v-for="group in availableCategories" :key="group.id" class="vp__cat-group">
+        <div
+          v-if="availableCategories.length > 0"
+          class="vp__sidebar-categories"
+        >
+          <div
+            v-for="group in availableCategories"
+            :key="group.id"
+            class="vp__cat-group"
+          >
             <div class="vp__cat-group-label">{{ group.label }}</div>
             <div class="vp__cat-options">
               <button
@@ -922,12 +1234,15 @@ defineExpose({ getCurrentTime, getDuration });
                 :class="{
                   'vp__cat-btn--active':
                     selectedCategories[group.id] === opt.id ||
-                    (!selectedCategories[group.id] && group.defaultSelected === opt.id),
+                    (!selectedCategories[group.id] &&
+                      group.defaultSelected === opt.id),
                 }"
                 @click="onSelectCategoryOption(group.id, opt.id)"
               >
                 {{ opt.label }}
-                <span v-if="opt.badge" class="vp__cat-badge">{{ opt.badge }}</span>
+                <span v-if="opt.badge" class="vp__cat-badge">{{
+                  opt.badge
+                }}</span>
               </button>
             </div>
           </div>
@@ -936,10 +1251,17 @@ defineExpose({ getCurrentTime, getDuration });
           <div class="vp__sidebar-header">
             <div class="vp__sidebar-heading">
               选集
-              <span class="vp__sidebar-count">{{ displayEpisodes.length }} 集</span>
+              <span class="vp__sidebar-count"
+                >{{ displayEpisodes.length }} 集</span
+              >
             </div>
-            <n-button text size="tiny" class="vp__sort-btn" @click="toggleVpSort">
-              {{ sortOrder === 'asc' ? '正序' : '倒序' }}
+            <n-button
+              text
+              size="tiny"
+              class="vp__sort-btn"
+              @click="toggleVpSort"
+            >
+              {{ sortOrder === "asc" ? "正序" : "倒序" }}
               <ArrowUp
                 :size="12"
                 :style="{
@@ -949,7 +1271,10 @@ defineExpose({ getCurrentTime, getDuration });
               />
             </n-button>
           </div>
-          <div v-if="hasGroups && !props.inlineGroupTabs" class="vp__sidebar-tabs">
+          <div
+            v-if="hasGroups && !props.inlineGroupTabs"
+            class="vp__sidebar-tabs"
+          >
             <button
               v-for="(g, gi) in groups"
               :key="g.name"
@@ -966,20 +1291,29 @@ defineExpose({ getCurrentTime, getDuration });
               v-for="(ch, i) in displayEpisodes"
               :key="`${ch.group || ''}-${ch.url}`"
               class="vp__sidebar-item"
-              :class="{ 'vp__sidebar-item--active': ch.url === activeChapter?.url }"
+              :class="{
+                'vp__sidebar-item--active': ch.url === activeChapter?.url,
+              }"
               @click="emitGotoChapter(ch)"
             >
               <span class="vp__sidebar-idx">{{
-                sortOrder === 'asc' ? i + 1 : displayEpisodes.length - i
+                sortOrder === "asc" ? i + 1 : displayEpisodes.length - i
               }}</span>
               <div class="vp__sidebar-meta">
                 <span class="vp__sidebar-name">{{ ch.name }}</span>
-                <span v-if="ch.url === activeChapter?.url" class="vp__sidebar-playing"
+                <span
+                  v-if="ch.url === activeChapter?.url"
+                  class="vp__sidebar-playing"
                   >正在播放</span
                 >
-                <span v-else-if="isEpWatched(ch)" class="vp__sidebar-watched">已看</span>
+                <span v-else-if="isEpWatched(ch)" class="vp__sidebar-watched"
+                  >已看</span
+                >
               </div>
-              <div v-if="!isEpWatched(ch) && epProgressRatio(ch) > 0" class="vp__sidebar-progress">
+              <div
+                v-if="!isEpWatched(ch) && epProgressRatio(ch) > 0"
+                class="vp__sidebar-progress"
+              >
                 <div
                   class="vp__sidebar-progress-fill"
                   :style="{ width: epProgressRatio(ch) * 100 + '%' }"
@@ -1181,7 +1515,8 @@ defineExpose({ getCurrentTime, getDuration });
   min-height: 0;
   overflow: auto;
   padding: 0 16px 10px;
-  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   font-size: 0.72rem;
   line-height: 1.5;
 }
@@ -1591,7 +1926,11 @@ defineExpose({ getCurrentTime, getDuration });
   }
 
   .vp__sidebar-item:hover {
-    background: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface));
+    background: color-mix(
+      in srgb,
+      var(--color-accent) 6%,
+      var(--color-surface)
+    );
   }
 
   .vp__sidebar-item--active {
