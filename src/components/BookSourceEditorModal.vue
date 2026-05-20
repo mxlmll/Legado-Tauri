@@ -62,6 +62,17 @@ watch(visible, async (v) => {
   }
 });
 
+// 弹层打开时若处于 loading 状态，等内容加载完成后再滚到顶
+watch(
+  () => props.loading,
+  async (loading) => {
+    if (!loading && visible.value && !props.loadError) {
+      await nextTick();
+      editorRef.value?.resetScroll();
+    }
+  },
+);
+
 // ---- 复制 ----
 async function copySource() {
   try {
