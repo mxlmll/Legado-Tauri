@@ -126,11 +126,15 @@ export function useReaderChapterContext(
     Object.assign(base, options.readerAppearanceVars.value);
     base["--reader-tts-hl-bg"] =
       "color-mix(in srgb, var(--reader-selection-color) 65%, transparent)";
-    // 小说模式：正文区从顶部安全区域下方开始，避免文字遮挡状态栏
+    // 小说模式：正文区从顶部安全区域下方开始，避免文字遮挡状态栏；两者相互独立
     // 漫画/视频模式保持沉浸式全屏，不做偏移
+    // 注意：这里显式为两种模式都赋值，effectiveStyle 是 --reader-body-top 的唯一控制来源，
+    // 避免与 ChapterReaderModal.vue scoped CSS 中已删除的默认值产生级联竞争
     if (!isComicMode.value && !isVideoMode.value) {
       base["--reader-body-top"] =
         "var(--safe-area-inset-top, env(safe-area-inset-top, 0px))";
+    } else {
+      base["--reader-body-top"] = "0px";
     }
     return base;
   });
