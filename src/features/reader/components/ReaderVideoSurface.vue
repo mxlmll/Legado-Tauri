@@ -1,44 +1,76 @@
 <script setup lang="ts">
-import { storeToRefs } from 'pinia';
-import { ref } from 'vue';
-import type { ChapterGroup } from '@/stores';
-import VideoPlayerPage from '@/components/reader/modes/VideoPlayerPage.vue';
-import { useReaderActionsStore, useReaderSessionStore, useReaderViewStore } from '@/stores';
+import { useMessage } from "naive-ui";
+import { onBeforeUnmount, onMounted, ref } from "vue";
+import type { ChapterGroup } from "@/stores";
+// TODO: 视频功能暂时屏蔽，待启用时取消下方注释并删除临时屏蔽逻辑
+// import { storeToRefs } from 'pinia';
+// import VideoPlayerPage from '@/components/reader/modes/VideoPlayerPage.vue';
+// import { useReaderActionsStore, useReaderSessionStore, useReaderViewStore } from '@/stores';
+import { useReaderActionsStore } from "@/stores";
 
 defineProps<{
   chapterGroups?: ChapterGroup[];
   initialGroupIndex?: number;
   inlineGroupTabs?: boolean;
-  episodeProgress?: Record<string, { time: number; duration: number; lastPlayedAt: number }>;
+  episodeProgress?: Record<
+    string,
+    { time: number; duration: number; lastPlayedAt: number }
+  >;
 }>();
 
 const readerActionsStore = useReaderActionsStore();
-const readerSessionStore = useReaderSessionStore();
-const readerViewStore = useReaderViewStore();
+const message = useMessage();
 
-const playerRef = ref<{
-  getCurrentTime?: () => number;
-  getDuration?: () => number;
-} | null>(null);
+// TODO: 待启用时恢复下方 ref 与 store 绑定
+// const readerSessionStore = useReaderSessionStore();
+// const readerViewStore = useReaderViewStore();
+// const playerRef = ref<{
+//   getCurrentTime?: () => number;
+//   getDuration?: () => number;
+// } | null>(null);
+// const { activeChapterIndex, content, error, pendingResumePlaybackTime } =
+//   storeToRefs(readerSessionStore);
+// const { blockingLoading, bookInfo, chapters, fileName, hasNext, hasPrev } =
+//   storeToRefs(readerViewStore);
 
-const { activeChapterIndex, content, error, pendingResumePlaybackTime } =
-  storeToRefs(readerSessionStore);
-const { blockingLoading, bookInfo, chapters, fileName, hasNext, hasPrev } =
-  storeToRefs(readerViewStore);
+const playerRef = ref<null>(null);
+void playerRef; // 保留 ref 声明以兼容父组件的 expose 接口
 
 function getCurrentTime() {
-  return playerRef.value?.getCurrentTime?.() ?? 0;
+  return 0;
+  // return playerRef.value?.getCurrentTime?.() ?? 0;
 }
 
 function getDuration() {
-  return playerRef.value?.getDuration?.() ?? 0;
+  return 0;
+  // return playerRef.value?.getDuration?.() ?? 0;
 }
 
 defineExpose({ getCurrentTime, getDuration });
+
+let closeTimer: ReturnType<typeof setTimeout> | null = null;
+
+onMounted(() => {
+  message.warning("该功能暂时无法使用", {
+    duration: 2500,
+    keepAliveOnHover: false,
+  });
+  closeTimer = setTimeout(() => {
+    readerActionsStore.close();
+  }, 2500);
+});
+
+onBeforeUnmount(() => {
+  if (closeTimer !== null) {
+    clearTimeout(closeTimer);
+    closeTimer = null;
+  }
+});
 </script>
 
 <template>
-  <VideoPlayerPage
+  <!-- TODO: 待启用时替换为 VideoPlayerPage -->
+  <!-- <VideoPlayerPage
     ref="playerRef"
     :content="content"
     :chapters="chapters"
@@ -61,5 +93,21 @@ defineExpose({ getCurrentTime, getDuration });
     @progress="readerActionsStore.onVideoProgress"
     @ended="readerActionsStore.onVideoEnded"
     @retry="readerActionsStore.retryCurrentChapter"
-  />
+  /> -->
+  <div class="video-unavailable">
+    <span class="video-unavailable__text">该功能暂时无法使用</span>
+  </div>
 </template>
+
+<style scoped>
+.video-unavailable {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 15px;
+}
+</style>
