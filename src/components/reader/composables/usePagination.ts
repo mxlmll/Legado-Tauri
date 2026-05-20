@@ -846,6 +846,28 @@ export function usePagination() {
     // DOM 引擎：创建复用的测量层，所有 block 共享，最后统一清理
     let measureLayer: HTMLDivElement | null = null;
     if (effectiveEngine === "dom") {
+      // 等待目标字体就绪，避免低端机字体加载慢时用 fallback metrics 测量
+      // 导致行高计算偏小，字体加载后字形更高 → 行重叠
+      const primaryFamily = typography.fontFamily
+        .split(",")[0]
+        .trim()
+        .replace(/^["']|["']$/g, "");
+      if (primaryFamily) {
+        try {
+          await Promise.race([
+            document.fonts.load(
+              `${typography.fontWeight} ${typography.fontSize}px "${primaryFamily}"`,
+            ),
+            new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+          ]);
+        } catch {
+          // 忽略错误，用当前可用字体继续
+        }
+        if (myToken !== cancelToken) {
+          isPaginating.value = false;
+          return;
+        }
+      }
       measureLayer = createMeasureLayer(container);
     }
     if (blocks.length === 0) {
