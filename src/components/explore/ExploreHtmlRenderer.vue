@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useMessage } from 'naive-ui';
+import { useMessage } from "naive-ui";
 /**
  * ExploreHtmlRenderer — 沙箱 iframe HTML 渲染器
  *
@@ -13,14 +13,14 @@ import { useMessage } from 'naive-ui';
  *     → 路由到对应 Tauri invoke
  *     → postMessage({type:'legado-response', id, result, error}) 回 iframe
  */
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import {
   buildSrcdoc,
   MSG_REQUEST,
   MSG_RESPONSE,
   type BridgeMethod,
-} from '../../composables/useExploreBridge';
-import { invokeWithTimeout } from '../../composables/useInvoke';
+} from "../../composables/useExploreBridge";
+import { invokeWithTimeout } from "../../composables/useInvoke";
 
 const props = defineProps<{
   /** 书源文件名（用于 callSource / config scope） */
@@ -31,11 +31,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   /** 请求打开书籍详情 */
-  (e: 'open-book', bookUrl: string): void;
+  (e: "open-book", bookUrl: string): void;
   /** 请求触发搜索 */
-  (e: 'search', keyword: string): void;
+  (e: "search", keyword: string): void;
   /** 请求导航到另一个分类 */
-  (e: 'explore', category: string, page: number): void;
+  (e: "explore", category: string, page: number): void;
 }>();
 
 const message = useMessage();
@@ -48,7 +48,7 @@ const srcdoc = computed(() => buildSrcdoc(props.html));
 
 function handleMessage(event: MessageEvent) {
   const data = event.data;
-  if (!data || typeof data !== 'object' || data.type !== MSG_REQUEST) {
+  if (!data || typeof data !== "object" || data.type !== MSG_REQUEST) {
     return;
   }
 
@@ -58,11 +58,19 @@ function handleMessage(event: MessageEvent) {
     return;
   }
 
-  const { id, method, args } = data as { id: string; method: BridgeMethod; args: unknown[] };
+  const { id, method, args } = data as {
+    id: string;
+    method: BridgeMethod;
+    args: unknown[];
+  };
   handleBridgeRequest(id, method, args ?? []);
 }
 
-async function handleBridgeRequest(id: string, method: BridgeMethod, args: unknown[]) {
+async function handleBridgeRequest(
+  id: string,
+  method: BridgeMethod,
+  args: unknown[],
+) {
   try {
     const result = await routeMethod(method, args);
     sendResponse(id, result, null);
@@ -84,21 +92,24 @@ function sendResponse(id: string, result: unknown, error: string | null) {
       result,
       error,
     },
-    '*',
+    "*",
   );
 }
 
 // ── 方法路由：将 bridge 方法映射到 Tauri invoke ──────────────────────────
 
-async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unknown> {
+async function routeMethod(
+  method: BridgeMethod,
+  args: unknown[],
+): Promise<unknown> {
   switch (method) {
-    case 'http.get': {
+    case "http.get": {
       const [url, headers] = args as [string, Record<string, string> | null];
       return invokeWithTimeout<string>(
-        'booksource_http_proxy',
+        "booksource_http_proxy",
         {
           url,
-          method: 'GET',
+          method: "GET",
           body: null,
           headers: headers ?? null,
         },
@@ -106,13 +117,17 @@ async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unkno
       );
     }
 
-    case 'http.post': {
-      const [url, body, headers] = args as [string, string, Record<string, string> | null];
+    case "http.post": {
+      const [url, body, headers] = args as [
+        string,
+        string,
+        Record<string, string> | null,
+      ];
       return invokeWithTimeout<string>(
-        'booksource_http_proxy',
+        "booksource_http_proxy",
         {
           url,
-          method: 'POST',
+          method: "POST",
           body: body ?? null,
           headers: headers ?? null,
         },
@@ -120,10 +135,10 @@ async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unkno
       );
     }
 
-    case 'config.read': {
+    case "config.read": {
       const [key, scope] = args as [string, string | null];
       return invokeWithTimeout<string>(
-        'config_read',
+        "config_read",
         {
           scope: scope ?? props.fileName,
           key,
@@ -132,10 +147,10 @@ async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unkno
       );
     }
 
-    case 'config.readJson': {
+    case "config.readJson": {
       const [key, scope] = args as [string, string | null];
       return invokeWithTimeout(
-        'config_read_json',
+        "config_read_json",
         {
           scope: scope ?? props.fileName,
           key,
@@ -144,11 +159,11 @@ async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unkno
       );
     }
 
-    case 'config.write': {
+    case "config.write": {
       const [key, value, scope] = args as [string, unknown, string | null];
-      if (typeof value === 'string') {
+      if (typeof value === "string") {
         await invokeWithTimeout<void>(
-          'config_write',
+          "config_write",
           {
             scope: scope ?? props.fileName,
             key,
@@ -158,7 +173,7 @@ async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unkno
         );
       } else {
         await invokeWithTimeout<void>(
-          'config_write_json',
+          "config_write_json",
           {
             scope: scope ?? props.fileName,
             key,
@@ -170,10 +185,10 @@ async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unkno
       return null;
     }
 
-    case 'config.writeJson': {
+    case "config.writeJson": {
       const [key, value, scope] = args as [string, unknown, string | null];
       await invokeWithTimeout<void>(
-        'config_write_json',
+        "config_write_json",
         {
           scope: scope ?? props.fileName,
           key,
@@ -184,10 +199,10 @@ async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unkno
       return null;
     }
 
-    case 'callSource': {
+    case "callSource": {
       const [fnName, ...fnArgs] = args;
       return invokeWithTimeout<unknown>(
-        'booksource_call_fn',
+        "booksource_call_fn",
         {
           fileName: props.fileName,
           fnName: String(fnName),
@@ -197,22 +212,22 @@ async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unkno
       );
     }
 
-    case 'explore': {
+    case "explore": {
       const [category, page] = args as [string, number?];
-      emit('explore', category, page ?? 1);
+      emit("explore", category, page ?? 1);
       return null;
     }
 
-    case 'toast': {
+    case "toast": {
       const [msg, type] = args as [string, string?];
       switch (type) {
-        case 'success':
+        case "success":
           message.success(msg);
           break;
-        case 'error':
+        case "error":
           message.error(msg);
           break;
-        case 'warning':
+        case "warning":
           message.warning(msg);
           break;
         default:
@@ -221,28 +236,30 @@ async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unkno
       return null;
     }
 
-    case 'openBook': {
+    case "openBook": {
       const [bookUrl] = args as [string];
-      emit('open-book', bookUrl);
+      emit("open-book", bookUrl);
       return null;
     }
 
-    case 'search': {
+    case "search": {
       const [keyword] = args as [string];
-      emit('search', keyword);
+      emit("search", keyword);
       return null;
     }
 
-    case 'log': {
+    case "log": {
       const [msg] = args as [string];
       console.log(`[${props.fileName}]`, msg);
       return null;
     }
 
-    case 'installSource': {
+    case "installSource": {
       const [url] = args as [string];
       // 使用纯前端 CustomEvent，绕开 Tauri transportEmit（它会发到 Rust 后端而不会回勂到前端监听器）
-      window.dispatchEvent(new CustomEvent('app:install-source', { detail: { url } }));
+      window.dispatchEvent(
+        new CustomEvent("app:install-source", { detail: { url } }),
+      );
       return null;
     }
 
@@ -254,11 +271,11 @@ async function routeMethod(method: BridgeMethod, args: unknown[]): Promise<unkno
 // ── 生命周期 ──────────────────────────────────────────────────────────────
 
 onMounted(() => {
-  window.addEventListener('message', handleMessage);
+  window.addEventListener("message", handleMessage);
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('message', handleMessage);
+  window.removeEventListener("message", handleMessage);
 });
 
 // HTML 变化时，如果 iframe 同一引用，手动更新 srcdoc 可能不触发重载
@@ -284,17 +301,22 @@ watch(srcdoc, () => {
 
 <style scoped>
 .ehr {
+  position: relative;
   width: 100%;
-  min-height: 300px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
   border-radius: var(--radius-md, 8px);
   overflow: hidden;
 }
 
 .ehr__frame {
+  flex: 1 1 auto;
   width: 100%;
-  min-height: 400px;
   height: 100%;
+  min-height: 0;
   border: none;
   background: transparent;
+  display: block;
 }
 </style>
