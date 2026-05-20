@@ -1,11 +1,11 @@
 <!-- BookSourceEditorModal — 书源代码编辑弹层，外壳适配移动端/桌面端。 -->
 <script setup lang="ts">
-import { useMessage } from 'naive-ui';
-import { computed, nextTick, ref, watch } from 'vue';
-import BookSourceCodeEditor from '@/components/booksource/BookSourceCodeEditor.vue';
-import { isMobile } from '@/composables/useEnv';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
-import { saveExportFile } from '@/utils/exportFile';
+import { useMessage } from "naive-ui";
+import { computed, nextTick, ref, watch } from "vue";
+import BookSourceCodeEditor from "@/components/booksource/BookSourceCodeEditor.vue";
+import { isMobile } from "@/composables/useEnv";
+import { useOverlayBackstack } from "@/composables/useOverlayBackstack";
+import { saveExportFile } from "@/utils/exportFile";
 
 const props = defineProps<{
   show: boolean;
@@ -20,18 +20,18 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  'update:show': [value: boolean];
-  'update:content': [value: string];
+  "update:show": [value: boolean];
+  "update:content": [value: string];
   save: [];
-  'open-vscode': [];
-  'open-external': [];
+  "open-vscode": [];
+  "open-external": [];
 }>();
 
 const message = useMessage();
 
 const visible = computed({
   get: () => props.show,
-  set: (v) => emit('update:show', v),
+  set: (v) => emit("update:show", v),
 });
 
 useOverlayBackstack(
@@ -43,12 +43,12 @@ useOverlayBackstack(
 
 const code = computed({
   get: () => props.content,
-  set: (v) => emit('update:content', v),
+  set: (v) => emit("update:content", v),
 });
 
 function saveFromEditor() {
   if (!props.saving) {
-    emit('save');
+    emit("save");
   }
 }
 
@@ -66,9 +66,9 @@ watch(visible, async (v) => {
 async function copySource() {
   try {
     await navigator.clipboard.writeText(props.content);
-    message.success('已复制书源代码');
+    message.success("已复制书源代码");
   } catch {
-    message.error('复制失败');
+    message.error("复制失败");
   }
 }
 
@@ -81,13 +81,13 @@ async function exportSource() {
   }
   exporting.value = true;
   try {
-    const name = props.fileName || 'booksource.js';
+    const name = props.fileName || "booksource.js";
     const saved = await saveExportFile({
       defaultName: name,
-      mime: 'text/javascript;charset=utf-8',
+      mime: "text/javascript;charset=utf-8",
       text: props.content,
-      filterName: 'JavaScript',
-      extensions: ['js'],
+      filterName: "JavaScript",
+      extensions: ["js"],
     });
     if (saved) {
       message.success(`已导出到 ${saved}`);
@@ -104,7 +104,10 @@ async function exportSource() {
   <n-modal
     v-model:show="visible"
     preset="card"
-    :class="{ 'booksource-editor-fullscreen': isMobile }"
+    :class="[
+      'booksource-editor-modal',
+      { 'booksource-editor-fullscreen': isMobile },
+    ]"
     :title="title"
     :bordered="false"
     :mask-closable="false"
@@ -118,7 +121,7 @@ async function exportSource() {
     <template #header-extra>
       <n-space :size="6" :wrap="false">
         <n-tag v-if="reloaded" type="warning" size="small" :bordered="false">
-          {{ isMobile ? '已变更' : '文件已变更' }}
+          {{ isMobile ? "已变更" : "文件已变更" }}
         </n-tag>
         <n-button
           v-if="!isMobile"
@@ -148,7 +151,12 @@ async function exportSource() {
         >
           导出
         </n-button>
-        <n-button size="small" type="primary" :loading="saving" @click="emit('save')">
+        <n-button
+          size="small"
+          type="primary"
+          :loading="saving"
+          @click="emit('save')"
+        >
           保存
         </n-button>
       </n-space>
@@ -180,6 +188,24 @@ async function exportSource() {
 </template>
 
 <style>
+/* 标题与工具栏自适应：空间不足时折行为两行 */
+.booksource-editor-modal .n-card-header {
+  flex-wrap: wrap;
+  gap: 4px 0;
+}
+
+.booksource-editor-modal .n-card-header__main {
+  flex: 1 1 auto;
+  min-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booksource-editor-modal .n-card-header__extra {
+  flex-shrink: 0;
+}
+
 /* 移动端全屏：去除卡片圆角和阴影 */
 .booksource-editor-fullscreen.n-card {
   border-radius: 0 !important;

@@ -1,9 +1,9 @@
 <!-- AiSourceTab — AI 写书源工作台，管理 AI 配置、会话草稿、生成日志与调试面板。 -->
 <script setup lang="ts">
-import { useMessage, useDialog } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { ref, watch, nextTick, computed, onMounted } from 'vue';
-import { useAiSessionsStore } from '@/stores';
+import { useMessage, useDialog } from "naive-ui";
+import { storeToRefs } from "pinia";
+import { ref, watch, nextTick, computed, onMounted } from "vue";
+import { useAiSessionsStore } from "@/stores";
 import {
   ACTIVITY_LABEL,
   getActivityClass,
@@ -13,7 +13,7 @@ import {
   truncateResult,
   sessionStatusLabel,
   sessionStatusType,
-} from '@/utils/aiActivityUtils';
+} from "@/utils/aiActivityUtils";
 import {
   useAiAgent,
   loadAiConfig,
@@ -21,14 +21,14 @@ import {
   saveAiConfig,
   type AiConfig,
   type AgentActivity,
-} from '../../composables/useAiAgent';
+} from "../../composables/useAiAgent";
 import {
   readBookSource,
   saveBookSource,
   type BookSourceMeta,
-} from '../../composables/useBookSource';
-import { invokeWithTimeout } from '../../composables/useInvoke';
-import AiTestPanel from './AiTestPanel.vue';
+} from "../../composables/useBookSource";
+import { invokeWithTimeout } from "../../composables/useInvoke";
+import AiTestPanel from "./AiTestPanel.vue";
 
 const props = defineProps<{
   sources: BookSourceMeta[];
@@ -41,7 +41,8 @@ const dialog = useDialog();
 const { state, runAiAgent, stopAiAgent, clearAgentState } = useAiAgent();
 const aiSessionsStore = useAiSessionsStore();
 const { sessions, currentSession } = storeToRefs(aiSessionsStore);
-const { createSession, selectSession, updateSession, deleteSession } = aiSessionsStore;
+const { createSession, selectSession, updateSession, deleteSession } =
+  aiSessionsStore;
 
 // ── AI 配置 ───────────────────────────────────────────────────────────────
 const config = ref<AiConfig>(loadAiConfig());
@@ -59,10 +60,10 @@ const sidebarCollapsed = ref(false);
 
 // ── 模式选择 ──────────────────────────────────────────────────────────────
 /** 工作模式：new = 从零创建，modify = 基于已有书源修改 */
-const workMode = ref<'new' | 'modify'>('new');
+const workMode = ref<"new" | "modify">("new");
 
 /** 修改模式下选中的书源文件名 */
-const selectedBaseSource = ref('');
+const selectedBaseSource = ref("");
 
 /** 从 sources prop 获取选项 */
 const sourceOptions = computed(() =>
@@ -73,21 +74,21 @@ const sourceOptions = computed(() =>
 );
 
 // ── 用户输入 ──────────────────────────────────────────────────────────────
-const userPrompt = ref('');
+const userPrompt = ref("");
 const NEW_PLACEHOLDER =
   '请描述目标网站，例如：\n为 https://www.biquge.com 创建一个小说书源，名叫"笔趣阁"，请实现搜索、书籍详情、章节目录、正文功能。';
 const MODIFY_PLACEHOLDER =
-  '请描述要做的修改，例如：\n修复搜索函数返回为空的问题；或：补充封面图片解析。';
+  "请描述要做的修改，例如：\n修复搜索函数返回为空的问题；或：补充封面图片解析。";
 
 // ── 内容标签页 ────────────────────────────────────────────────────────────
-const activePane = ref<'log' | 'source' | 'test' | 'history'>('log');
+const activePane = ref<"log" | "source" | "test" | "history">("log");
 
 // 日志自动滚动
 const logListRef = ref<HTMLElement | null>(null);
 watch(
   () => state.activities.length,
   () => {
-    if (activePane.value !== 'log') {
+    if (activePane.value !== "log") {
       return;
     }
     nextTick(() => {
@@ -100,7 +101,7 @@ watch(
 
 // ── 会话名称编辑 ──────────────────────────────────────────────────────────
 const editingName = ref(false);
-const nameInputRef = ref('');
+const nameInputRef = ref("");
 function startEditName() {
   if (!currentSession.value) {
     return;
@@ -108,7 +109,7 @@ function startEditName() {
   nameInputRef.value = currentSession.value.name;
   editingName.value = true;
   nextTick(() => {
-    const el = document.getElementById('session-name-input');
+    const el = document.getElementById("session-name-input");
     if (el) {
       (el as HTMLInputElement).focus();
     }
@@ -134,18 +135,18 @@ function onSelectSession(id: string) {
     state.testResults = [...session.testResults];
     state.currentFileName = session.currentFileName;
     state.currentSourceCode = session.currentSourceCode;
-    activePane.value = 'log';
+    activePane.value = "log";
   }
 }
 
 // ── 新建会话 ──────────────────────────────────────────────────────────────
 async function onNewSession() {
-  if (workMode.value === 'modify' && selectedBaseSource.value) {
+  if (workMode.value === "modify" && selectedBaseSource.value) {
     await createModifySession();
   } else {
-    const session = createSession('new');
+    const session = createSession("new");
     clearAgentState();
-    activePane.value = 'log';
+    activePane.value = "log";
     message.success(`已创建新草稿：${session.name}`);
   }
 }
@@ -153,21 +154,23 @@ async function onNewSession() {
 async function createModifySession() {
   const fileName = selectedBaseSource.value;
   if (!fileName) {
-    message.warning('请先选择要修改的书源');
+    message.warning("请先选择要修改的书源");
     return;
   }
   try {
     const code = await readBookSource(fileName);
-    const session = createSession('modify', { fileName, code });
+    const session = createSession("modify", { fileName, code });
     state.activities = [];
     state.testResults = [];
     state.currentFileName = fileName;
     state.currentSourceCode = code;
-    activePane.value = 'log';
-    message.success(`已载入《${fileName.replace(/\.js$/, '')}》作为基础版本`);
+    activePane.value = "log";
+    message.success(`已载入《${fileName.replace(/\.js$/, "")}》作为基础版本`);
     return session;
   } catch (e: unknown) {
-    message.error(`读取书源失败：${e instanceof Error ? e.message : String(e)}`);
+    message.error(
+      `读取书源失败：${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 
@@ -175,36 +178,36 @@ async function createModifySession() {
 async function startAgent(continueConversation = false) {
   const prompt = userPrompt.value.trim();
   if (!prompt) {
-    message.warning('请先输入任务描述');
+    message.warning("请先输入任务描述");
     return;
   }
   if (!config.value.apiUrl.trim()) {
-    message.warning('请填写 API 地址');
+    message.warning("请填写 API 地址");
     return;
   }
   if (!config.value.model.trim()) {
-    message.warning('请填写模型名称');
+    message.warning("请填写模型名称");
     return;
   }
 
   // 确保有当前会话
   if (!currentSession.value) {
-    if (workMode.value === 'modify' && selectedBaseSource.value) {
+    if (workMode.value === "modify" && selectedBaseSource.value) {
       await createModifySession();
       if (!currentSession.value) {
         return;
       }
     } else {
-      createSession('new');
+      createSession("new");
     }
   }
 
-  const sessionId = currentSession.value?.id ?? '';
-  activePane.value = 'log';
+  const sessionId = currentSession.value?.id ?? "";
+  activePane.value = "log";
 
   try {
     await runAiAgent(config.value, prompt, { sessionId, continueConversation });
-    emit('reload');
+    emit("reload");
     if (state.currentFileName) {
       message.success(`书源 "${state.currentFileName}" 已保存`);
     }
@@ -212,7 +215,7 @@ async function startAgent(continueConversation = false) {
     message.error(`错误：${e instanceof Error ? e.message : String(e)}`);
   }
 
-  userPrompt.value = '';
+  userPrompt.value = "";
 }
 
 // ── 保存为正式书源 ────────────────────────────────────────────────────────
@@ -221,17 +224,21 @@ async function saveAsFormal() {
   const code = state.currentSourceCode || session?.currentSourceCode;
   const fileName = state.currentFileName || session?.currentFileName;
   if (!code || !fileName) {
-    message.warning('当前草稿没有可保存的代码');
+    message.warning("当前草稿没有可保存的代码");
     return;
   }
   try {
     await saveBookSource(fileName, code);
     // 正式保存后清理草稿文件
-    await invokeWithTimeout('booksource_delete_draft', { fileName }, 5_000).catch(() => {});
+    await invokeWithTimeout(
+      "booksource_delete_draft",
+      { fileName },
+      5_000,
+    ).catch(() => {});
     if (session) {
-      updateSession(session.id, { status: 'saved' });
+      updateSession(session.id, { status: "saved" });
     }
-    emit('reload');
+    emit("reload");
     message.success(`已保存为正式书源：${fileName}`);
   } catch (e: unknown) {
     message.error(`保存失败：${e instanceof Error ? e.message : String(e)}`);
@@ -241,36 +248,38 @@ async function saveAsFormal() {
 /** 覆盖原书源（仅修改模式可用） */
 async function overwriteOriginal() {
   const session = currentSession.value;
-  if (!session || session.mode !== 'modify' || !session.baseSourceFileName) {
+  if (!session || session.mode !== "modify" || !session.baseSourceFileName) {
     return;
   }
   const code = state.currentSourceCode || session.currentSourceCode;
   if (!code) {
-    message.warning('当前草稿没有可保存的代码');
+    message.warning("当前草稿没有可保存的代码");
     return;
   }
   dialog.warning({
-    title: '覆盖原书源',
-    content: `确定要用当前草稿覆盖《${session.baseSourceFileName.replace(/\.js$/, '')}》吗？此操作不可撤销。`,
-    positiveText: '覆盖',
-    negativeText: '取消',
+    title: "覆盖原书源",
+    content: `确定要用当前草稿覆盖《${session.baseSourceFileName.replace(/\.js$/, "")}》吗？此操作不可撤销。`,
+    positiveText: "覆盖",
+    negativeText: "取消",
     onPositiveClick: async () => {
       try {
-        await saveBookSource(session.baseSourceFileName ?? '', code);
+        await saveBookSource(session.baseSourceFileName ?? "", code);
         // 正式保存后清理草稿文件（草稿文件名可能与原书源不同）
         const draftFileName = state.currentFileName || session.currentFileName;
         if (draftFileName) {
           await invokeWithTimeout(
-            'booksource_delete_draft',
+            "booksource_delete_draft",
             { fileName: draftFileName },
             5_000,
           ).catch(() => {});
         }
-        updateSession(session.id, { status: 'saved' });
-        emit('reload');
+        updateSession(session.id, { status: "saved" });
+        emit("reload");
         message.success(`已覆盖原书源：${session.baseSourceFileName}`);
       } catch (e: unknown) {
-        message.error(`保存失败：${e instanceof Error ? e.message : String(e)}`);
+        message.error(
+          `保存失败：${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     },
   });
@@ -293,24 +302,26 @@ function rollbackToDraft(version: number) {
     currentSourceCode: draft.content,
   });
   message.success(`已回滚到版本 v${version}`);
-  activePane.value = 'source';
+  activePane.value = "source";
 }
 
 // ── 删除会话 ──────────────────────────────────────────────────────────────
 function onDeleteSession(id: string) {
   dialog.warning({
-    title: '删除草稿',
-    content: '删除后无法恢复，确定继续吗？',
-    positiveText: '删除',
-    negativeText: '取消',
+    title: "删除草稿",
+    content: "删除后无法恢复，确定继续吗？",
+    positiveText: "删除",
+    negativeText: "取消",
     onPositiveClick: () => {
       // 删除会话关联的草稿文件（安静失败，文件可能已手动保存为正式书源）
       const session = sessions.value.find((s) => s.id === id);
       const draftFileName = session?.currentFileName;
       if (draftFileName) {
-        invokeWithTimeout('booksource_delete_draft', { fileName: draftFileName }, 5_000).catch(
-          () => {},
-        );
+        invokeWithTimeout(
+          "booksource_delete_draft",
+          { fileName: draftFileName },
+          5_000,
+        ).catch(() => {});
       }
       deleteSession(id);
       if (!currentSession.value) {
@@ -322,15 +333,16 @@ function onDeleteSession(id: string) {
 
 // ── 复制代码 ──────────────────────────────────────────────────────────────
 async function copySourceCode() {
-  const code = state.currentSourceCode || currentSession.value?.currentSourceCode;
+  const code =
+    state.currentSourceCode || currentSession.value?.currentSourceCode;
   if (!code) {
     return;
   }
   try {
     await navigator.clipboard.writeText(code);
-    message.success('已复制到剪贴板');
+    message.success("已复制到剪贴板");
   } catch {
-    message.error('复制失败');
+    message.error("复制失败");
   }
 }
 
@@ -350,20 +362,26 @@ const displayActivities = computed<AgentActivity[]>(() => {
 });
 
 const displaySourceCode = computed(
-  () => state.currentSourceCode || currentSession.value?.currentSourceCode || '',
+  () =>
+    state.currentSourceCode || currentSession.value?.currentSourceCode || "",
 );
 const displayFileName = computed(
-  () => state.currentFileName || currentSession.value?.currentFileName || '',
+  () => state.currentFileName || currentSession.value?.currentFileName || "",
 );
 const displayTestResults = computed(() =>
-  state.isRunning ? state.testResults : (currentSession.value?.testResults ?? state.testResults),
+  state.isRunning
+    ? state.testResults
+    : (currentSession.value?.testResults ?? state.testResults),
 );
 </script>
 
 <template>
   <div class="ai-workbench">
     <!-- ── 左侧会话列表 ────────────────────────────────────── -->
-    <div class="ai-sidebar" :class="{ 'ai-sidebar--collapsed': sidebarCollapsed }">
+    <div
+      class="ai-sidebar"
+      :class="{ 'ai-sidebar--collapsed': sidebarCollapsed }"
+    >
       <div class="sidebar-header">
         <span v-if="!sidebarCollapsed" class="sidebar-title">工作草稿</span>
         <n-button
@@ -373,13 +391,15 @@ const displayTestResults = computed(() =>
           :title="sidebarCollapsed ? '展开' : '收起'"
           @click="sidebarCollapsed = !sidebarCollapsed"
         >
-          {{ sidebarCollapsed ? '›' : '‹' }}
+          {{ sidebarCollapsed ? "›" : "‹" }}
         </n-button>
       </div>
 
       <template v-if="!sidebarCollapsed">
         <div class="sidebar-actions">
-          <n-button size="small" type="primary" block @click="onNewSession"> + 新建草稿 </n-button>
+          <n-button size="small" type="primary" block @click="onNewSession">
+            + 新建草稿
+          </n-button>
         </div>
 
         <div class="session-list">
@@ -401,7 +421,9 @@ const displayTestResults = computed(() =>
                 >
                   {{ sessionStatusLabel(s) }}
                 </n-tag>
-                <span class="session-item-time">{{ formatDate(s.updatedAt) }}</span>
+                <span class="session-item-time">{{
+                  formatDate(s.updatedAt)
+                }}</span>
               </div>
             </div>
             <n-button
@@ -440,6 +462,13 @@ const displayTestResults = computed(() =>
     <div class="ai-main">
       <n-alert class="ai-feature-warning" type="warning" :show-icon="true">
         AI 写书源是测试功能，暂时还不好用，请谨慎使用并手动检查生成结果。
+        <br />
+        <small
+          >请使用AI编程工具来进行ai 写书源获得更好的体验.
+          <a href="https://docs.legadoteam.org/prompt/" target="_blank"
+            >https://docs.legadoteam.org/prompt/</a
+          >
+        </small>
       </n-alert>
 
       <!-- 顶部工具栏 -->
@@ -450,10 +479,19 @@ const displayTestResults = computed(() =>
         </n-radio-group>
         <div class="toolbar-spacer" />
         <n-tag v-if="config.model" size="small" round>{{ config.model }}</n-tag>
-        <n-button size="small" quaternary @click="configExpanded = !configExpanded">
+        <n-button
+          size="small"
+          quaternary
+          @click="configExpanded = !configExpanded"
+        >
           ⚙ 配置
         </n-button>
-        <n-button v-if="state.isRunning" size="small" type="error" @click="stopAiAgent()">
+        <n-button
+          v-if="state.isRunning"
+          size="small"
+          type="error"
+          @click="stopAiAgent()"
+        >
           ■ 停止
         </n-button>
       </div>
@@ -512,7 +550,9 @@ const displayTestResults = computed(() =>
               size="small"
               @update:value="onConfigChange"
             >
-              <n-radio-button value="chat">Chat Completions（推荐）</n-radio-button>
+              <n-radio-button value="chat"
+                >Chat Completions（推荐）</n-radio-button
+              >
               <n-radio-button value="responses">Responses API</n-radio-button>
             </n-radio-group>
           </div>
@@ -533,8 +573,8 @@ const displayTestResults = computed(() =>
           </div>
         </div>
         <p class="cfg-hint">
-          支持任意 OpenAI 兼容 API。第三方服务请选择 Chat Completions，仅 OpenAI 官方支持 Responses
-          API。
+          支持任意 OpenAI 兼容 API。第三方服务请选择 Chat Completions，仅 OpenAI
+          官方支持 Responses API。
         </p>
       </div>
 
@@ -550,16 +590,24 @@ const displayTestResults = computed(() =>
             @keydown.enter="confirmEditName"
             @keydown.esc="editingName = false"
           />
-          <button v-else class="draft-name" title="点击编辑名称" @click="startEditName">
+          <button
+            v-else
+            class="draft-name"
+            title="点击编辑名称"
+            @click="startEditName"
+          >
             {{ currentSession.name }}
           </button>
           <n-tag
-            v-if="currentSession.mode === 'modify' && currentSession.baseSourceFileName"
+            v-if="
+              currentSession.mode === 'modify' &&
+              currentSession.baseSourceFileName
+            "
             size="tiny"
             type="info"
             round
           >
-            基于《{{ currentSession.baseSourceFileName.replace(/\.js$/, '') }}》
+            基于《{{ currentSession.baseSourceFileName.replace(/\.js$/, "") }}》
           </n-tag>
           <n-tag :type="sessionStatusType(currentSession)" size="tiny" round>
             {{ sessionStatusLabel(currentSession) }}
@@ -583,7 +631,12 @@ const displayTestResults = computed(() =>
           >
             覆盖原书源
           </n-button>
-          <n-button size="small" quaternary :disabled="!hasDraftCode" @click="copySourceCode">
+          <n-button
+            size="small"
+            quaternary
+            :disabled="!hasDraftCode"
+            @click="copySourceCode"
+          >
             复制代码
           </n-button>
         </div>
@@ -615,14 +668,16 @@ const displayTestResults = computed(() =>
           class="base-source-notice"
         >
           已载入《{{
-            currentSession.baseSourceFileName?.replace(/\.js$/, '')
+            currentSession.baseSourceFileName?.replace(/\.js$/, "")
           }}》作为基础版本，后续修改仅作用于当前草稿。
         </div>
         <div class="prompt-row">
           <n-input
             v-model:value="userPrompt"
             type="textarea"
-            :placeholder="workMode === 'modify' ? MODIFY_PLACEHOLDER : NEW_PLACEHOLDER"
+            :placeholder="
+              workMode === 'modify' ? MODIFY_PLACEHOLDER : NEW_PLACEHOLDER
+            "
             :rows="3"
             :disabled="state.isRunning"
             class="prompt-input"
@@ -645,7 +700,7 @@ const displayTestResults = computed(() =>
               :ghost="hasConversationHistory"
               @click="startAgent(false)"
             >
-              {{ hasConversationHistory ? '重新开始' : '开始创作' }}
+              {{ hasConversationHistory ? "重新开始" : "开始创作" }}
             </n-button>
           </div>
         </div>
@@ -666,21 +721,27 @@ const displayTestResults = computed(() =>
             :class="{ 'pane-tab--active': activePane === 'source' }"
             @click="activePane = 'source'"
           >
-            当前草稿{{ displayFileName ? ` (${displayFileName})` : '' }}
+            当前草稿{{ displayFileName ? ` (${displayFileName})` : "" }}
           </button>
           <button
             class="pane-tab"
             :class="{ 'pane-tab--active': activePane === 'test' }"
             @click="activePane = 'test'"
           >
-            调试测试{{ displayTestResults.length ? ` (${displayTestResults.length})` : '' }}
+            调试测试{{
+              displayTestResults.length ? ` (${displayTestResults.length})` : ""
+            }}
           </button>
           <button
             class="pane-tab"
             :class="{ 'pane-tab--active': activePane === 'history' }"
             @click="activePane = 'history'"
           >
-            版本历史{{ currentSession?.drafts.length ? ` (${currentSession.drafts.length})` : '' }}
+            版本历史{{
+              currentSession?.drafts.length
+                ? ` (${currentSession.drafts.length})`
+                : ""
+            }}
           </button>
         </div>
 
@@ -691,7 +752,7 @@ const displayTestResults = computed(() =>
             <p>
               {{
                 currentSession
-                  ? '配置好 API 后，描述目标网站开始创作书源'
+                  ? "配置好 API 后，描述目标网站开始创作书源"
                   : '选择一个草稿继续工作，或点击"新建草稿"开始'
               }}
             </p>
@@ -705,7 +766,9 @@ const displayTestResults = computed(() =>
             <div class="log-hd">
               <span class="log-time">{{ formatTime(activity.timestamp) }}</span>
               <span class="log-badge">{{ ACTIVITY_LABEL[activity.type] }}</span>
-              <span v-if="activity.toolName" class="log-tool">{{ activity.toolName }}</span>
+              <span v-if="activity.toolName" class="log-tool">{{
+                activity.toolName
+              }}</span>
               <span
                 v-if="
                   activity.type === 'thinking' &&
@@ -722,11 +785,15 @@ const displayTestResults = computed(() =>
               </div>
               <div v-if="activity.result" class="log-section">
                 <div class="log-section-label">返回值</div>
-                <pre class="log-pre log-pre--result">{{ truncateResult(activity.result) }}</pre>
+                <pre class="log-pre log-pre--result">{{
+                  truncateResult(activity.result)
+                }}</pre>
               </div>
             </template>
             <template v-else>
-              <pre v-if="activity.content" class="log-pre">{{ getDisplayContent(activity) }}</pre>
+              <pre v-if="activity.content" class="log-pre">{{
+                getDisplayContent(activity)
+              }}</pre>
             </template>
           </div>
         </div>
@@ -741,7 +808,9 @@ const displayTestResults = computed(() =>
             <div class="source-toolbar">
               <span class="source-name">{{ displayFileName }}</span>
               <div class="source-toolbar-actions">
-                <n-button size="tiny" quaternary @click="copySourceCode">复制代码</n-button>
+                <n-button size="tiny" quaternary @click="copySourceCode"
+                  >复制代码</n-button
+                >
                 <n-button
                   size="tiny"
                   type="primary"
@@ -764,7 +833,10 @@ const displayTestResults = computed(() =>
 
         <!-- 版本历史面板 -->
         <div v-show="activePane === 'history'" class="history-panel">
-          <div v-if="!currentSession || currentSession.drafts.length === 0" class="empty-hint">
+          <div
+            v-if="!currentSession || currentSession.drafts.length === 0"
+            class="empty-hint"
+          >
             <span class="empty-icon">📦</span>
             <p>暂无版本快照</p>
             <p style="font-size: 12px; color: var(--color-text-muted)">
@@ -778,14 +850,19 @@ const displayTestResults = computed(() =>
               class="history-item"
               :class="{
                 'history-item--current':
-                  draft.fileName === displayFileName && draft.content === displaySourceCode,
+                  draft.fileName === displayFileName &&
+                  draft.content === displaySourceCode,
               }"
             >
               <div class="history-item-hd">
                 <span class="history-version">v{{ draft.version }}</span>
                 <span class="history-filename">{{ draft.fileName }}</span>
-                <span class="history-time">{{ formatDate(draft.createdAt) }}</span>
-                <span class="history-size">{{ Math.ceil(draft.content.length / 1024) }} KB</span>
+                <span class="history-time">{{
+                  formatDate(draft.createdAt)
+                }}</span>
+                <span class="history-size"
+                  >{{ Math.ceil(draft.content.length / 1024) }} KB</span
+                >
               </div>
               <div class="history-item-actions">
                 <n-tag
@@ -794,7 +871,9 @@ const displayTestResults = computed(() =>
                   type="success"
                   round
                 >
-                  {{ draft.testResults.filter((r) => r.status === 'ok').length }}
+                  {{
+                    draft.testResults.filter((r) => r.status === "ok").length
+                  }}
                   项通过
                 </n-tag>
                 <n-tag
@@ -803,14 +882,17 @@ const displayTestResults = computed(() =>
                   type="error"
                   round
                 >
-                  {{ draft.testResults.filter((r) => r.status === 'error').length }}
+                  {{
+                    draft.testResults.filter((r) => r.status === "error").length
+                  }}
                   项失败
                 </n-tag>
                 <n-button
                   size="tiny"
                   quaternary
                   :disabled="
-                    draft.fileName === displayFileName && draft.content === displaySourceCode
+                    draft.fileName === displayFileName &&
+                    draft.content === displaySourceCode
                   "
                   @click="rollbackToDraft(draft.version)"
                 >
@@ -1262,7 +1344,7 @@ const displayTestResults = computed(() =>
 .log-pre {
   margin: 4px 0 0;
   font-size: 12px;
-  font-family: 'Consolas', 'Menlo', monospace;
+  font-family: "Consolas", "Menlo", monospace;
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--color-text-primary);
@@ -1285,7 +1367,11 @@ const displayTestResults = computed(() =>
   --badge-bg: color-mix(in srgb, var(--color-accent) 15%, transparent);
   --badge-color: var(--color-accent);
   border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
-  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface-raised));
+  background: color-mix(
+    in srgb,
+    var(--color-accent) 5%,
+    var(--color-surface-raised)
+  );
 }
 .log-item--message {
   --badge-bg: color-mix(in srgb, var(--color-warning) 20%, transparent);
@@ -1296,7 +1382,11 @@ const displayTestResults = computed(() =>
   --badge-bg: color-mix(in srgb, var(--color-danger) 15%, transparent);
   --badge-color: var(--color-danger);
   border-color: color-mix(in srgb, var(--color-danger) 30%, transparent);
-  background: color-mix(in srgb, var(--color-danger) 6%, var(--color-surface-raised));
+  background: color-mix(
+    in srgb,
+    var(--color-danger) 6%,
+    var(--color-surface-raised)
+  );
 }
 .log-item--info {
   --badge-bg: var(--color-surface-hover);
@@ -1336,7 +1426,7 @@ const displayTestResults = computed(() =>
   padding: 12px;
   overflow-y: auto;
   font-size: 12px;
-  font-family: 'Consolas', 'Menlo', monospace;
+  font-family: "Consolas", "Menlo", monospace;
   line-height: 1.6;
   white-space: pre;
   color: var(--color-text-primary);

@@ -157,11 +157,12 @@ export async function openInExternalEditor(
   );
   const bridge = (window as unknown as Record<string, unknown>)[
     "LegadoAndroidInput"
-  ] as { openFileInEditor(p: string): void } | undefined;
+  ] as { openFileInEditor(p: string): string } | undefined;
   if (!bridge?.openFileInEditor) {
     throw new Error("外部编辑器功能仅在 Android 上可用");
   }
-  bridge.openFileInEditor(path);
+  const error = bridge.openFileInEditor(path);
+  if (error) throw new Error(error);
 }
 
 /**

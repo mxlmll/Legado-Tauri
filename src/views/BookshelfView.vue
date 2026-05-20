@@ -1,20 +1,24 @@
 <script setup lang="ts">
-import { useMessage } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { computed, onMounted, ref, watch } from 'vue';
-import ChapterReaderModal from '@/components/explore/ChapterReaderModal.vue';
-import ShelfGroupMenu from '@/components/shelf/ShelfGroupMenu.vue';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
-import { useShelfGroups } from '@/composables/useShelfGroups';
-import { useTocAutoUpdate } from '@/composables/useTocAutoUpdate';
-import { isTransportAvailable } from '@/composables/useTransport';
-import { useViewCardDensity, type CardSizeKey } from '@/composables/useViewCardDensity';
-import BookshelfContextMenu from '@/features/bookshelf/components/BookshelfContextMenu.vue';
-import BookshelfDialogs from '@/features/bookshelf/components/BookshelfDialogs.vue';
-import BookshelfGrid from '@/features/bookshelf/components/BookshelfGrid.vue';
-import BookshelfHeader from '@/features/bookshelf/components/BookshelfHeader.vue';
-import { useBookshelfActions } from '@/features/bookshelf/services/bookshelfActions';
-import { useBookshelfReaderLauncher } from '@/features/bookshelf/services/bookshelfReaderLauncher';
+import { useMessage } from "naive-ui";
+import { storeToRefs } from "pinia";
+import { computed, onMounted, ref, watch } from "vue";
+import ChapterReaderModal from "@/components/explore/ChapterReaderModal.vue";
+import ShelfGroupMenu from "@/components/shelf/ShelfGroupMenu.vue";
+import { useOverlayBackstack } from "@/composables/useOverlayBackstack";
+import { useShelfGroups } from "@/composables/useShelfGroups";
+import { useTocAutoUpdate } from "@/composables/useTocAutoUpdate";
+import { isTransportAvailable } from "@/composables/useTransport";
+import { useDynamicConfig } from "@/composables/useDynamicConfig";
+import {
+  useViewCardDensity,
+  type CardSizeKey,
+} from "@/composables/useViewCardDensity";
+import BookshelfContextMenu from "@/features/bookshelf/components/BookshelfContextMenu.vue";
+import BookshelfDialogs from "@/features/bookshelf/components/BookshelfDialogs.vue";
+import BookshelfGrid from "@/features/bookshelf/components/BookshelfGrid.vue";
+import BookshelfHeader from "@/features/bookshelf/components/BookshelfHeader.vue";
+import { useBookshelfActions } from "@/features/bookshelf/services/bookshelfActions";
+import { useBookshelfReaderLauncher } from "@/features/bookshelf/services/bookshelfReaderLauncher";
 import {
   useBookshelfReaderStore,
   useBookshelfStore,
@@ -22,7 +26,7 @@ import {
   useFrontendPluginsStore,
   useNavigationStore,
   usePrivacyModeStore,
-} from '@/stores';
+} from "@/stores";
 
 const message = useMessage();
 const bookshelfStore = useBookshelfStore();
@@ -92,7 +96,7 @@ const showGroupMenu = computed({
 
 // 搜索弹出层
 const showSearch = ref(false);
-const searchPopupKw = ref('');
+const searchPopupKw = ref("");
 
 // 书架编辑模式
 const editMode = ref(false);
@@ -148,7 +152,7 @@ const contextBookGroupId = computed(() => {
   if (!bookId) {
     return undefined;
   }
-  return shelfGroupsState.bookGroupMap[bookId] ?? 'all';
+  return shelfGroupsState.bookGroupMap[bookId] ?? "all";
 });
 
 const {
@@ -157,7 +161,24 @@ const {
   activeSizeKey,
   style: bookshelfDensityStyle,
   setSize,
-} = useViewCardDensity('bookshelf');
+} = useViewCardDensity("bookshelf");
+
+// 移动端每行列数（2~6，持久化）
+const mobileColsConfig = useDynamicConfig<{ cols: number }>({
+  namespace: "ui.bookshelf.mobileCols",
+  version: 1,
+  defaults: () => ({ cols: 3 }),
+  migrate: () => null,
+  legacyKeys: [],
+});
+const mobileCols = computed(() => mobileColsConfig.state.cols);
+function setMobileCols(cols: number) {
+  mobileColsConfig.replace({ cols });
+}
+const bookshelfStyle = computed(() => ({
+  ...bookshelfDensityStyle.value,
+  "--bs-mobile-cols": String(mobileCols.value),
+}));
 
 const navigationStore = useNavigationStore();
 const { activeView } = storeToRefs(navigationStore);
@@ -230,7 +251,9 @@ const searchedBooks = computed(() => {
     return sortedBooks.value;
   }
   return sortedBooks.value.filter(
-    (book) => book.name.toLowerCase().includes(kw) || book.author.toLowerCase().includes(kw),
+    (book) =>
+      book.name.toLowerCase().includes(kw) ||
+      book.author.toLowerCase().includes(kw),
   );
 });
 
@@ -241,7 +264,7 @@ watch(activeView, (newView) => {
     _shelfViewWatchInitialized = true;
     return;
   }
-  if (newView === 'bookshelf') {
+  if (newView === "bookshelf") {
     tocAutoUpdate.refreshAllOnShelfView();
   }
 });
@@ -258,17 +281,17 @@ watch(privacyExitTick, () => {
 // 分组菜单操作
 async function handleAddGroup(name: string) {
   await addGroup(name);
-  message.success('分组已创建');
+  message.success("分组已创建");
 }
 
 function handleRemoveGroup(groupId: string) {
   removeGroup(groupId);
-  message.success('分组已删除');
+  message.success("分组已删除");
 }
 
 async function handleRenameGroup(groupId: string, name: string) {
   await renameGroup(groupId, name);
-  message.success('分组已重命名');
+  message.success("分组已重命名");
 }
 
 function handleToggleGroup(groupId: string, enabled: boolean) {
@@ -286,11 +309,11 @@ async function handleRefresh() {
   if (result.updated > 0) {
     message.success(`发现 ${result.updated} 个新章节`);
   } else if (result.success > 0) {
-    message.info('已是最新，没有新章节');
+    message.info("已是最新，没有新章节");
   } else if (result.failed > 0) {
     message.warning(`刷新完成，${result.failed} 本书刷新失败`);
   } else {
-    message.info('没有需要刷新的书籍');
+    message.info("没有需要刷新的书籍");
   }
 }
 
@@ -301,9 +324,14 @@ onMounted(async () => {
   }
   loading.value = true;
   try {
-    await Promise.all([bookshelfStore.loadBooks(), frontendPluginsStore.ensureInitialized()]);
+    await Promise.all([
+      bookshelfStore.loadBooks(),
+      frontendPluginsStore.ensureInitialized(),
+    ]);
   } catch (error: unknown) {
-    message.error(`加载书架失败: ${error instanceof Error ? error.message : String(error)}`);
+    message.error(
+      `加载书架失败: ${error instanceof Error ? error.message : String(error)}`,
+    );
   } finally {
     loading.value = false;
   }
@@ -313,18 +341,20 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="bookshelf-view app-page" :style="bookshelfDensityStyle">
+  <div class="bookshelf-view" :style="bookshelfStyle">
     <BookshelfHeader
       :book-count="visibleBookCount"
       :privacy-mode-enabled="privacyModeEnabled"
       :card-sizes="CARD_SIZES"
       :active-size-key="activeSizeKey"
       :active-size-label="activeSize.label"
+      :mobile-cols="mobileCols"
       :groups="groupsWithAll"
       :active-group-id="shelfGroupsState.activeGroupId"
       :show-group-menu="showGroupMenu"
       :loading="loading"
       @set-size="(key: CardSizeKey) => setSize(key)"
+      @set-mobile-cols="setMobileCols"
       @toggle-privacy="togglePrivacyMode"
       @toggle-group-menu="showGroupMenu = !showGroupMenu"
       @select-group="(id: string) => selectGroup(id)"
@@ -342,7 +372,9 @@ onMounted(async () => {
       :opening-book-id="editMode ? null : openingBookId"
       :edit-mode="editMode"
       :selected-book-ids="selectedBookIds"
-      @select="editMode ? toggleBookSelect($event.id) : readerLauncher.openBook($event)"
+      @select="
+        editMode ? toggleBookSelect($event.id) : readerLauncher.openBook($event)
+      "
       @contextmenu="(book, e) => !editMode && uiStore.openContextMenu(book, e)"
       @refresh="handleRefresh"
     />
@@ -350,10 +382,12 @@ onMounted(async () => {
     <!-- 编辑模式底部操作栏 -->
     <Transition name="bs-edit-bar">
       <div v-if="editMode" class="bs-edit-bar">
-        <span class="bs-edit-bar__count">已选 {{ selectedBookIds.size }} 本</span>
+        <span class="bs-edit-bar__count"
+          >已选 {{ selectedBookIds.size }} 本</span
+        >
         <div class="bs-edit-bar__actions">
           <button class="bs-edit-bar__btn" @click="toggleSelectAll">
-            {{ allSelected ? '取消全选' : '全选' }}
+            {{ allSelected ? "取消全选" : "全选" }}
           </button>
           <button class="bs-edit-bar__btn" @click="toggleEditMode">取消</button>
           <button
@@ -376,15 +410,24 @@ onMounted(async () => {
       :segmented="{ content: true }"
       @after-leave="searchPopupKw = ''"
     >
-      <n-input v-model:value="searchPopupKw" placeholder="搜索书名或作者..." clearable autofocus />
+      <n-input
+        v-model:value="searchPopupKw"
+        placeholder="搜索书名或作者..."
+        clearable
+        autofocus
+      />
       <div class="bs-search-results">
         <template v-if="searchPopupKw.trim()">
           <div
             v-for="book in sortedBooks
               .filter(
                 (b) =>
-                  b.name.toLowerCase().includes(searchPopupKw.trim().toLowerCase()) ||
-                  b.author.toLowerCase().includes(searchPopupKw.trim().toLowerCase()),
+                  b.name
+                    .toLowerCase()
+                    .includes(searchPopupKw.trim().toLowerCase()) ||
+                  b.author
+                    .toLowerCase()
+                    .includes(searchPopupKw.trim().toLowerCase()),
               )
               .slice(0, 30)"
             :key="book.id"
@@ -400,15 +443,23 @@ onMounted(async () => {
               showSearch = false;
             "
           >
-            <span class="bs-search-item__name">{{ book.name || '未知书名' }}</span>
-            <span class="bs-search-item__author">{{ book.author || '佚名' }}</span>
+            <span class="bs-search-item__name">{{
+              book.name || "未知书名"
+            }}</span>
+            <span class="bs-search-item__author">{{
+              book.author || "佚名"
+            }}</span>
           </div>
           <div
             v-if="
               !sortedBooks.filter(
                 (b) =>
-                  b.name.toLowerCase().includes(searchPopupKw.trim().toLowerCase()) ||
-                  b.author.toLowerCase().includes(searchPopupKw.trim().toLowerCase()),
+                  b.name
+                    .toLowerCase()
+                    .includes(searchPopupKw.trim().toLowerCase()) ||
+                  b.author
+                    .toLowerCase()
+                    .includes(searchPopupKw.trim().toLowerCase()),
               ).length
             "
             class="bs-search-empty"
@@ -454,7 +505,9 @@ onMounted(async () => {
       :chapter-groups="readerChapterGroups"
       :inline-group-tabs="true"
       :episode-progress="episodeProgressMap"
-      :save-episode-progress="(_, url, t, d) => readerStore.setEpisodeProgress(url, t, d)"
+      :save-episode-progress="
+        (_, url, t, d) => readerStore.setEpisodeProgress(url, t, d)
+      "
       :shelf-book-id="readerShelfId"
       :book-info="readerBookInfo"
       :source-type="readerSourceType"

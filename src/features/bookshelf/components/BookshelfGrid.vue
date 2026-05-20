@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { BookOpen } from 'lucide-vue-next';
-import type { ShelfBook } from '@/stores';
-import ShelfBookCard from '@/components/bookshelf/ShelfBookCard.vue';
-import { useShelfPullRefresh } from '@/composables/useShelfPullRefresh';
+import { BookOpen } from "lucide-vue-next";
+import type { ShelfBook } from "@/stores";
+import ShelfBookCard from "@/components/bookshelf/ShelfBookCard.vue";
+import { useShelfPullRefresh } from "@/composables/useShelfPullRefresh";
 
 const props = defineProps<{
   loading: boolean;
@@ -15,18 +15,25 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'select', book: ShelfBook): void;
-  (e: 'contextmenu', book: ShelfBook, event: MouseEvent): void;
-  (e: 'refresh'): Promise<void>;
+  (e: "select", book: ShelfBook): void;
+  (e: "contextmenu", book: ShelfBook, event: MouseEvent): void;
+  (e: "refresh"): Promise<void>;
 }>();
 
 // 下拉刷新
-const { pullDistance, isRefreshing, isReady, onTouchStart, onTouchMove, onTouchEnd, onMouseDown } =
-  useShelfPullRefresh({
-    onRefresh: async () => {
-      await emit('refresh');
-    },
-  });
+const {
+  pullDistance,
+  isRefreshing,
+  isReady,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+  onMouseDown,
+} = useShelfPullRefresh({
+  onRefresh: async () => {
+    await emit("refresh");
+  },
+});
 </script>
 
 <template>
@@ -153,7 +160,7 @@ const { pullDistance, isRefreshing, isReady, onTouchStart, onTouchMove, onTouchE
 }
 
 .bs-pull-indicator--refreshing .bs-pull-indicator__content,
-.bs-pull-indicator:not([style*='height: 0']) .bs-pull-indicator__content {
+.bs-pull-indicator:not([style*="height: 0"]) .bs-pull-indicator__content {
   opacity: 1;
 }
 
@@ -227,7 +234,10 @@ const { pullDistance, isRefreshing, isReady, onTouchStart, onTouchMove, onTouchE
 
 .bs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--book-card-col-min, 120px), 1fr));
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--book-card-col-min, 120px), 1fr)
+  );
   gap: 12px;
   padding-top: 4px;
 }
@@ -265,10 +275,7 @@ const { pullDistance, isRefreshing, isReady, onTouchStart, onTouchMove, onTouchE
   }
 
   .bs-grid {
-    grid-template-columns: repeat(
-      auto-fill,
-      minmax(var(--book-card-col-min-mobile, var(--book-card-col-min, 100px)), 1fr)
-    );
+    grid-template-columns: repeat(var(--bs-mobile-cols, 4), 1fr);
     gap: 8px;
   }
 }

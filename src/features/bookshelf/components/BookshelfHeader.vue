@@ -12,12 +12,13 @@ import {
   Search,
   Pencil,
   Settings2,
-} from 'lucide-vue-next';
-import type { DropdownOption } from 'naive-ui';
-import { computed } from 'vue';
-import MobileToolbarMenu from '@/components/layout/MobileToolbarMenu.vue';
-import type { CardSizeKey } from '@/composables/useViewCardDensity';
-import type { ShelfGroup } from '@/types/shelfGroup';
+} from "lucide-vue-next";
+import { isMobile } from "@/composables/useEnv";
+import type { DropdownOption } from "naive-ui";
+import { computed } from "vue";
+import MobileToolbarMenu from "@/components/layout/MobileToolbarMenu.vue";
+import type { CardSizeKey } from "@/composables/useViewCardDensity";
+import type { ShelfGroup } from "@/types/shelfGroup";
 
 const props = defineProps<{
   bookCount: number;
@@ -25,6 +26,7 @@ const props = defineProps<{
   cardSizes: { key: CardSizeKey; label: string }[];
   activeSizeKey: CardSizeKey;
   activeSizeLabel: string;
+  mobileCols: number;
   groups: ShelfGroup[];
   activeGroupId: string;
   showGroupMenu: boolean;
@@ -32,15 +34,18 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'set-size', key: CardSizeKey): void;
-  (e: 'toggle-privacy'): void;
-  (e: 'toggle-group-menu'): void;
-  (e: 'select-group', groupId: string): void;
-  (e: 'import-txt'): void;
-  (e: 'refresh'): void;
-  (e: 'toggle-search'): void;
-  (e: 'toggle-edit'): void;
+  (e: "set-size", key: CardSizeKey): void;
+  (e: "set-mobile-cols", cols: number): void;
+  (e: "toggle-privacy"): void;
+  (e: "toggle-group-menu"): void;
+  (e: "select-group", groupId: string): void;
+  (e: "import-txt"): void;
+  (e: "refresh"): void;
+  (e: "toggle-search"): void;
+  (e: "toggle-edit"): void;
 }>();
+
+const MOBILE_COLS_OPTIONS = [2, 3, 4, 5, 6];
 
 // 启用的分组（排除禁用的）
 const enabledGroups = computed(() => {
@@ -54,60 +59,57 @@ const showGroupBar = computed(() => {
 
 const mobileMenuOptions = computed<DropdownOption[]>(() => [
   {
-    label: '搜索书架',
-    key: 'search',
+    label: "搜索书架",
+    key: "search",
   },
   {
-    label: props.showGroupMenu ? '关闭分组管理' : '分组管理',
-    key: 'group-menu',
-  },
-  {
-    label: '刷新书架',
-    key: 'refresh',
+    label: "刷新书架",
+    key: "refresh",
     disabled: props.loading,
   },
   {
-    label: '导入本地 TXT',
-    key: 'import-txt',
+    label: "导入本地 TXT",
+    key: "import-txt",
   },
-  ...props.cardSizes.map((size) => ({
-    label: `卡片大小：${size.label}`,
-    key: `size-${size.key}`,
-    disabled: props.activeSizeKey === size.key,
+  ...MOBILE_COLS_OPTIONS.map((n) => ({
+    label: `每行 ${n} 本`,
+    key: `cols-${n}`,
+    disabled: props.mobileCols === n,
   })),
   {
-    label: props.privacyModeEnabled ? '退出隐私模式' : '进入隐私模式',
-    key: 'privacy',
+    label: props.privacyModeEnabled ? "退出隐私模式" : "进入隐私模式",
+    key: "privacy",
   },
   {
-    label: '编辑书架',
-    key: 'edit',
+    label: "编辑书架",
+    key: "edit",
   },
 ]);
 
 function handleMobileMenuSelect(key: string) {
-  if (key.startsWith('size-')) {
-    emit('set-size', key.slice(5) as CardSizeKey);
+  if (key.startsWith("size-")) {
+    emit("set-size", key.slice(5) as CardSizeKey);
+    return;
+  }
+  if (key.startsWith("cols-")) {
+    emit("set-mobile-cols", Number(key.slice(5)));
     return;
   }
   switch (key) {
-    case 'search':
-      emit('toggle-search');
+    case "search":
+      emit("toggle-search");
       break;
-    case 'group-menu':
-      emit('toggle-group-menu');
+    case "refresh":
+      emit("refresh");
       break;
-    case 'refresh':
-      emit('refresh');
+    case "import-txt":
+      emit("import-txt");
       break;
-    case 'import-txt':
-      emit('import-txt');
+    case "privacy":
+      emit("toggle-privacy");
       break;
-    case 'privacy':
-      emit('toggle-privacy');
-      break;
-    case 'edit':
-      emit('toggle-edit');
+    case "edit":
+      emit("toggle-edit");
       break;
   }
 }
@@ -119,11 +121,14 @@ function handleMobileMenuSelect(key: string) {
       <div>
         <h1 class="bs-header__title">书架</h1>
         <p class="bs-header__sub">
-          {{ privacyModeEnabled ? '隐私模式' : `${bookCount} 本书籍` }}
+          {{ privacyModeEnabled ? "隐私模式" : `${bookCount} 本书籍` }}
         </p>
       </div>
       <div class="bs-header__actions">
-        <MobileToolbarMenu :options="mobileMenuOptions" @select="handleMobileMenuSelect">
+        <MobileToolbarMenu
+          :options="mobileMenuOptions"
+          @select="handleMobileMenuSelect"
+        >
           <!-- 搜索按钮 -->
           <button
             class="bs-icon-btn"
@@ -167,21 +172,25 @@ function handleMobileMenuSelect(key: string) {
           >
             <FilePlus :size="16" />
           </button>
-          <n-dropdown
-            trigger="click"
-            :options="cardSizes.map((size) => ({ label: size.label, key: size.key }))"
-            :value="activeSizeKey"
-            @select="(key: string) => emit('set-size', key as CardSizeKey)"
-          >
-            <button
-              class="bs-icon-btn"
-              type="button"
-              :title="`卡片大小（${activeSizeLabel}）`"
-              aria-label="卡片大小"
+          <template v-if="!isMobile">
+            <n-dropdown
+              trigger="click"
+              :options="
+                cardSizes.map((size) => ({ label: size.label, key: size.key }))
+              "
+              :value="activeSizeKey"
+              @select="(key: string) => emit('set-size', key as CardSizeKey)"
             >
-              <LayoutGrid :size="16" />
-            </button>
-          </n-dropdown>
+              <button
+                class="bs-icon-btn"
+                type="button"
+                :title="`卡片大小（${activeSizeLabel}）`"
+                aria-label="卡片大小"
+              >
+                <LayoutGrid :size="16" />
+              </button>
+            </n-dropdown>
+          </template>
           <button
             class="bs-icon-btn"
             :class="{ 'bs-icon-btn--active': privacyModeEnabled }"
