@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, computed, onMounted, onUnmounted } from "vue";
+import { ref, nextTick, watch, computed, onMounted, onUnmounted } from 'vue';
 import {
   type BookSourceMeta,
   type TestStepResult,
   runBookSourceTests,
-} from "../../composables/useBookSource";
-import { eventListen } from "../../composables/useEventBus";
+} from '../../composables/useBookSource';
+import { eventListen } from '../../composables/useEventBus';
 
 const props = defineProps<{
   sources: BookSourceMeta[];
@@ -14,7 +14,7 @@ const props = defineProps<{
 // ---- 测试状态 ----
 interface TestSourceState {
   fileName: string;
-  status: "idle" | "running" | "done";
+  status: 'idle' | 'running' | 'done';
   steps: TestStepResult[];
   allPassed: boolean | null;
   /** 该书源产生的日志行 */
@@ -26,7 +26,7 @@ const testRunning = ref(false);
 /** 批量测试全局日志（开始/结束横幅） */
 const batchLogs = ref<string[]>([]);
 /** 日志过滤：全部 / 成功 / 失败 */
-const logFilter = ref<"all" | "pass" | "fail">("all");
+const logFilter = ref<'all' | 'pass' | 'fail'>('all');
 const testProgress = ref({ current: 0, total: 0 });
 const testLogContainer = ref<HTMLDivElement | null>(null);
 
@@ -39,7 +39,7 @@ const totalTimeoutSecs = ref(0);
 const concurrency = ref(5);
 
 function createTestState(fileName: string): TestSourceState {
-  return { fileName, status: "idle", steps: [], allPassed: null, logs: [] };
+  return { fileName, status: 'idle', steps: [], allPassed: null, logs: [] };
 }
 
 // ---- 实时日志订阅 ----
@@ -64,18 +64,15 @@ function findRunningStatesBySourceName(sourceName: string): TestSourceState[] {
 
 /** 订阅书源实时日志事件（组件生命周期内保持订阅） */
 async function subscribeTestLogs() {
-  unlistenLog = await eventListen<{ message: string; sourceName?: string }>(
-    "script:log",
-    (e) => {
-      const { message, sourceName } = e.payload;
-      if (!sourceName) {
-        return;
-      }
-      for (const state of findRunningStatesBySourceName(sourceName)) {
-        pushLog(state, `  · ${message}`);
-      }
-    },
-  );
+  unlistenLog = await eventListen<{ message: string; sourceName?: string }>('script:log', (e) => {
+    const { message, sourceName } = e.payload;
+    if (!sourceName) {
+      return;
+    }
+    for (const state of findRunningStatesBySourceName(sourceName)) {
+      pushLog(state, `  · ${message}`);
+    }
+  });
 
   unlistenHttp = await eventListen<{
     url: string;
@@ -85,16 +82,15 @@ async function subscribeTestLogs() {
     elapsed?: number;
     error?: string;
     sourceName?: string;
-  }>("script:http", (e) => {
+  }>('script:http', (e) => {
     const p = e.payload;
     if (!p.sourceName) {
       return;
     }
-    const sc = p.status ? ` ${p.status}` : "";
-    const ms =
-      p.elapsed !== null && p.elapsed !== undefined ? ` (${p.elapsed}ms)` : "";
-    const errPart = p.error ? ` → ${p.error}` : "";
-    const line = `  [http] ${p.ok ? "✓" : "✗"}${sc} ${p.method} ${p.url}${ms}${errPart}`;
+    const sc = p.status ? ` ${p.status}` : '';
+    const ms = p.elapsed !== null && p.elapsed !== undefined ? ` (${p.elapsed}ms)` : '';
+    const errPart = p.error ? ` → ${p.error}` : '';
+    const line = `  [http] ${p.ok ? '✓' : '✗'}${sc} ${p.method} ${p.url}${ms}${errPart}`;
     for (const state of findRunningStatesBySourceName(p.sourceName)) {
       pushLog(state, line);
     }
@@ -134,15 +130,12 @@ function ensureTestState(fileName: string): TestSourceState {
 }
 
 watch(
-  () => props.sources.map((src) => `${src.fileName}:${src.enabled}`).join("|"),
+  () => props.sources.map((src) => `${src.fileName}:${src.enabled}`).join('|'),
   () => {
     const next = new Map<string, TestSourceState>();
     for (const src of props.sources) {
       if (src.enabled) {
-        next.set(
-          src.fileName,
-          testStates.value.get(src.fileName) ?? createTestState(src.fileName),
-        );
+        next.set(src.fileName, testStates.value.get(src.fileName) ?? createTestState(src.fileName));
         continue;
       }
       const existing = testStates.value.get(src.fileName);
@@ -188,12 +181,10 @@ function pushBatchLog(msg: string) {
 
 // ---- 计算属性 ----
 const passCount = computed(
-  () =>
-    [...testStates.value.values()].filter((s) => s.allPassed === true).length,
+  () => [...testStates.value.values()].filter((s) => s.allPassed === true).length,
 );
 const failCount = computed(
-  () =>
-    [...testStates.value.values()].filter((s) => s.allPassed === false).length,
+  () => [...testStates.value.values()].filter((s) => s.allPassed === false).length,
 );
 
 /** 按日志过滤器生成当前应显示的日志行 */
@@ -208,10 +199,10 @@ const filteredLogs = computed(() => {
     if (state.logs.length === 0) {
       continue;
     }
-    if (logFilter.value === "pass" && state.allPassed !== true) {
+    if (logFilter.value === 'pass' && state.allPassed !== true) {
       continue;
     }
-    if (logFilter.value === "fail" && state.allPassed !== false) {
+    if (logFilter.value === 'fail' && state.allPassed !== false) {
       continue;
     }
     lines.push(...state.logs);
@@ -227,7 +218,7 @@ const filteredLogs = computed(() => {
 // ---- 测试执行 ----
 async function runSingleTest(fileName: string) {
   const state = ensureTestState(fileName);
-  state.status = "running";
+  state.status = 'running';
   state.steps = [];
   state.allPassed = null;
   state.logs = [];
@@ -241,22 +232,16 @@ async function runSingleTest(fileName: string) {
     const result = await runBookSourceTests(fileName, itemTimeoutSecs.value);
     state.steps = result.steps;
     state.allPassed = result.allPassed;
-    state.status = "done";
+    state.status = 'done';
     for (const step of result.steps) {
-      const icon = step.passed ? "✓" : "✗";
-      pushLog(
-        state,
-        `  ${icon} [${step.step}] ${step.message} (${step.durationMs}ms)`,
-      );
+      const icon = step.passed ? '✓' : '✗';
+      pushLog(state, `  ${icon} [${step.step}] ${step.message} (${step.durationMs}ms)`);
     }
-    pushLog(state, `  ${result.allPassed ? "✅ 全部通过" : "❌ 存在失败"}`);
+    pushLog(state, `  ${result.allPassed ? '✅ 全部通过' : '❌ 存在失败'}`);
   } catch (e: unknown) {
-    state.status = "done";
+    state.status = 'done';
     state.allPassed = false;
-    pushLog(
-      state,
-      `  ✗ 测试异常: ${e instanceof Error ? e.message : String(e)}`,
-    );
+    pushLog(state, `  ✗ 测试异常: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
     runningFileNames.delete(fileName);
   }
@@ -271,7 +256,7 @@ async function runAllTests() {
 
   const concurrencyVal = Math.max(1, concurrency.value);
   pushBatchLog(
-    `═══ 开始批量测试 (${fileNames.length} 个书源, 并发: ${concurrencyVal}${totalTimeoutSecs.value > 0 ? `, 总超时: ${totalTimeoutSecs.value}s` : ""}) ═══`,
+    `═══ 开始批量测试 (${fileNames.length} 个书源, 并发: ${concurrencyVal}${totalTimeoutSecs.value > 0 ? `, 总超时: ${totalTimeoutSecs.value}s` : ''}) ═══`,
   );
 
   const startTime = Date.now();
@@ -293,10 +278,7 @@ async function runAllTests() {
         // runSingleTest 内部已有 try/catch，此处只做最后兜底，防止单个异常令 Promise.all 提前 reject
       }
       testProgress.value.current++;
-      if (
-        totalTimeoutSecs.value > 0 &&
-        Date.now() - startTime > totalTimeoutSecs.value * 1000
-      ) {
+      if (totalTimeoutSecs.value > 0 && Date.now() - startTime > totalTimeoutSecs.value * 1000) {
         aborted = true;
         break;
       }
@@ -304,14 +286,9 @@ async function runAllTests() {
   }
 
   try {
-    await Promise.all(
-      Array.from(
-        { length: Math.min(concurrencyVal, fileNames.length) },
-        worker,
-      ),
-    );
+    await Promise.all(Array.from({ length: Math.min(concurrencyVal, fileNames.length) }, worker));
   } finally {
-    const suffix = aborted ? " (已超时中断)" : "";
+    const suffix = aborted ? ' (已超时中断)' : '';
     pushBatchLog(
       `═══ 测试完成: ${passCount.value} 通过, ${failCount.value} 失败, ${[...testStates.value.values()].filter((s) => s.allPassed === null).length} 跳过${suffix} ═══`,
     );
@@ -338,7 +315,7 @@ function clearLogs() {
         :disabled="testRunning"
         @click="runAllTests"
       >
-        {{ testRunning ? "测试中..." : "全部测试" }}
+        {{ testRunning ? '测试中...' : '全部测试' }}
       </n-button>
       <span v-if="testRunning" class="bv-test__progress">
         {{ testProgress.current }} / {{ testProgress.total }}
@@ -368,9 +345,7 @@ function clearLogs() {
           :disabled="testRunning"
         />
         <span class="bv-test__settings-label">s</span>
-        <span class="bv-test__settings-label" style="margin-left: 4px"
-          >总超时</span
-        >
+        <span class="bv-test__settings-label" style="margin-left: 4px">总超时</span>
         <n-input-number
           v-model:value="totalTimeoutSecs"
           :min="0"
@@ -393,18 +368,13 @@ function clearLogs() {
           :key="'test-' + src.fileName"
           class="bv-test__item"
           :class="{
-            'bv-test__item--running':
-              testStates.get(src.fileName)?.status === 'running',
-            'bv-test__item--pass':
-              testStates.get(src.fileName)?.allPassed === true,
-            'bv-test__item--fail':
-              testStates.get(src.fileName)?.allPassed === false,
+            'bv-test__item--running': testStates.get(src.fileName)?.status === 'running',
+            'bv-test__item--pass': testStates.get(src.fileName)?.allPassed === true,
+            'bv-test__item--fail': testStates.get(src.fileName)?.allPassed === false,
           }"
         >
           <div class="bv-test__item-header">
-            <span class="bv-test__item-name">{{
-              src.name || src.fileName
-            }}</span>
+            <span class="bv-test__item-name">{{ src.name || src.fileName }}</span>
             <n-button
               size="tiny"
               quaternary
@@ -420,19 +390,17 @@ function clearLogs() {
               v-for="step in testStates.get(src.fileName)?.steps ?? []"
               :key="step.step"
               class="bv-test__step"
-              :class="
-                step.passed ? 'bv-test__step--pass' : 'bv-test__step--fail'
-              "
+              :class="step.passed ? 'bv-test__step--pass' : 'bv-test__step--fail'"
               :title="step.message"
             >
-              {{ step.passed ? "✓" : "✗" }}
+              {{ step.passed ? '✓' : '✗' }}
               {{
                 {
-                  search: "搜索",
-                  bookInfo: "详情",
-                  chapterList: "目录",
-                  chapterContent: "正文",
-                  explore: "发现",
+                  search: '搜索',
+                  bookInfo: '详情',
+                  chapterList: '目录',
+                  chapterContent: '正文',
+                  explore: '发现',
                 }[step.step] || step.step
               }}
             </span>
@@ -466,16 +434,13 @@ function clearLogs() {
             class="bv-test__log-line"
             :class="{
               'bv-test__log-line--pass':
-                log.includes('✅') ||
-                (log.includes('✓') && !log.startsWith('  [http]')),
+                log.includes('✅') || (log.includes('✓') && !log.startsWith('  [http]')),
               'bv-test__log-line--fail':
-                log.includes('❌') ||
-                (log.includes('✗') && !log.startsWith('  [http]')),
+                log.includes('❌') || (log.includes('✗') && !log.startsWith('  [http]')),
               'bv-test__log-line--banner': log.includes('═══'),
               'bv-test__log-line--http-ok': log.startsWith('  [http] ✓'),
               'bv-test__log-line--http-err': log.startsWith('  [http] ✗'),
-              'bv-test__log-line--detail':
-                log.startsWith('  ·') || log.startsWith('  [http]'),
+              'bv-test__log-line--detail': log.startsWith('  ·') || log.startsWith('  [http]'),
             }"
           >
             {{ log }}
@@ -616,7 +581,7 @@ function clearLogs() {
   flex: 1;
   overflow-y: auto;
   padding: 8px 10px;
-  font-family: "Cascadia Code", "Consolas", monospace;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 0.75rem;
   line-height: 1.6;
   color: var(--color-text-secondary);

@@ -1,14 +1,14 @@
 ﻿<script setup lang="ts">
-import { computed } from "vue";
-import { useOverlayBackstack } from "@/composables/useOverlayBackstack";
-import ReaderImmersiveSurface from "../../features/reader/components/ReaderImmersiveSurface.vue";
-import ReaderModal from "../../features/reader/components/ReaderModal.vue";
-import ReaderVideoSurface from "../../features/reader/components/ReaderVideoSurface.vue";
+import { computed } from 'vue';
+import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import ReaderImmersiveSurface from '../../features/reader/components/ReaderImmersiveSurface.vue';
+import ReaderModal from '../../features/reader/components/ReaderModal.vue';
+import ReaderVideoSurface from '../../features/reader/components/ReaderVideoSurface.vue';
 import {
   type ChapterReaderModalEmit,
   type ChapterReaderModalProps,
   useChapterReaderModalController,
-} from "../reader/composables/useChapterReaderModalController";
+} from '../reader/composables/useChapterReaderModalController';
 
 const props = defineProps<ChapterReaderModalProps>();
 const emit = defineEmits<ChapterReaderModalEmit>();
@@ -21,7 +21,7 @@ const settings = controller.settings;
 // 视频模式通过 Teleport 挂载，不经过 ReaderModal，需单独注册返回栈
 useOverlayBackstack(
   () => isVideoMode.value && props.show,
-  () => emit("update:show", false),
+  () => emit('update:show', false),
 );
 </script>
 
@@ -40,11 +40,7 @@ useOverlayBackstack(
   </Teleport>
 
   <!-- ── 小说 / 漫画模式：沉浸全屏阅读器 ── -->
-  <ReaderModal
-    v-if="!isVideoMode"
-    :show="show"
-    @update:show="emit('update:show', $event)"
-  >
+  <ReaderModal v-if="!isVideoMode" :show="show" @update:show="emit('update:show', $event)">
     <ReaderImmersiveSurface
       :ref="controller.menuLayerRef"
       :style-value="effectiveStyle"
@@ -85,7 +81,7 @@ useOverlayBackstack(
   --reader-bottom-shadow: none;
   --reader-menu-overlay-bg: rgba(0, 0, 0, 0.35);
   --reader-shell-title-display: none;
-  --reader-shell-title-text: "";
+  --reader-shell-title-text: '';
   --reader-shell-title-height: 0px;
   --reader-shell-title-bg: transparent;
   --reader-shell-title-color: inherit;
@@ -94,7 +90,7 @@ useOverlayBackstack(
   --reader-shell-title-font: inherit;
   --reader-shell-title-z-index: 9;
   --reader-shell-winctrls-display: none;
-  --reader-shell-winctrls-text: "";
+  --reader-shell-winctrls-text: '';
   --reader-shell-winctrls-height: 0px;
   --reader-shell-winctrls-bg: transparent;
   --reader-shell-winctrls-color: inherit;
@@ -109,13 +105,9 @@ useOverlayBackstack(
   );
   --reader-plugin-top-right-right: 14px;
   --reader-plugin-bottom-left-left: 14px;
-  --reader-plugin-bottom-left-bottom: calc(
-    env(safe-area-inset-bottom, 0px) + 14px
-  );
+  --reader-plugin-bottom-left-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
   --reader-plugin-bottom-right-right: 14px;
-  --reader-plugin-bottom-right-bottom: calc(
-    env(safe-area-inset-bottom, 0px) + 14px
-  );
+  --reader-plugin-bottom-right-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
   width: 100vw;
   height: 100vh;
   height: 100dvh;
@@ -199,26 +191,20 @@ useOverlayBackstack(
   text-size-adjust: none;
 }
 
-.reader-modal[data-reader-skin="reader-disguise-skins:notepad"]
-  :deep(.scroll-mode__body),
-.reader-modal[data-reader-skin="reader-disguise-skins:notepad-light"]
-  :deep(.scroll-mode__body) {
+.reader-modal[data-reader-skin='reader-disguise-skins:notepad'] :deep(.scroll-mode__body),
+.reader-modal[data-reader-skin='reader-disguise-skins:notepad-light'] :deep(.scroll-mode__body) {
   padding: var(--reader-padding, 8px 10px 8px);
 }
 
-.reader-modal[data-reader-skin="reader-disguise-skins:notepad"]
-  :deep(.scroll-mode__para),
-.reader-modal[data-reader-skin="reader-disguise-skins:notepad-light"]
-  :deep(.scroll-mode__para) {
+.reader-modal[data-reader-skin='reader-disguise-skins:notepad'] :deep(.scroll-mode__para),
+.reader-modal[data-reader-skin='reader-disguise-skins:notepad-light'] :deep(.scroll-mode__para) {
   margin-bottom: 0 !important;
   text-indent: 0 !important;
   white-space: pre-wrap;
 }
 
-.reader-modal[data-reader-skin="reader-disguise-skins:notepad"]
-  :deep(.reader-chapter-title),
-.reader-modal[data-reader-skin="reader-disguise-skins:notepad-light"]
-  :deep(.reader-chapter-title) {
+.reader-modal[data-reader-skin='reader-disguise-skins:notepad'] :deep(.reader-chapter-title),
+.reader-modal[data-reader-skin='reader-disguise-skins:notepad-light'] :deep(.reader-chapter-title) {
   display: none;
 }
 

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import hljs from "highlight.js/lib/core";
-import javascript from "highlight.js/lib/languages/javascript";
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import hljs from 'highlight.js/lib/core';
+import javascript from 'highlight.js/lib/languages/javascript';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
-hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage('javascript', javascript);
 
 const props = withDefaults(
   defineProps<{
@@ -13,14 +13,14 @@ const props = withDefaults(
     minHeight?: string;
   }>(),
   {
-    placeholder: "",
+    placeholder: '',
     autofocusKey: undefined,
-    minHeight: "420px",
+    minHeight: '420px',
   },
 );
 
 const emit = defineEmits<{
-  "update:modelValue": [value: string];
+  'update:modelValue': [value: string];
   save: [];
 }>();
 
@@ -28,12 +28,12 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const highlightRef = ref<HTMLElement | null>(null);
 
 const highlightedCode = computed(() => {
-  const source = props.modelValue || " ";
+  const source = props.modelValue || ' ';
   const highlighted = hljs.highlight(source, {
-    language: "javascript",
+    language: 'javascript',
     ignoreIllegals: true,
   }).value;
-  return props.modelValue.endsWith("\n") ? `${highlighted}\n` : highlighted;
+  return props.modelValue.endsWith('\n') ? `${highlighted}\n` : highlighted;
 });
 
 watch(
@@ -50,7 +50,7 @@ watch(
     }
     resetScroll();
   },
-  { flush: "post", immediate: true },
+  { flush: 'post', immediate: true },
 );
 
 onMounted(resetScroll);
@@ -58,7 +58,7 @@ onMounted(resetScroll);
 defineExpose({ resetScroll });
 
 function updateValue(event: Event) {
-  emit("update:modelValue", (event.target as HTMLTextAreaElement).value);
+  emit('update:modelValue', (event.target as HTMLTextAreaElement).value);
 }
 
 function syncScroll() {
@@ -83,13 +83,13 @@ function resetScroll() {
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if ((event.ctrlKey || event.metaKey) && event.key === "s") {
+  if ((event.ctrlKey || event.metaKey) && event.key === 's') {
     event.preventDefault();
-    emit("save");
+    emit('save');
     return;
   }
 
-  if (event.key !== "Tab") {
+  if (event.key !== 'Tab') {
     return;
   }
 
@@ -97,12 +97,10 @@ function onKeydown(event: KeyboardEvent) {
   const textarea = event.target as HTMLTextAreaElement;
   const start = textarea.selectionStart;
   const end = textarea.selectionEnd;
-  const indent = "  ";
+  const indent = '  ';
   emit(
-    "update:modelValue",
-    props.modelValue.substring(0, start) +
-      indent +
-      props.modelValue.substring(end),
+    'update:modelValue',
+    props.modelValue.substring(0, start) + indent + props.modelValue.substring(end),
   );
   nextTick(() => {
     textarea.selectionStart = textarea.selectionEnd = start + indent.length;
@@ -157,9 +155,7 @@ function onKeydown(event: KeyboardEvent) {
   margin: 0;
   padding: 12px 16px;
   border: 0;
-  font-family:
-    "JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", "Monaco",
-    monospace;
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
   font-size: 13px;
   font-variant-ligatures: none;
   line-height: 1.6;
@@ -239,99 +235,67 @@ function onKeydown(event: KeyboardEvent) {
   color: #6e7781;
 }
 
-:root[data-theme="dark"] .js-highlight-editor,
-.n-config-provider[data-theme="dark"] .js-highlight-editor {
+:root[data-theme='dark'] .js-highlight-editor,
+.n-config-provider[data-theme='dark'] .js-highlight-editor {
   background: #1e1e1e;
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-:root[data-theme="dark"] .js-highlight-editor__highlight,
-:root[data-theme="dark"] .js-highlight-editor__textarea,
-.n-config-provider[data-theme="dark"] .js-highlight-editor__highlight,
-.n-config-provider[data-theme="dark"] .js-highlight-editor__textarea {
+:root[data-theme='dark'] .js-highlight-editor__highlight,
+:root[data-theme='dark'] .js-highlight-editor__textarea,
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight,
+.n-config-provider[data-theme='dark'] .js-highlight-editor__textarea {
   caret-color: #d4d4d4;
   color: transparent;
 }
 
-:root[data-theme="dark"] .js-highlight-editor__highlight,
-.n-config-provider[data-theme="dark"] .js-highlight-editor__highlight {
+:root[data-theme='dark'] .js-highlight-editor__highlight,
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight {
   color: #d4d4d4;
 }
 
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-keyword),
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-literal),
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-symbol),
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-name),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-keyword),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-literal),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-symbol),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-name) {
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-keyword),
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-literal),
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-symbol),
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-name),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-keyword),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-literal),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-symbol),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-name) {
   color: #c586c0;
 }
 
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-string),
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-regexp),
-:root[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-template-variable),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-string),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-regexp),
-.n-config-provider[data-theme="dark"]
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-string),
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-regexp),
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-template-variable),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-string),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-regexp),
+.n-config-provider[data-theme='dark']
   .js-highlight-editor__highlight
   :deep(.hljs-template-variable) {
   color: #ce9178;
 }
 
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-number),
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-built_in),
-:root[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-title.class_),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-number),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-built_in),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-title.class_) {
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-number),
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-built_in),
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-title.class_),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-number),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-built_in),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-title.class_) {
   color: #b5cea8;
 }
 
-:root[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-title.function_),
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-attr),
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-property),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-title.function_),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-attr),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-property) {
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-title.function_),
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-attr),
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-property),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-title.function_),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-attr),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-property) {
   color: #9cdcfe;
 }
 
-:root[data-theme="dark"] .js-highlight-editor__highlight :deep(.hljs-comment),
-.n-config-provider[data-theme="dark"]
-  .js-highlight-editor__highlight
-  :deep(.hljs-comment) {
+:root[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-comment),
+.n-config-provider[data-theme='dark'] .js-highlight-editor__highlight :deep(.hljs-comment) {
   color: #6a9955;
 }
 </style>

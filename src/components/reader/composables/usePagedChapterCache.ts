@@ -1,6 +1,11 @@
-import { nextTick, reactive, type Ref } from 'vue';
+import { nextTick, reactive, ref, watch, type Ref } from 'vue';
 import type { PaginationEngine, ReaderPagePadding, ReaderTypography } from '../types';
-import { usePagination, type ReadingAnchor, type PageMeta } from './usePagination';
+import {
+  usePagination,
+  type ReadingAnchor,
+  type PageMeta,
+  type PaginationMeasurementData,
+} from './usePagination';
 
 interface ChapterPageEntry {
   pages?: string[];
@@ -44,6 +49,7 @@ async function waitForHost(hostRef: Ref<HTMLElement | null>): Promise<HTMLElemen
 
 export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
   const pageEntries = reactive(new Map<number, ChapterPageEntry>());
+  const paginationMeasurementData = ref<PaginationMeasurementData | null>(null);
 
   function getEntry(index: number): ChapterPageEntry {
     let entry = pageEntries.get(index);
@@ -95,6 +101,16 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
       options.getPaginationEngine?.() ?? 'dom',
     );
 
+    // 记录最新的测量数据用于调试
+    watch(
+      () => paginator.measurementData.value,
+      (data) => {
+        if (data) {
+          paginationMeasurementData.value = data;
+        }
+      },
+    );
+
     for (let i = 0; i < 120; i++) {
       if (paginator.pages.value.length > 0 || !paginator.isPaginating.value) {
         break;
@@ -104,7 +120,11 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
 
     const initialPages = paginator.pages.value.length > 0 ? paginator.pages.value : ['<p></p>'];
     const initialMetas = paginator.pageMetas.value.length > 0 ? paginator.pageMetas.value : [];
-    setEntry(index, { pages: initialPages, pageMetas: initialMetas, pagesComplete: false });
+    setEntry(index, {
+      pages: initialPages,
+      pageMetas: initialMetas,
+      pagesComplete: false,
+    });
 
     const completePromise = paginateJob.then(() => {
       const finalPages = paginator.pages.value.length > 0 ? paginator.pages.value : ['<p></p>'];
@@ -234,7 +254,12 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
     const metas = getPageMetas(chapterIndex);
     const total = getPages(chapterIndex).length;
     if (pageIndex < 0 || pageIndex >= metas.length || total <= 0) {
-      return { charOffset: -1, paragraphIndex: -1, paragraphCharOffset: -1, ratio: 0 };
+      return {
+        charOffset: -1,
+        paragraphIndex: -1,
+        paragraphCharOffset: -1,
+        ratio: 0,
+      };
     }
     const meta = metas[pageIndex];
     return {
@@ -259,5 +284,6 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
     invalidatePages,
     dropChapter,
     buildAnchorForChapterPage,
+    paginationMeasurementData,
   };
 }

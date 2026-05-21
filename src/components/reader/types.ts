@@ -193,19 +193,49 @@ export interface ReadingProgress {
    预设主题
    ============================================================ */
 export const PRESET_THEMES: ReaderTheme[] = [
-  { name: '默认白', backgroundColor: '#ffffff', textColor: '#1a1a1a', selectionColor: '#b3d4fc' },
-  { name: '护眼绿', backgroundColor: '#cce8cf', textColor: '#2d4a22', selectionColor: '#a3c99e' },
-  { name: '羊皮纸', backgroundColor: '#f5e6c8', textColor: '#5b4636', selectionColor: '#d4b896' },
-  { name: '暮光蓝', backgroundColor: '#1e293b', textColor: '#cbd5e1', selectionColor: '#475569' },
-  { name: '纯黑夜', backgroundColor: '#0a0a0a', textColor: '#d4d4d4', selectionColor: '#404040' },
-  { name: '柔粉色', backgroundColor: '#fde8e8', textColor: '#6b2c2c', selectionColor: '#f5b7b1' },
+  {
+    name: '默认白',
+    backgroundColor: '#ffffff',
+    textColor: '#1a1a1a',
+    selectionColor: '#b3d4fc',
+  },
+  {
+    name: '护眼绿',
+    backgroundColor: '#cce8cf',
+    textColor: '#2d4a22',
+    selectionColor: '#a3c99e',
+  },
+  {
+    name: '羊皮纸',
+    backgroundColor: '#f5e6c8',
+    textColor: '#5b4636',
+    selectionColor: '#d4b896',
+  },
+  {
+    name: '暮光蓝',
+    backgroundColor: '#1e293b',
+    textColor: '#cbd5e1',
+    selectionColor: '#475569',
+  },
+  {
+    name: '纯黑夜',
+    backgroundColor: '#0a0a0a',
+    textColor: '#d4d4d4',
+    selectionColor: '#404040',
+  },
+  {
+    name: '柔粉色',
+    backgroundColor: '#fde8e8',
+    textColor: '#6b2c2c',
+    selectionColor: '#f5b7b1',
+  },
 ];
 
 /* ============================================================
    默认排版
    ============================================================ */
 export const DEFAULT_TYPOGRAPHY: ReaderTypography = {
-  fontFamily: '"Noto Serif SC", "Source Han Serif CN", "SimSun", serif',
+  fontFamily: '"SimHei", "黑体", sans-serif',
   fontSize: 18,
   lineHeight: 1.8,
   letterSpacing: 0,

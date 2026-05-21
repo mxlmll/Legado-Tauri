@@ -18,28 +18,28 @@
 // ── postMessage 协议常量 ──────────────────────────────────────────────────
 
 /** iframe → parent 的请求消息类型 */
-export const MSG_REQUEST = "legado-request";
+export const MSG_REQUEST = 'legado-request';
 /** parent → iframe 的响应消息类型 */
-export const MSG_RESPONSE = "legado-response";
+export const MSG_RESPONSE = 'legado-response';
 /** parent → iframe 的事件推送消息类型 */
-export const MSG_EVENT = "legado-event";
+export const MSG_EVENT = 'legado-event';
 
 // ── Bridge 可调用的方法白名单 ──────────────────────────────────────────────
 
 export const BRIDGE_METHODS = [
-  "http.get",
-  "http.post",
-  "config.read",
-  "config.readJson",
-  "config.write",
-  "config.writeJson",
-  "callSource",
-  "explore",
-  "toast",
-  "openBook",
-  "search",
-  "log",
-  "installSource",
+  'http.get',
+  'http.post',
+  'config.read',
+  'config.readJson',
+  'config.write',
+  'config.writeJson',
+  'callSource',
+  'explore',
+  'toast',
+  'openBook',
+  'search',
+  'log',
+  'installSource',
 ] as const;
 
 export type BridgeMethod = (typeof BRIDGE_METHODS)[number];
@@ -336,10 +336,7 @@ export function buildSrcdoc(html: string): string {
 
   // 如果 HTML 已包含 <html> 或 <head>，在 <head> 末尾注入
   if (/<head[\s>]/i.test(htmlWithLockedViewport)) {
-    return htmlWithLockedViewport.replace(
-      /<\/head>/i,
-      `${baseStyles}\n${bridgeScript}\n</head>`,
-    );
+    return htmlWithLockedViewport.replace(/<\/head>/i, `${baseStyles}\n${bridgeScript}\n</head>`);
   }
 
   // 如果 HTML 已有 <html> 但没有 <head>
@@ -377,12 +374,12 @@ ${html}
  */
 export function isHtmlExploreResult(
   value: unknown,
-): value is { type: "html"; html: string; title?: string } {
-  if (!value || typeof value !== "object") {
+): value is { type: 'html'; html: string; title?: string } {
+  if (!value || typeof value !== 'object') {
     return false;
   }
   const obj = value as Record<string, unknown>;
-  return obj.type === "html" && typeof obj.html === "string";
+  return obj.type === 'html' && typeof obj.html === 'string';
 }
 
 /**
@@ -393,13 +390,13 @@ export function isHtmlExploreResult(
  * - 对象格式：`{ type: 'url', url: string }`
  */
 export function isUrlExploreResult(value: unknown): boolean {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     const s = value.trim();
-    return s.startsWith("http://") || s.startsWith("https://");
+    return s.startsWith('http://') || s.startsWith('https://');
   }
-  if (value && typeof value === "object") {
+  if (value && typeof value === 'object') {
     const obj = value as Record<string, unknown>;
-    return obj.type === "url" && typeof obj.url === "string";
+    return obj.type === 'url' && typeof obj.url === 'string';
   }
   return false;
 }
@@ -411,14 +408,14 @@ export function isUrlExploreResult(value: unknown): boolean {
  * 若无法提取则返回空字符串。
  */
 export function getUrlFromExploreResult(value: unknown): string {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     return value.trim();
   }
-  if (value && typeof value === "object") {
+  if (value && typeof value === 'object') {
     const obj = value as Record<string, unknown>;
-    if (typeof obj.url === "string") {
+    if (typeof obj.url === 'string') {
       return obj.url;
     }
   }
-  return "";
+  return '';
 }

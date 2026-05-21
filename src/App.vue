@@ -36,6 +36,7 @@ import {
   useNavigationStore,
   usePrivacyModeStore,
   useShellStatusStore,
+  useBookSourceStore,
 } from './stores';
 // ScriptDialog 按需懒加载：仅在 Boa 引擎触发弹窗时才加载，不阻塞首屏
 const ScriptDialog = defineAsyncComponent(() => import('./components/ScriptDialog.vue'));
@@ -44,6 +45,7 @@ const FrontendPluginDialog = defineAsyncComponent(
 );
 // WsConnectDialog：非 Tauri 环境下后端连接失败时弹出地址输入框
 const WsConnectDialog = defineAsyncComponent(() => import('./components/WsConnectDialog.vue'));
+import BookSourceLimitWarningDialog from './components/BookSourceLimitWarningDialog.vue';
 import PrefetchProgressBar from './components/PrefetchProgressBar.vue';
 
 // ── 主窗口视图 ───────────────────────────────────────────────────────────
@@ -116,6 +118,11 @@ let _maskMinElapsed = false;
 let _pendingViewId = '';
 let _maskTimer: ReturnType<typeof setTimeout> | null = null;
 let _maskSafetyTimer: ReturnType<typeof setTimeout> | null = null;
+
+// ── 书源超限警告对话框 ────────────────────────────────────────────────────
+const bookSourceStore = useBookSourceStore();
+const showBookSourceLimitWarning = ref(false);
+const enabledBookSourceCount = ref(0);
 
 function onSuspenseResolve(viewId: string) {
   resolvedViews.add(viewId);
@@ -292,6 +299,20 @@ onMounted(() => {
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', _onVisibilityChange);
   }
+
+  // ── 书源超限检查（启动时触发，非阻塞） ──────────────────────────────────
+  void bookSourceStore
+    .loadSources()
+    .then(() => {
+      const enabledCount = bookSourceStore.enabledSources.length;
+      if (enabledCount > 30) {
+        enabledBookSourceCount.value = enabledCount;
+        showBookSourceLimitWarning.value = true;
+      }
+    })
+    .catch(() => {
+      // 加载失败时忽略，不影响启动流程
+    });
 });
 onUnmounted(() => {
   window.removeEventListener('popstate', _onPopState);
@@ -487,6 +508,12 @@ const latestLogMessage = computed(() => shellStatusStore.latestLog?.message ?? '
           <WsConnectDialog v-if="!hasNativeTransport" />
           <!-- 全局 legado:// 书源安装确认 -->
           <LegadoDeepLinkDialog />
+          <!-- 书源超限启动警告 -->
+          <BookSourceLimitWarningDialog
+            :show="showBookSourceLimitWarning"
+            :enabled-count="enabledBookSourceCount"
+            @update:show="(v) => (showBookSourceLimitWarning = v)"
+          />
           <TaskCenterDrawer
             :show="shellStatusStore.state.showTaskCenter"
             :running-tasks="shellStatusStore.state.runningTasks"

@@ -39,9 +39,9 @@ export interface VideoSource {
   /** 视频播放地址（与 m3u8Content 二选一） */
   url: string;
   /** 视频流类型，影响解码器选择 */
-  type?: "hls" | "dash" | "mp4" | "flv" | "proxy";
+  type?: 'hls' | 'dash' | 'mp4' | 'flv' | 'proxy';
   /** type 为 proxy 时，提示本地代理后的真实播放流类型 */
-  proxyType?: "hls" | "dash" | "mp4" | "flv";
+  proxyType?: 'hls' | 'dash' | 'mp4' | 'flv';
   /** type 为 proxy 时可选：单个闭区间 Range 请求的上游拆分并发数，默认 8 */
   proxyConcurrency?: number;
   /**
@@ -80,16 +80,16 @@ export interface VideoSubtitle {
 
 /** 播放器事件类型 */
 export type VideoPlayerEvent =
-  | "play"
-  | "pause"
-  | "ended"
-  | "timeupdate"
-  | "error"
-  | "volumechange"
-  | "ratechange"
-  | "loadedmetadata"
-  | "waiting"
-  | "canplay";
+  | 'play'
+  | 'pause'
+  | 'ended'
+  | 'timeupdate'
+  | 'error'
+  | 'volumechange'
+  | 'ratechange'
+  | 'loadedmetadata'
+  | 'waiting'
+  | 'canplay';
 
 /** 统一播放器接口，所有适配器必须实现 */
 export interface IVideoPlayer {
@@ -127,7 +127,7 @@ export interface IVideoPlayer {
 }
 
 /** 支持的播放器类型 */
-export type VideoPlayerType = "videojs" | "xgplayer" | "dplayer";
+export type VideoPlayerType = 'videojs' | 'xgplayer' | 'dplayer';
 
 /**
  * 解析 chapterContent 返回值为 VideoSource 对象。
@@ -140,17 +140,17 @@ export function parseVideoSource(raw: string): VideoSource {
   const trimmed = raw.trim();
 
   // 原始 m3u8 文本内容（书源直接返回 m3u8 内容）
-  if (trimmed.startsWith("#EXTM3U")) {
-    return { url: "", type: "hls", m3u8Content: trimmed };
+  if (trimmed.startsWith('#EXTM3U')) {
+    return { url: '', type: 'hls', m3u8Content: trimmed };
   }
 
   // 尝试 JSON 解析
-  if (trimmed.startsWith("{")) {
+  if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed) as VideoSource;
       // JSON 含 m3u8Content 字段（书源通过 JSON 返回 m3u8 内容）
       if (parsed.m3u8Content) {
-        return { ...parsed, type: parsed.type ?? "hls" };
+        return { ...parsed, type: parsed.type ?? 'hls' };
       }
       if (parsed.url) {
         return parsed;
@@ -167,16 +167,16 @@ export function parseVideoSource(raw: string): VideoSource {
 }
 
 /** 根据 URL 后缀猜测流类型 */
-function guessStreamType(url: string): VideoSource["type"] {
+function guessStreamType(url: string): VideoSource['type'] {
   const lower = url.toLowerCase();
-  if (lower.includes(".m3u8")) {
-    return "hls";
+  if (lower.includes('.m3u8')) {
+    return 'hls';
   }
-  if (lower.includes(".mpd")) {
-    return "dash";
+  if (lower.includes('.mpd')) {
+    return 'dash';
   }
-  if (lower.includes(".flv")) {
-    return "flv";
+  if (lower.includes('.flv')) {
+    return 'flv';
   }
-  return "mp4";
+  return 'mp4';
 }

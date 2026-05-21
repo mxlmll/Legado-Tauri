@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight } from 'lucide-vue-next';
-import type { ReaderSettings, ReaderTypography } from '@/components/reader/types';
+import { ChevronLeft, ChevronRight } from "lucide-vue-next";
+import type {
+  ReaderSettings,
+  ReaderTypography,
+} from "@/components/reader/types";
 
-type MoreTarget = 'tapControls' | 'spacing' | 'pagePadding' | 'typography' | 'shortcuts';
+type MoreTarget =
+  | "tapControls"
+  | "spacing"
+  | "pagePadding"
+  | "typography"
+  | "shortcuts";
 
 defineProps<{
   settings: ReaderSettings;
@@ -13,14 +21,12 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'back'): void;
-  (e: 'reset'): void;
-  (e: 'update-typography', patch: Partial<ReaderTypography>): void;
-  (e: 'set-layout-debug', value: boolean): void;
-  (e: 'set-volume-key-page-turn', value: boolean): void;
-  (e: 'set-hide-top-bar-on-mobile', value: boolean): void;
-  (e: 'dump-pagination-layout'): void;
-  (e: 'navigate', target: MoreTarget): void;
+  (e: "back"): void;
+  (e: "reset"): void;
+  (e: "update-typography", patch: Partial<ReaderTypography>): void;
+  (e: "set-layout-debug", value: boolean): void;
+  (e: "dump-pagination-layout"): void;
+  (e: "navigate", target: MoreTarget): void;
 }>();
 </script>
 
@@ -42,7 +48,9 @@ const emit = defineEmits<{
   <div class="reader-settings__fw-section">
     <div class="reader-settings__fw-header">
       <span class="reader-settings__fw-label">粗细</span>
-      <span class="reader-settings__fw-value">{{ settings.typography.fontWeight }}</span>
+      <span class="reader-settings__fw-value">{{
+        settings.typography.fontWeight
+      }}</span>
     </div>
     <n-slider
       :value="settings.typography.fontWeight"
@@ -61,7 +69,9 @@ const emit = defineEmits<{
         900: '黑体',
       }"
       :format-tooltip="(v: number) => v.toString()"
-      @update:value="(v: number) => emit('update-typography', { fontWeight: v })"
+      @update:value="
+        (v: number) => emit('update-typography', { fontWeight: v })
+      "
     />
     <div class="reader-settings__fw-warn">
       ⚠️ 大部分字体只内置 400（正常）和 700（粗）两个字重。可变字体（Variable
@@ -71,49 +81,27 @@ const emit = defineEmits<{
 
   <div class="reader-settings__row reader-settings__row--col">
     <div class="reader-settings__col-header">
-      <span class="reader-settings__label">布局调试</span>
-      <n-switch
-        :value="settings.layoutDebugMode"
-        @update:value="emit('set-layout-debug', $event)"
-      />
-    </div>
-    <span class="reader-settings__hint">显示页边距、内容区和行盒/行距网格</span>
-  </div>
-
-  <div v-if="!isComic && !isVideo" class="reader-settings__row reader-settings__row--col">
-    <div class="reader-settings__col-header">
-      <span class="reader-settings__label">排版诊断</span>
-      <button
-        class="reader-settings__debug-export-btn"
-        :disabled="!canDumpPaginationLayout"
-        @click="emit('dump-pagination-layout')"
+      <span class="reader-settings__label">排版调试</span>
+      <div
+        class="reader-settings__col-actions"
+        style="display: flex; gap: 8px; align-items: center"
       >
-        输出当前页
-      </button>
+        <n-switch
+          :value="settings.layoutDebugMode"
+          @update:value="(v: boolean) => emit('set-layout-debug', v)"
+        />
+        <button
+          class="reader-settings__debug-export-btn"
+          :disabled="!canDumpPaginationLayout"
+          @click="emit('dump-pagination-layout')"
+        >
+          输出
+        </button>
+      </div>
     </div>
-    <span class="reader-settings__hint">导出当前页的详细分页信息到实时日志，仅分页模式可用</span>
-  </div>
-
-  <div v-if="!isComic && !isVideo" class="reader-settings__row reader-settings__row--col">
-    <div class="reader-settings__col-header">
-      <span class="reader-settings__label">音量键</span>
-      <n-switch
-        :value="settings.volumeKeyPageTurnEnabled"
-        @update:value="emit('set-volume-key-page-turn', $event)"
-      />
-    </div>
-    <span class="reader-settings__hint">菜单关闭且未听书时，音量键用于上一页 / 下一页</span>
-  </div>
-
-  <div v-if="isMobile" class="reader-settings__row reader-settings__row--col">
-    <div class="reader-settings__col-header">
-      <span class="reader-settings__label">顶部栏</span>
-      <n-switch
-        :value="settings.hideTopBarOnMobile"
-        @update:value="emit('set-hide-top-bar-on-mobile', $event)"
-      />
-    </div>
-    <span class="reader-settings__hint">手机布局打开菜单时隐藏顶部栏，减少正文遮挡</span>
+    <span class="reader-settings__hint"
+      >显示页边距/内容区/行盒网格，或导出当前页分页信息</span
+    >
   </div>
 
   <div class="reader-settings__more-list">
@@ -125,19 +113,31 @@ const emit = defineEmits<{
       <span>点击控制</span>
       <ChevronRight :size="14" />
     </button>
-    <button class="reader-settings__more-item" @click="emit('navigate', 'spacing')">
+    <button
+      class="reader-settings__more-item"
+      @click="emit('navigate', 'spacing')"
+    >
       <span>间距设置</span>
       <ChevronRight :size="14" />
     </button>
-    <button class="reader-settings__more-item" @click="emit('navigate', 'pagePadding')">
+    <button
+      class="reader-settings__more-item"
+      @click="emit('navigate', 'pagePadding')"
+    >
       <span>页边距设置</span>
       <ChevronRight :size="14" />
     </button>
-    <button class="reader-settings__more-item" @click="emit('navigate', 'typography')">
+    <button
+      class="reader-settings__more-item"
+      @click="emit('navigate', 'typography')"
+    >
       <span>字体样式</span>
       <ChevronRight :size="14" />
     </button>
-    <button class="reader-settings__more-item" @click="emit('navigate', 'shortcuts')">
+    <button
+      class="reader-settings__more-item"
+      @click="emit('navigate', 'shortcuts')"
+    >
       <span>快捷键说明</span>
       <ChevronRight :size="14" />
     </button>

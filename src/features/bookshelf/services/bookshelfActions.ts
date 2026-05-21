@@ -21,7 +21,9 @@ export function useBookshelfActions(message: MessageApi) {
   const shelfGroups = useShelfGroups();
 
   function syncOpenReaderBookInfo(bookId: string) {
-    readerStore.syncOpenReaderBookInfo(bookshelfStore.books.find((book: ShelfBook) => book.id === bookId));
+    readerStore.syncOpenReaderBookInfo(
+      bookshelfStore.books.find((book: ShelfBook) => book.id === bookId),
+    );
   }
 
   async function handlePluginCoverGenerate(book: ShelfBook, generatorId: string) {

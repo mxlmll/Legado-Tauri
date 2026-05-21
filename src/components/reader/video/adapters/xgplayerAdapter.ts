@@ -6,9 +6,9 @@
  * 比浏览器原生 <video> 整包加载节省首开时间，也支持精确 seek。
  */
 
-import type XgPlayer from "xgplayer";
-import type { IVideoPlayer, VideoPlayerEvent, VideoSource } from "../types";
-import { useAppConfig } from "../../../../composables/useAppConfig";
+import type XgPlayer from 'xgplayer';
+import type { IVideoPlayer, VideoPlayerEvent, VideoSource } from '../types';
+import { useAppConfig } from '../../../../composables/useAppConfig';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ▌ MP4 分片下载调优参数（手动调整区）
@@ -95,16 +95,16 @@ const MP4_RETRY_DELAY = 500; // ms
 
 /** xgplayer 事件名映射：统一接口事件 → xgplayer 实际事件 */
 const EVENT_MAP: Record<VideoPlayerEvent, string> = {
-  play: "play",
-  pause: "pause",
-  ended: "ended",
-  timeupdate: "timeupdate",
-  error: "error",
-  volumechange: "volumechange",
-  ratechange: "ratechange",
-  loadedmetadata: "loadedmetadata",
-  waiting: "waiting",
-  canplay: "canplay",
+  play: 'play',
+  pause: 'pause',
+  ended: 'ended',
+  timeupdate: 'timeupdate',
+  error: 'error',
+  volumechange: 'volumechange',
+  ratechange: 'ratechange',
+  loadedmetadata: 'loadedmetadata',
+  waiting: 'waiting',
+  canplay: 'canplay',
 };
 
 export class XgplayerAdapter implements IVideoPlayer {
@@ -117,8 +117,8 @@ export class XgplayerAdapter implements IVideoPlayer {
   }
 
   private async initPlayer(source: VideoSource): Promise<void> {
-    const { default: Player } = await import("xgplayer");
-    await import("xgplayer/dist/index.min.css");
+    const { default: Player } = await import('xgplayer');
+    await import('xgplayer/dist/index.min.css');
 
     if (!this.container) {
       return;
@@ -127,7 +127,7 @@ export class XgplayerAdapter implements IVideoPlayer {
     const { videoXgDownload } = useAppConfig();
 
     // 创建播放器容器 div
-    const el = document.createElement("div");
+    const el = document.createElement('div');
     this.container.appendChild(el);
 
     const config: Record<string, unknown> = {
@@ -141,9 +141,9 @@ export class XgplayerAdapter implements IVideoPlayer {
     };
 
     // HLS 支持
-    if (source.type === "hls") {
+    if (source.type === 'hls') {
       try {
-        const { HlsPlugin } = await import("xgplayer-hls");
+        const { HlsPlugin } = await import('xgplayer-hls');
         config.plugins = [HlsPlugin];
         config.hls = source.headers ? { headers: source.headers } : undefined;
       } catch {
@@ -161,9 +161,9 @@ export class XgplayerAdapter implements IVideoPlayer {
     //   4. 通过 MSE (Media Source Extensions) 逐块喂给 <video>，实现边下边播。
     //
     // 当 source.type 未指定时也默认走此路径，兼容绝大多数直链视频场景。
-    if (source.type === "mp4" || source.type === undefined) {
+    if (source.type === 'mp4' || source.type === undefined) {
       try {
-        const { default: Mp4Plugin } = await import("xgplayer-mp4");
+        const { default: Mp4Plugin } = await import('xgplayer-mp4');
         config.plugins = [...((config.plugins as unknown[]) ?? []), Mp4Plugin];
         const mp4PluginConfig = {
           // ── 分片大小 ──────────────────────────────────────────────────────
@@ -190,8 +190,8 @@ export class XgplayerAdapter implements IVideoPlayer {
           // ── 自定义请求头 ──────────────────────────────────────────────────
           // xgplayer-mp4 v3 通过 mp4plugin.reqOptions.headers 透传自定义请求头。
           reqOptions: {
-            method: "GET",
-            mode: "cors",
+            method: 'GET',
+            mode: 'cors',
             ...(source.headers ? { headers: source.headers } : {}),
           },
         };
@@ -210,10 +210,10 @@ export class XgplayerAdapter implements IVideoPlayer {
       const videoEl = this.player.video;
       if (videoEl instanceof HTMLElement) {
         for (const sub of source.subtitles) {
-          const track = document.createElement("track");
-          track.kind = "subtitles";
+          const track = document.createElement('track');
+          track.kind = 'subtitles';
           track.label = sub.label;
-          track.srclang = sub.srclang ?? "zh";
+          track.srclang = sub.srclang ?? 'zh';
           track.src = sub.url;
           if (sub.default) {
             track.default = true;
@@ -283,7 +283,7 @@ export class XgplayerAdapter implements IVideoPlayer {
       const videoEl = this.player.video as HTMLVideoElement | undefined;
       if (videoEl) {
         videoEl.pause();
-        videoEl.removeAttribute("src");
+        videoEl.removeAttribute('src');
         try {
           videoEl.load();
         } catch {

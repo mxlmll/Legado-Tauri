@@ -18,17 +18,9 @@
  *   每次调用 paginate 递增 cancelToken；
  *   后台任务在每个 await 点检查令牌，不一致则安全退出。
  */
-import {
-  layoutNextLine,
-  prepareWithSegments,
-  type LayoutCursor,
-} from "@chenglou/pretext";
-import { ref, nextTick } from "vue";
-import type {
-  PaginationEngine,
-  ReaderPagePadding,
-  ReaderTypography,
-} from "../types";
+import { layoutNextLine, prepareWithSegments, type LayoutCursor } from '@chenglou/pretext';
+import { ref, nextTick } from 'vue';
+import type { PaginationEngine, ReaderPagePadding, ReaderTypography } from '../types';
 
 export interface PaginationResult {
   pages: string[];
@@ -60,7 +52,7 @@ export interface PageMeta {
   paragraphCharOffset: number;
 }
 
-type PaginationBlockKind = "title" | "paragraph";
+type PaginationBlockKind = 'title' | 'paragraph';
 
 interface PaginationBlockInput {
   kind: PaginationBlockKind;
@@ -70,7 +62,7 @@ interface PaginationBlockInput {
   leadingGapPx: number;
   trailingGapPx: number;
   firstLineIndentPx: number;
-  textAlign: ReaderTypography["textAlign"];
+  textAlign: ReaderTypography['textAlign'];
   /** 字间距 px，传给 Pretext 引擎的 letterSpacing 选项 */
   letterSpacingPx: number;
   /** 该 block 在原始全文中的字符偏移起始 */
@@ -83,7 +75,7 @@ interface PaginationResolvedLine {
   text: string;
   indentPx: number;
   lineHeightPx: number;
-  textAlign: "left" | "center" | "right" | "justify";
+  textAlign: 'left' | 'center' | 'right' | 'justify';
   justify: boolean;
   isTerminal: boolean;
   /** 该行首字在 block 原始文本中的字符偏移 */
@@ -98,12 +90,12 @@ interface PaginationResolvedBlock {
 }
 
 interface PaginationPageGapItem {
-  kind: "gap";
+  kind: 'gap';
   sizePx: number;
 }
 
 interface PaginationPageBlockItem {
-  kind: "block";
+  kind: 'block';
   blockKind: PaginationBlockKind;
   lines: PaginationResolvedLine[];
 }
@@ -118,10 +110,8 @@ interface PaginationPageState {
 
 // ─── 工具函数 ──────────────────────────────────────────────────────────────
 
-function normalizePadding(
-  padding: number | ReaderPagePadding,
-): ReaderPagePadding {
-  if (typeof padding === "number") {
+function normalizePadding(padding: number | ReaderPagePadding): ReaderPagePadding {
+  if (typeof padding === 'number') {
     return {
       top: padding,
       right: padding,
@@ -140,10 +130,7 @@ function formatPx(value: number): string {
 function buildCanvasFont(
   typography: ReaderTypography,
   overrides: Partial<
-    Pick<
-      ReaderTypography,
-      "fontSize" | "fontWeight" | "fontStyle" | "fontVariant"
-    >
+    Pick<ReaderTypography, 'fontSize' | 'fontWeight' | 'fontStyle' | 'fontVariant'>
   > = {},
 ): string {
   const fontStyle = overrides.fontStyle ?? typography.fontStyle;
@@ -175,17 +162,17 @@ function applyTypographyToEl(
   el.style.textDecoration = typography.textDecoration;
   el.style.textShadow = typography.textShadow;
   el.style.cssText += `;-webkit-text-stroke-width:${typography.textStrokeWidth}px;-webkit-text-stroke-color:${typography.textStrokeColor}`;
-  el.style.textRendering = "optimizeLegibility";
+  el.style.textRendering = 'optimizeLegibility';
   el.style.cssText += `;-webkit-font-smoothing:antialiased`;
 }
 function extractPrefixText(prefixHtml: string): string {
   if (!prefixHtml.trim()) {
-    return "";
+    return '';
   }
 
-  const probe = document.createElement("div");
+  const probe = document.createElement('div');
   probe.innerHTML = prefixHtml;
-  return probe.textContent?.trim() ?? "";
+  return probe.textContent?.trim() ?? '';
 }
 
 /**
@@ -194,7 +181,7 @@ function extractPrefixText(prefixHtml: string): string {
  * 仅用于 Pretext 引擎路径。
  */
 function protectStickyPunct(text: string): string {
-  return text.replace(/(…{2,}|—{2,})/g, (match) => [...match].join("\u2060"));
+  return text.replace(/(…{2,}|—{2,})/g, (match) => [...match].join('\u2060'));
 }
 
 function splitParagraphs(content: string): string[] {
@@ -211,23 +198,23 @@ function wrapRawPageHtml(contentHtml: string): string {
 function renderManualPage(items: PaginationPageItem[]): string {
   const body = items
     .map((item) => {
-      if (item.kind === "gap") {
+      if (item.kind === 'gap') {
         return `<div class="reader-gap" style="height:${formatPx(item.sizePx)}"></div>`;
       }
 
       const blockClass =
-        item.blockKind === "title"
-          ? "reader-block reader-block--title reader-chapter-title"
-          : "reader-block reader-block--paragraph";
+        item.blockKind === 'title'
+          ? 'reader-block reader-block--title reader-chapter-title'
+          : 'reader-block reader-block--paragraph';
 
       const lines = item.lines
         .map((line) => {
-          const classes = ["reader-line"];
+          const classes = ['reader-line'];
           if (line.justify) {
-            classes.push("reader-line--justify");
+            classes.push('reader-line--justify');
           }
           if (line.isTerminal) {
-            classes.push("reader-line--terminal");
+            classes.push('reader-line--terminal');
           }
 
           const styles = [
@@ -239,13 +226,13 @@ function renderManualPage(items: PaginationPageItem[]): string {
             styles.push(`padding-inline-start:${formatPx(line.indentPx)}`);
           }
 
-          return `<div class="${classes.join(" ")}" style="${styles.join(";")}">${escapeHtml(line.text.replace(/\u2060/g, ""))}</div>`;
+          return `<div class="${classes.join(' ')}" style="${styles.join(';')}">${escapeHtml(line.text.replace(/\u2060/g, ''))}</div>`;
         })
-        .join("");
+        .join('');
 
       return `<div class="${blockClass}">${lines}</div>`;
     })
-    .join("");
+    .join('');
 
   return `<div class="reader-page-fragments reader-page-fragments--manual-lines">${body}</div>`;
 }
@@ -264,12 +251,12 @@ function pushGapItem(page: PaginationPageState, sizePx: number) {
   }
 
   const last = page.items[page.items.length - 1];
-  if (last?.kind === "gap") {
+  if (last?.kind === 'gap') {
     last.sizePx += sizePx;
     return;
   }
 
-  page.items.push({ kind: "gap", sizePx });
+  page.items.push({ kind: 'gap', sizePx });
 }
 
 function pushBlockItem(
@@ -282,7 +269,7 @@ function pushBlockItem(
   }
 
   page.items.push({
-    kind: "block",
+    kind: 'block',
     blockKind,
     lines: [...lines],
   });
@@ -300,7 +287,7 @@ function resolveHorizontalBlocks(
 
   if (titleText) {
     blocks.push({
-      kind: "title",
+      kind: 'title',
       text: titleText,
       font: buildCanvasFont(typography, {
         fontSize: titleBaseFontSize,
@@ -310,7 +297,7 @@ function resolveHorizontalBlocks(
       leadingGapPx: titleBaseFontSize * 0.5,
       trailingGapPx: titleBaseFontSize * 1.5,
       firstLineIndentPx: 0,
-      textAlign: "left",
+      textAlign: 'left',
       letterSpacingPx: typography.letterSpacing,
       charOffsetInContent: -1,
       paragraphIndex: -1,
@@ -324,16 +311,13 @@ function resolveHorizontalBlocks(
     const pos = content.indexOf(paragraph, searchFrom);
     const charOffset = pos >= 0 ? pos : searchFrom;
     blocks.push({
-      kind: "paragraph",
+      kind: 'paragraph',
       text: paragraph,
       font: buildCanvasFont(typography),
       lineHeightPx: typography.fontSize * typography.lineHeight,
       leadingGapPx: 0,
       trailingGapPx: Math.max(0, typography.paragraphSpacing),
-      firstLineIndentPx: Math.max(
-        0,
-        typography.textIndent * typography.fontSize,
-      ),
+      firstLineIndentPx: Math.max(0, typography.textIndent * typography.fontSize),
       textAlign: typography.textAlign,
       letterSpacingPx: typography.letterSpacing,
       charOffsetInContent: charOffset,
@@ -351,49 +335,49 @@ function resolveHorizontalBlocks(
  * 当第二个 `…`/`—` 落在行首时，会被吸回上一行，保持双符号同行。
  */
 const LINE_START_PROHIBITED = new Set<string>([
-  "，",
-  "。",
-  "！",
-  "？",
-  "；",
-  "：",
-  "、",
-  "）",
-  "〕",
-  "】",
-  "〉",
-  "》",
-  "」",
-  "』",
-  "〗",
-  "〙",
-  "\u201D" /* " */,
-  "\u2019" /* ' */,
-  "…",
-  "—",
-  "·",
-  ")",
-  "]",
-  "}",
+  '，',
+  '。',
+  '！',
+  '？',
+  '；',
+  '：',
+  '、',
+  '）',
+  '〕',
+  '】',
+  '〉',
+  '》',
+  '」',
+  '』',
+  '〗',
+  '〙',
+  '\u201D' /* " */,
+  '\u2019' /* ' */,
+  '…',
+  '—',
+  '·',
+  ')',
+  ']',
+  '}',
 ]);
 
 /**
  * 行尾禁则：这些字符不应出现在行的结尾。
  */
 const LINE_END_PROHIBITED = new Set<string>([
-  "（",
-  "〔",
-  "【",
-  "〈",
-  "《",
-  "「",
-  "『",
-  "〘",
-  "\u201C" /* " */,
-  "\u2018" /* ' */,
-  "(",
-  "[",
-  "{",
+  '（',
+  '〔',
+  '【',
+  '〈',
+  '《',
+  '「',
+  '『',
+  '〘',
+  '\u201C' /* " */,
+  '\u2018' /* ' */,
+  '(',
+  '[',
+  '{',
 ]);
 
 /**
@@ -406,7 +390,7 @@ const LINE_END_PROHIBITED = new Set<string>([
  */
 function applyKinsoku(
   lines: PaginationResolvedLine[],
-  textAlign: ReaderTypography["textAlign"],
+  textAlign: ReaderTypography['textAlign'],
 ): PaginationResolvedLine[] {
   if (lines.length <= 1) {
     return lines;
@@ -430,10 +414,7 @@ function applyKinsoku(
       }
 
       // Push：当前行末是行尾禁则字符 → 推入下一行行首
-      if (
-        curr.text.length > 0 &&
-        LINE_END_PROHIBITED.has(curr.text[curr.text.length - 1])
-      ) {
+      if (curr.text.length > 0 && LINE_END_PROHIBITED.has(curr.text[curr.text.length - 1])) {
         const lastChar = curr.text[curr.text.length - 1];
         curr.text = curr.text.slice(0, -1);
         next.text = lastChar + next.text;
@@ -453,13 +434,13 @@ function applyKinsoku(
   }
 
   // 修复 isTerminal / justify / textAlign 标志
-  const isJustify = textAlign === "justify";
+  const isJustify = textAlign === 'justify';
   for (let i = 0; i < filtered.length; i++) {
     const isLast = i === filtered.length - 1;
     filtered[i].isTerminal = isLast;
     filtered[i].justify = isJustify && !isLast;
     if (isJustify) {
-      filtered[i].textAlign = isLast ? "left" : "justify";
+      filtered[i].textAlign = isLast ? 'left' : 'justify';
     }
   }
 
@@ -473,14 +454,14 @@ function applyKinsoku(
  * 返回该层 DOM 元素，调用方负责在使用完毕后 remove()。
  */
 function createMeasureLayer(container: HTMLElement): HTMLDivElement {
-  const layer = document.createElement("div");
-  layer.style.position = "absolute";
-  layer.style.top = "0";
-  layer.style.left = "0";
-  layer.style.visibility = "hidden";
-  layer.style.pointerEvents = "none";
-  layer.style.overflow = "hidden";
-  layer.style.zIndex = "-9999";
+  const layer = document.createElement('div');
+  layer.style.position = 'absolute';
+  layer.style.top = '0';
+  layer.style.left = '0';
+  layer.style.visibility = 'hidden';
+  layer.style.pointerEvents = 'none';
+  layer.style.overflow = 'hidden';
+  layer.style.zIndex = '-9999';
   container.appendChild(layer);
   return layer;
 }
@@ -537,31 +518,31 @@ function resolveBlockDOM(
     };
   }
 
-  const isTitle = block.kind === "title";
+  const isTitle = block.kind === 'title';
   const titleBaseFontSize = typography.fontSize + 4;
 
-  const div = document.createElement("div");
-  div.style.width = availW + "px";
-  div.style.boxSizing = "border-box";
-  div.style.whiteSpace = "normal";
-  div.style.wordBreak = "break-all";
-  div.style.overflowWrap = "break-word";
-  div.style.margin = "0";
-  div.style.padding = "0";
-  div.style.border = "none";
+  const div = document.createElement('div');
+  div.style.width = availW + 'px';
+  div.style.boxSizing = 'border-box';
+  div.style.whiteSpace = 'normal';
+  div.style.wordBreak = 'break-all';
+  div.style.overflowWrap = 'break-word';
+  div.style.margin = '0';
+  div.style.padding = '0';
+  div.style.border = 'none';
 
   if (isTitle) {
     applyTypographyToEl(div, typography, {
       fontSize: titleBaseFontSize,
       fontWeight: 700,
     });
-    div.style.textAlign = "left";
-    div.style.textIndent = "0";
+    div.style.textAlign = 'left';
+    div.style.textIndent = '0';
   } else {
     applyTypographyToEl(div, typography);
     div.style.textAlign = block.textAlign;
     if (block.firstLineIndentPx > 0) {
-      div.style.textIndent = block.firstLineIndentPx + "px";
+      div.style.textIndent = block.firstLineIndentPx + 'px';
     }
   }
 
@@ -595,19 +576,16 @@ function resolveBlockDOM(
       text: block.text,
       indentPx: block.firstLineIndentPx,
       lineHeightPx,
-      textAlign: block.textAlign === "justify" ? "left" : block.textAlign,
+      textAlign: block.textAlign === 'justify' ? 'left' : block.textAlign,
       justify: false,
       isTerminal: true,
       charOffsetInBlock: 0,
     });
   } else {
-    const isJustify = block.textAlign === "justify";
+    const isJustify = block.textAlign === 'justify';
     for (let i = 0; i < lineOffsets.length; i++) {
       const start = lineOffsets[i].charOffset;
-      const end =
-        i + 1 < lineOffsets.length
-          ? lineOffsets[i + 1].charOffset
-          : block.text.length;
+      const end = i + 1 < lineOffsets.length ? lineOffsets[i + 1].charOffset : block.text.length;
       const lineText = block.text.slice(start, end);
       const isTerminal = i === lineOffsets.length - 1;
       const indentPx = i === 0 ? block.firstLineIndentPx : 0;
@@ -616,11 +594,7 @@ function resolveBlockDOM(
         text: lineText,
         indentPx,
         lineHeightPx,
-        textAlign: isJustify
-          ? isTerminal
-            ? "left"
-            : "justify"
-          : block.textAlign,
+        textAlign: isJustify ? (isTerminal ? 'left' : 'justify') : block.textAlign,
         justify: isJustify && !isTerminal,
         isTerminal,
         charOffsetInBlock: start,
@@ -638,10 +612,7 @@ function resolveBlockDOM(
 
 // ─── Pretext 排版引擎 ──────────────────────────────────────────────────────
 
-function resolveBlockPretext(
-  block: PaginationBlockInput,
-  availW: number,
-): PaginationResolvedBlock {
+function resolveBlockPretext(block: PaginationBlockInput, availW: number): PaginationResolvedBlock {
   const lines: PaginationResolvedLine[] = [];
   if (!block.text) {
     return {
@@ -652,19 +623,11 @@ function resolveBlockPretext(
     };
   }
 
-  const prepared = prepareWithSegments(
-    protectStickyPunct(block.text),
-    block.font,
-    {
-      wordBreak: "normal",
-      letterSpacing:
-        block.letterSpacingPx > 0 ? block.letterSpacingPx : undefined,
-    },
-  );
-  const firstLineIndentPx = Math.min(
-    block.firstLineIndentPx,
-    Math.max(0, availW - 1),
-  );
+  const prepared = prepareWithSegments(protectStickyPunct(block.text), block.font, {
+    wordBreak: 'normal',
+    letterSpacing: block.letterSpacingPx > 0 ? block.letterSpacingPx : undefined,
+  });
+  const firstLineIndentPx = Math.min(block.firstLineIndentPx, Math.max(0, availW - 1));
   let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 };
   let isFirstLine = true;
   let charConsumed = 0;
@@ -681,12 +644,12 @@ function resolveBlockPretext(
       text: line.text,
       indentPx,
       lineHeightPx: block.lineHeightPx,
-      textAlign: block.textAlign === "justify" ? "left" : block.textAlign,
+      textAlign: block.textAlign === 'justify' ? 'left' : block.textAlign,
       justify: false,
       isTerminal: false,
       charOffsetInBlock: charConsumed,
     });
-    charConsumed += line.text.replace(/\u2060/g, "").length;
+    charConsumed += line.text.replace(/\u2060/g, '').length;
     cursor = line.end;
     isFirstLine = false;
   }
@@ -694,9 +657,9 @@ function resolveBlockPretext(
   for (let index = 0; index < lines.length; index++) {
     const isTerminal = index === lines.length - 1;
     lines[index].isTerminal = isTerminal;
-    lines[index].justify = block.textAlign === "justify" && !isTerminal;
-    if (block.textAlign === "justify" && !isTerminal) {
-      lines[index].textAlign = "justify";
+    lines[index].justify = block.textAlign === 'justify' && !isTerminal;
+    if (block.textAlign === 'justify' && !isTerminal) {
+      lines[index].textAlign = 'justify';
     }
   }
 
@@ -708,6 +671,27 @@ function resolveBlockPretext(
   };
 }
 
+export interface PaginationMeasurementData {
+  /** 容器实际宽度 px */
+  containerWidth: number;
+  /** 容器实际高度 px */
+  containerHeight: number;
+  /** 计算后的可用宽度（已扣除左右边距）px */
+  availableWidth: number;
+  /** 计算后的可用高度（已扣除上下边距）px */
+  availableHeight: number;
+  /** 页边距 */
+  padding: ReaderPagePadding;
+  /** 当前使用的排版引擎 */
+  engine: 'dom' | 'pretext';
+  /** 行高倍数对应的像素值 */
+  lineHeightPx: number;
+  /** 字号 px */
+  fontSize: number;
+  /** Canvas 测量的宽度补偿比例（用于诊断 Pretext 精度） */
+  pretextCompensation?: number;
+}
+
 export function usePagination() {
   const pages = ref<string[]>([]);
   const currentPage = ref(0);
@@ -715,6 +699,8 @@ export function usePagination() {
   const isPaginating = ref(false);
   /** 每页的元数据（与 pages 一一对应），用于锚点定位 */
   const pageMetas = ref<PageMeta[]>([]);
+  /** 最后一次排版的测量数据（用于调试） */
+  const measurementData = ref<PaginationMeasurementData | null>(null);
 
   /** 每次 paginate 调用递增，旧后台任务据此终止 */
   let cancelToken = 0;
@@ -723,11 +709,7 @@ export function usePagination() {
    * 从锚点查找最匹配的页面索引。
    * 多级回退：charOffset → paragraphIndex+offset → ratio → 0
    */
-  function findPageByAnchor(
-    anchor: ReadingAnchor,
-    metas: PageMeta[],
-    total: number,
-  ): number {
+  function findPageByAnchor(anchor: ReadingAnchor, metas: PageMeta[], total: number): number {
     if (total <= 0) {
       return 0;
     }
@@ -802,8 +784,8 @@ export function usePagination() {
     container: HTMLElement,
     typography: ReaderTypography,
     padding: number | ReaderPagePadding,
-    initialPage: "first" | "last" = "first",
-    prefixHtml = "",
+    initialPage: 'first' | 'last' = 'first',
+    prefixHtml = '',
     /** 用于恢复阅读位置的锚点，优先于 initialPage */
     anchor?: ReadingAnchor,
     /**
@@ -812,7 +794,7 @@ export function usePagination() {
      * - 'dom'     真实 DOM 渲染测量，天然支持系统缩放，兼容性最佳，部分旧版 Android 可能更准
      * 旧值 'auto'/'simple' 向后兼容，均视为 'pretext'
      */
-    paginationEngine: PaginationEngine = "pretext",
+    paginationEngine: PaginationEngine = 'pretext',
   ) {
     const myToken = ++cancelToken;
     isPaginating.value = true;
@@ -829,8 +811,22 @@ export function usePagination() {
     const resolvedPadding = normalizePadding(padding);
     const availW = cW - resolvedPadding.left - resolvedPadding.right;
     const availH = cH - resolvedPadding.top - resolvedPadding.bottom;
+
+    // 记录测量数据用于调试
+    const lineHeightPx = typography.fontSize * typography.lineHeight;
+    measurementData.value = {
+      containerWidth: cW,
+      containerHeight: cH,
+      availableWidth: availW,
+      availableHeight: availH,
+      padding: resolvedPadding,
+      engine: paginationEngine as 'dom' | 'pretext',
+      lineHeightPx,
+      fontSize: typography.fontSize,
+    };
+
     if (availW <= 0 || availH <= 0) {
-      pages.value = [wrapRawPageHtml("")];
+      pages.value = [wrapRawPageHtml('')];
       totalPages.value = 1;
       currentPage.value = 0;
       isPaginating.value = false;
@@ -838,20 +834,19 @@ export function usePagination() {
     }
 
     // 向后兼容旧存储值 'auto'/'simple'，默认为 'pretext'
-    const effectiveEngine: "dom" | "pretext" =
-      paginationEngine === "dom" ? "dom" : "pretext";
+    const effectiveEngine: 'dom' | 'pretext' = paginationEngine === 'dom' ? 'dom' : 'pretext';
 
     const blocks = resolveHorizontalBlocks(content, prefixHtml, typography);
 
     // DOM 引擎：创建复用的测量层，所有 block 共享，最后统一清理
     let measureLayer: HTMLDivElement | null = null;
-    if (effectiveEngine === "dom") {
+    if (effectiveEngine === 'dom') {
       // 等待目标字体就绪，避免低端机字体加载慢时用 fallback metrics 测量
       // 导致行高计算偏小，字体加载后字形更高 → 行重叠
       const primaryFamily = typography.fontFamily
-        .split(",")[0]
+        .split(',')[0]
         .trim()
-        .replace(/^["']|["']$/g, "");
+        .replace(/^["']|["']$/g, '');
       if (primaryFamily) {
         try {
           await Promise.race([
@@ -871,10 +866,8 @@ export function usePagination() {
       measureLayer = createMeasureLayer(container);
     }
     if (blocks.length === 0) {
-      pages.value = [wrapRawPageHtml("")];
-      pageMetas.value = [
-        { charOffset: 0, paragraphIndex: 0, paragraphCharOffset: 0 },
-      ];
+      pages.value = [wrapRawPageHtml('')];
+      pageMetas.value = [{ charOffset: 0, paragraphIndex: 0, paragraphCharOffset: 0 }];
       totalPages.value = 1;
       currentPage.value = 0;
       isPaginating.value = false;
@@ -892,14 +885,13 @@ export function usePagination() {
     } | null = null;
     let publishedCount = 0;
     const useAnchor = anchor !== undefined;
-    const deferForLast = !useAnchor && initialPage === "last";
+    const deferForLast = !useAnchor && initialPage === 'last';
     let firstVisiblePublished = false;
 
     // ── 锚点强制断页 ──────────────────────────────────────────────
     // 当 anchor 提供了有效 charOffset 时，在分页过程中到达该偏移的行时
     // 强制插入一次断页，使锚点所在行成为新页的首行，保证首字不变。
-    const anchorBreakOffset =
-      useAnchor && anchor.charOffset > 0 ? anchor.charOffset : -1;
+    const anchorBreakOffset = useAnchor && anchor.charOffset > 0 ? anchor.charOffset : -1;
     let anchorBreakDone = false;
     /** 锚点断页后产生的页面索引（用于最终 currentPage 定位） */
     let anchorPageIndex = -1;
@@ -948,8 +940,7 @@ export function usePagination() {
       if (pageFirstBlockInfo) {
         const charOffset =
           pageFirstBlockInfo.charOffsetInContent >= 0
-            ? pageFirstBlockInfo.charOffsetInContent +
-              pageFirstBlockInfo.charOffsetInBlock
+            ? pageFirstBlockInfo.charOffsetInContent + pageFirstBlockInfo.charOffsetInBlock
             : -1;
         builtMetas.push({
           charOffset,
@@ -971,7 +962,7 @@ export function usePagination() {
     for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
       const inputBlock = blocks[blockIndex];
       const block =
-        effectiveEngine === "dom"
+        effectiveEngine === 'dom'
           ? resolveBlockDOM(inputBlock, measureLayer!, availW, typography)
           : resolveBlockPretext(inputBlock, availW);
       if (block.lines.length === 0) {
@@ -979,10 +970,7 @@ export function usePagination() {
       }
 
       if (block.leadingGapPx > 0) {
-        if (
-          page.hasVisibleContent &&
-          page.usedPx + block.leadingGapPx > availH
-        ) {
+        if (page.hasVisibleContent && page.usedPx + block.leadingGapPx > availH) {
           finalizePage();
           publishPendingPages();
         }
@@ -1002,13 +990,8 @@ export function usePagination() {
       for (const line of block.lines) {
         // ── 锚点强制断页：到达锚点字符偏移时立即断页 ──
         // 保证锚点所在行成为新页首行，维持"首字不变"。
-        if (
-          !anchorBreakDone &&
-          anchorBreakOffset > 0 &&
-          inputBlock.charOffsetInContent >= 0
-        ) {
-          const lineGlobalOffset =
-            inputBlock.charOffsetInContent + line.charOffsetInBlock;
+        if (!anchorBreakDone && anchorBreakOffset > 0 && inputBlock.charOffsetInContent >= 0) {
+          const lineGlobalOffset = inputBlock.charOffsetInContent + line.charOffsetInBlock;
           if (lineGlobalOffset >= anchorBreakOffset && page.hasVisibleContent) {
             flushFragment();
             finalizePage();
@@ -1018,8 +1001,7 @@ export function usePagination() {
           }
         }
 
-        const fitsCurrentPage =
-          page.usedPx + line.lineHeightPx <= availH + 0.01;
+        const fitsCurrentPage = page.usedPx + line.lineHeightPx <= availH + 0.01;
         if (!fitsCurrentPage && page.hasVisibleContent) {
           flushFragment();
           finalizePage();
@@ -1070,7 +1052,7 @@ export function usePagination() {
     }
 
     if (builtPages.length === 0) {
-      builtPages.push(wrapRawPageHtml(""));
+      builtPages.push(wrapRawPageHtml(''));
       builtMetas.push({
         charOffset: 0,
         paragraphIndex: 0,
@@ -1088,8 +1070,7 @@ export function usePagination() {
             ? Math.min(anchorPageIndex, totalPages.value - 1)
             : findPageByAnchor(anchor, builtMetas, builtPages.length);
       } else {
-        currentPage.value =
-          initialPage === "last" ? Math.max(0, totalPages.value - 1) : 0;
+        currentPage.value = initialPage === 'last' ? Math.max(0, totalPages.value - 1) : 0;
       }
       isPaginating.value = false;
       return;
@@ -1144,6 +1125,7 @@ export function usePagination() {
     totalPages,
     isPaginating,
     pageMetas,
+    measurementData,
     paginate,
     goToPage,
     nextPage,
@@ -1161,8 +1143,8 @@ function yieldToMain(): Promise<void> {
 
 function escapeHtml(text: string): string {
   return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

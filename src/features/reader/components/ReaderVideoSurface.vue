@@ -1,21 +1,18 @@
 <script setup lang="ts">
-import { useMessage } from "naive-ui";
-import { onBeforeUnmount, onMounted, ref } from "vue";
-import type { ChapterGroup } from "@/stores";
+import { useMessage } from 'naive-ui';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+import type { ChapterGroup } from '@/stores';
 // TODO: 视频功能暂时屏蔽，待启用时取消下方注释并删除临时屏蔽逻辑
 // import { storeToRefs } from 'pinia';
 // import VideoPlayerPage from '@/components/reader/modes/VideoPlayerPage.vue';
 // import { useReaderActionsStore, useReaderSessionStore, useReaderViewStore } from '@/stores';
-import { useReaderActionsStore } from "@/stores";
+import { useReaderActionsStore } from '@/stores';
 
 defineProps<{
   chapterGroups?: ChapterGroup[];
   initialGroupIndex?: number;
   inlineGroupTabs?: boolean;
-  episodeProgress?: Record<
-    string,
-    { time: number; duration: number; lastPlayedAt: number }
-  >;
+  episodeProgress?: Record<string, { time: number; duration: number; lastPlayedAt: number }>;
 }>();
 
 const readerActionsStore = useReaderActionsStore();
@@ -51,7 +48,7 @@ defineExpose({ getCurrentTime, getDuration });
 let closeTimer: ReturnType<typeof setTimeout> | null = null;
 
 onMounted(() => {
-  message.warning("该功能暂时无法使用", {
+  message.warning('该功能暂时无法使用', {
     duration: 2500,
     keepAliveOnHover: false,
   });
