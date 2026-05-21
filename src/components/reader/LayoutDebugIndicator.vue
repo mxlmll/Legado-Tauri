@@ -25,6 +25,12 @@ const displayData = computed(() => {
       ? ((heightDiff / m.containerHeight) * 100).toFixed(1)
       : "0";
 
+  const compensation = m.pretextCompensation;
+  const compensationStr =
+    compensation !== undefined ? compensation.toFixed(4) : null;
+  const compensationPctStr =
+    compensation !== undefined ? ((1 - compensation) * 100).toFixed(2) : null;
+
   return {
     containerWidth: m.containerWidth.toFixed(1),
     containerHeight: m.containerHeight.toFixed(1),
@@ -41,6 +47,8 @@ const displayData = computed(() => {
     lineHeightPx: m.lineHeightPx.toFixed(1),
     fontSize: m.fontSize.toFixed(1),
     engine: m.engine,
+    compensationStr,
+    compensationPctStr,
   };
 });
 
@@ -57,8 +65,12 @@ const handleCopyData = async () => {
   if (!displayData.value) return;
 
   const data = displayData.value;
+  const compensationLine =
+    data.compensationStr !== null
+      ? `\nCanvas/DOM 校准比: ${data.compensationStr} (偏差 ${data.compensationPctStr}%)`
+      : "";
   const text = `排版测量诊断数据
-引擎: ${data.engine}
+引擎: ${data.engine}${compensationLine}
 
 容器尺寸:
   实际宽: ${data.containerWidth}px (可用: ${data.availableWidth}px)
@@ -92,6 +104,15 @@ const handleCopyData = async () => {
       <span class="layout-debug-indicator__title">排版测量诊断</span>
       <span class="layout-debug-indicator__engine"
         >引擎: {{ displayData.engine }}</span
+      >
+      <span
+        v-if="displayData.compensationStr !== null"
+        class="layout-debug-indicator__compensation"
+        :class="{
+          'layout-debug-indicator__compensation--warn':
+            Math.abs(parseFloat(displayData.compensationPctStr!)) > 1,
+        }"
+        >校准: {{ displayData.compensationStr }}</span
       >
       <button
         class="layout-debug-indicator__copy-btn"
@@ -162,7 +183,18 @@ const handleCopyData = async () => {
 
     <!-- 诊断提示 -->
     <div
-      v-if="parseFloat(displayData.widthDiffPct) > 5"
+      v-if="
+        displayData.compensationStr !== null &&
+        Math.abs(parseFloat(displayData.compensationPctStr!)) > 1
+      "
+      class="layout-debug-indicator__warning"
+    >
+      ⚠️ Canvas/DOM 宽度偏差
+      {{ displayData.compensationPctStr }}%，DPI/fontScale
+      导致测量不一致，行宽已自动补偿
+    </div>
+    <div
+      v-else-if="parseFloat(displayData.widthDiffPct) > 5"
       class="layout-debug-indicator__warning"
     >
       ⚠️ 宽度边距占比 >5%，检查是否有 Canvas 测量精度问题
@@ -229,6 +261,17 @@ const handleCopyData = async () => {
 .layout-debug-indicator__engine {
   color: #81c784;
   font-size: 11px;
+}
+
+.layout-debug-indicator__compensation {
+  font-size: 11px;
+  color: #81c784;
+  font-family: "Courier New", monospace;
+}
+
+.layout-debug-indicator__compensation--warn {
+  color: #ffb74d;
+  font-weight: bold;
 }
 
 .layout-debug-indicator__section {

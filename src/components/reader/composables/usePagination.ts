@@ -638,6 +638,76 @@ function resolveBlockDOM(
 
 // ─── Pretext 排版引擎 ──────────────────────────────────────────────────────
 
+/**
+ * 校准 Canvas measureText 与实际 DOM 渲染的宽度比例。
+ *
+ * 问题根源：在 Android 上修改系统 DPI（显示大小）时，系统 fontScale 同步变化。
+ * WebView 将 fontScale 应用于 CSS font-size 的实际渲染，但 Canvas measureText
+ * 使用原始 CSS 像素值，不感知 fontScale，导致两者测量结果不一致。
+ * 非整数 devicePixelRatio（如 2.75）也会因字体 hinting 取整方向不同产生偏差。
+ *
+ * 校准方式：用相同字体渲染测试字符串，对比 Canvas 与 DOM getBoundingClientRect
+ * 的实测宽度，返回 canvasWidth / domWidth 比值。
+ * 调用方将 availW 乘以此比值后传入 Pretext，确保换行位置与实际渲染一致。
+ *
+ * @returns canvasWidth / domWidth（理想为 1.0；无法测量或结果异常时返回 1.0）
+ */
+function measurePretextCompensation(
+  container: HTMLElement,
+  font: string,
+): number {
+  // 使用多个 CJK 字符作为测试字符串，长度足够使偏差可被检测
+  const TEST_STR = "\u4e2d\u6587\u6d4b\u8bd5\u6392\u7248\u5bbd\u5ea6";
+
+  // 固定使用 32px 测量，只保留字族部分。
+  // fontScale 是全局乘数，在任何字号下比值相同；固定大字号可大幅减少
+  // 字体 hinting（像素取整）在不同字号下带来的噪声，使测量结果更稳定。
+  // 若直接用阅读器当前字号，不同字号下 hinting 方向不同会导致比值随字号波动。
+  const stableMeasureFont = font.replace(/\d+(?:\.\d+)?px/, "32px");
+
+  // 1. Canvas 测量（与 Pretext 内部使用同类 Canvas）
+  let canvasW = 0;
+  try {
+    let ctx:
+      | CanvasRenderingContext2D
+      | OffscreenCanvasRenderingContext2D
+      | null = null;
+    if (typeof OffscreenCanvas !== "undefined") {
+      ctx = new OffscreenCanvas(1, 1).getContext("2d");
+    } else if (typeof document !== "undefined") {
+      ctx = document.createElement("canvas").getContext("2d");
+    }
+    if (!ctx) return 1.0;
+    ctx.font = stableMeasureFont;
+    canvasW = ctx.measureText(TEST_STR).width;
+  } catch {
+    return 1.0;
+  }
+  if (canvasW <= 0) return 1.0;
+
+  // 2. DOM 测量：与实际渲染环境一致，应用相同字体和 text-size-adjust
+  const probe = document.createElement("span");
+  probe.style.cssText =
+    "position:absolute;top:0;left:-9999px;visibility:hidden;" +
+    "white-space:nowrap;padding:0;margin:0;border:0;" +
+    "letter-spacing:0px;word-spacing:0px;" +
+    "-webkit-text-size-adjust:none;text-size-adjust:none;" +
+    "text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;";
+  probe.style.font = stableMeasureFont;
+  probe.textContent = TEST_STR;
+  container.appendChild(probe);
+  const domW = probe.getBoundingClientRect().width;
+  probe.remove();
+
+  if (domW <= 0) return 1.0;
+
+  const ratio = canvasW / domW;
+  // 合理性检查：正常偏差通常在 5% 以内，保留到 30% 的容忍范围
+  if (ratio < 0.7 || ratio > 1.3) return 1.0;
+
+  return ratio;
+}
+
 function resolveBlockPretext(
   block: PaginationBlockInput,
   availW: number,
@@ -672,13 +742,7 @@ function resolveBlockPretext(
   while (true) {
     const indentPx = isFirstLine ? firstLineIndentPx : 0;
     const lineWidth = Math.max(1, availW - indentPx);
-
-    // Pretext 的 Canvas 测量可能存在舍入误差，导致行末字符被截断。
-    // 为了确保安全性，在传给 layoutNextLine 前保留 1px 缓冲，
-    // 这样即使 Canvas 测量偏差也不会导致字符溢出。
-    const safeLineWidth = Math.max(1, lineWidth - 1);
-
-    const line = layoutNextLine(prepared, cursor, safeLineWidth);
+    const line = layoutNextLine(prepared, cursor, lineWidth);
     if (line === null) {
       break;
     }
@@ -884,6 +948,19 @@ export function usePagination() {
     const effectiveEngine: "dom" | "pretext" =
       paginationEngine === "dom" ? "dom" : "pretext";
 
+    // Pretext 引擎：校准 Canvas 测量与实际 DOM 渲染的宽度偏差。
+    // 在 Android 上修改系统 DPI 后，fontScale 会导致 Canvas 与 DOM 测量结果不一致。
+    // pretextAvailW 为校准后传入 Pretext 的有效可用宽度。
+    let pretextAvailW = availW;
+    if (effectiveEngine === "pretext") {
+      const paragraphFont = buildCanvasFont(typography);
+      const compensation = measurePretextCompensation(container, paragraphFont);
+      pretextAvailW = availW * compensation;
+      if (measurementData.value) {
+        measurementData.value.pretextCompensation = compensation;
+      }
+    }
+
     const blocks = resolveHorizontalBlocks(content, prefixHtml, typography);
 
     // DOM 引擎：创建复用的测量层，所有 block 共享，最后统一清理
@@ -1016,7 +1093,7 @@ export function usePagination() {
       const block =
         effectiveEngine === "dom"
           ? resolveBlockDOM(inputBlock, measureLayer!, availW, typography)
-          : resolveBlockPretext(inputBlock, availW);
+          : resolveBlockPretext(inputBlock, pretextAvailW);
       if (block.lines.length === 0) {
         continue;
       }
