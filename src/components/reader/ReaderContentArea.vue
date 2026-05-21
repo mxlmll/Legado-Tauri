@@ -1,23 +1,31 @@
 <!-- ReaderContentArea — 阅读正文区域，负责阅读模式承载、文字选择菜单与选区插件动作。 -->
 <script setup lang="ts">
-import { NSpin, NAlert, NButton, NDropdown, useMessage } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { NSpin, NAlert, NButton, NDropdown, useMessage } from "naive-ui";
+import { storeToRefs } from "pinia";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import {
   useFrontendPlugins,
   type ReaderTextSelectionContext,
-} from '@/composables/useFrontendPlugins';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
-import { useReaderBookmarksStore } from '@/features/reader/stores/readerBookmarks';
+} from "@/composables/useFrontendPlugins";
+import { useOverlayBackstack } from "@/composables/useOverlayBackstack";
+import { useReaderBookmarksStore } from "@/features/reader/stores/readerBookmarks";
 import {
   useReaderActionsStore,
   useReaderSessionStore,
   useReaderSettingsStore,
   useReaderViewStore,
-} from '@/stores';
-import ComicMode from './modes/ComicMode.vue';
-import PagedMode from './modes/PagedMode.vue';
-import ScrollMode from './modes/ScrollMode.vue';
+} from "@/stores";
+import ComicMode from "./modes/ComicMode.vue";
+import PagedMode from "./modes/PagedMode.vue";
+import ScrollMode from "./modes/ScrollMode.vue";
 
 const message = useMessage();
 const readerActionsStore = useReaderActionsStore();
@@ -56,25 +64,31 @@ const {
   prevScrollChapterTitle,
   sourceType,
   ttsScrollHighlightIdx,
+  paginationMeasurementData,
 } = storeToRefs(readerViewStore);
-const { getReaderContextActions, runReaderContextAction } = useFrontendPlugins();
+const { getReaderContextActions, runReaderContextAction } =
+  useFrontendPlugins();
 const bookmarksStore = useReaderBookmarksStore();
 const selectionMode = ref(false);
 
 /** 当前章节中所有书签文本列表，用于高亮渲染 */
 const chapterBookmarkTexts = computed(() =>
   bookmarksStore
-    .getChapterBookmarks(bookUrl.value ?? '', fileName.value, activeChapterIndex.value)
+    .getChapterBookmarks(
+      bookUrl.value ?? "",
+      fileName.value,
+      activeChapterIndex.value,
+    )
     .map((b) => b.text),
 );
 
 /** 将书签文本插入 HTML 字符串中（用于分页模式预生成页面） */
 function escapeHtml(text: string): string {
   return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function applyBookmarkHighlights(html: string, texts: string[]): string {
@@ -84,7 +98,9 @@ function applyBookmarkHighlights(html: string, texts: string[]): string {
       continue;
     }
     const escaped = escapeHtml(text);
-    result = result.split(escaped).join(`<mark class="reader-bookmark">${escaped}</mark>`);
+    result = result
+      .split(escaped)
+      .join(`<mark class="reader-bookmark">${escaped}</mark>`);
   }
   return result;
 }
@@ -94,7 +110,9 @@ const pagedPagesHighlighted = computed(() => {
   if (texts.length === 0) {
     return activePagedPages.value;
   }
-  return activePagedPages.value.map((page) => applyBookmarkHighlights(page, texts));
+  return activePagedPages.value.map((page) =>
+    applyBookmarkHighlights(page, texts),
+  );
 });
 
 const prevBoundaryPageHighlighted = computed(() => {
@@ -135,7 +153,9 @@ const LONG_PRESS_MOVE_LIMIT = 6;
 const hasReaderContextMenu = computed(() => !!contextMenu.context);
 
 const contextMenuOptions = computed(() => {
-  const actions = contextMenu.context ? getReaderContextActions(contextMenu.context) : [];
+  const actions = contextMenu.context
+    ? getReaderContextActions(contextMenu.context)
+    : [];
   const items: {
     label: string;
     key: string;
@@ -146,19 +166,19 @@ const contextMenuOptions = computed(() => {
   if (contextMenu.context) {
     const ctx = contextMenu.context;
     const existing = bookmarksStore.findBookmark(
-      ctx.bookUrl ?? '',
+      ctx.bookUrl ?? "",
       ctx.fileName,
       ctx.chapterIndex,
       ctx.text,
     );
     items.push({
-      label: existing ? '取消书签' : '设置为书签',
-      key: '__bookmark',
+      label: existing ? "取消书签" : "设置为书签",
+      key: "__bookmark",
     });
   }
 
   if (items.length > 0 && actions.length > 0) {
-    items.push({ type: 'divider', key: '__divider' } as {
+    items.push({ type: "divider", key: "__divider" } as {
       label: string;
       key: string;
       type: string;
@@ -170,7 +190,7 @@ const contextMenuOptions = computed(() => {
   }
 
   if (items.length === 0) {
-    return [{ label: '无', key: '__empty', disabled: true }];
+    return [{ label: "无", key: "__empty", disabled: true }];
   }
 
   return items;
@@ -189,18 +209,18 @@ function closeReaderContextMenu() {
 function getSelectedReaderText(): string {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) {
-    return '';
+    return "";
   }
   const root = contentRefs.value.readerBodyRef.value;
   if (!root) {
-    return '';
+    return "";
   }
   const anchor = selection.anchorNode;
   const focus = selection.focusNode;
   if ((anchor && !root.contains(anchor)) || (focus && !root.contains(focus))) {
-    return '';
+    return "";
   }
-  return selection.toString().replace(/\s+/g, ' ').trim();
+  return selection.toString().replace(/\s+/g, " ").trim();
 }
 
 function updateSelectionModeFromSelection() {
@@ -222,7 +242,7 @@ function updateSelectionModeFromSelection() {
 function buildSelectionContext(text: string): ReaderTextSelectionContext {
   return {
     text,
-    sourceType: sourceType.value ?? '',
+    sourceType: sourceType.value ?? "",
     fileName: fileName.value,
     chapterIndex: activeChapterIndex.value,
     chapterName: currentChapterName.value,
@@ -233,7 +253,7 @@ function buildSelectionContext(text: string): ReaderTextSelectionContext {
 }
 
 function openReaderContextMenu(x: number, y: number): boolean {
-  if (sourceType.value !== 'novel') {
+  if (sourceType.value !== "novel") {
     return false;
   }
   const text = getSelectedReaderText();
@@ -269,12 +289,15 @@ function clearLongPressTimer() {
 function getCaretRangeFromPoint(x: number, y: number): Range | null {
   const doc = document as Document & {
     caretRangeFromPoint?: (x: number, y: number) => Range | null;
-    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretPositionFromPoint?: (
+      x: number,
+      y: number,
+    ) => { offsetNode: Node; offset: number } | null;
   };
-  if (typeof doc.caretRangeFromPoint === 'function') {
+  if (typeof doc.caretRangeFromPoint === "function") {
     return doc.caretRangeFromPoint(x, y);
   }
-  if (typeof doc.caretPositionFromPoint === 'function') {
+  if (typeof doc.caretPositionFromPoint === "function") {
     const position = doc.caretPositionFromPoint(x, y);
     if (!position) {
       return null;
@@ -287,28 +310,33 @@ function getCaretRangeFromPoint(x: number, y: number): Range | null {
   return null;
 }
 
-function getCharacterGroup(char: string): 'ascii-word' | 'cjk' | 'other' | 'space' {
+function getCharacterGroup(
+  char: string,
+): "ascii-word" | "cjk" | "other" | "space" {
   if (/\s/.test(char)) {
-    return 'space';
+    return "space";
   }
   if (/[A-Za-z0-9_]/.test(char)) {
-    return 'ascii-word';
+    return "ascii-word";
   }
   if (/[\u3400-\u9fff\uf900-\ufaff]/.test(char)) {
-    return 'cjk';
+    return "cjk";
   }
-  return 'other';
+  return "other";
 }
 
 function findSelectableOffset(text: string, offset: number): number {
   const initial = Math.min(Math.max(offset, 0), Math.max(text.length - 1, 0));
   for (let radius = 0; radius <= 8; radius += 1) {
     const left = initial - radius;
-    if (left >= 0 && getCharacterGroup(text.charAt(left)) !== 'space') {
+    if (left >= 0 && getCharacterGroup(text.charAt(left)) !== "space") {
       return left;
     }
     const right = initial + radius;
-    if (right < text.length && getCharacterGroup(text.charAt(right)) !== 'space') {
+    if (
+      right < text.length &&
+      getCharacterGroup(text.charAt(right)) !== "space"
+    ) {
       return right;
     }
   }
@@ -325,7 +353,7 @@ function selectReaderTextAtPoint(x: number, y: number): boolean {
   if (textNode.nodeType !== Node.TEXT_NODE) {
     return false;
   }
-  const text = textNode.textContent ?? '';
+  const text = textNode.textContent ?? "";
   if (!text) {
     return false;
   }
@@ -335,13 +363,13 @@ function selectReaderTextAtPoint(x: number, y: number): boolean {
     return false;
   }
   const group = getCharacterGroup(text.charAt(selectableOffset));
-  if (group === 'space') {
+  if (group === "space") {
     return false;
   }
 
   let start = selectableOffset;
   let end = selectableOffset + 1;
-  if (group === 'ascii-word') {
+  if (group === "ascii-word") {
     while (start > 0 && getCharacterGroup(text.charAt(start - 1)) === group) {
       start -= 1;
     }
@@ -367,16 +395,19 @@ function enterSelectionMode() {
       updateSelectionModeFromSelection();
     }
   });
-  if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+  if (
+    typeof navigator !== "undefined" &&
+    typeof navigator.vibrate === "function"
+  ) {
     navigator.vibrate(12);
   }
 }
 
 function onReaderPointerDown(event: PointerEvent) {
   if (
-    sourceType.value !== 'novel' ||
+    sourceType.value !== "novel" ||
     selectionMode.value ||
-    event.pointerType === 'mouse' ||
+    event.pointerType === "mouse" ||
     event.button !== 0
   ) {
     return;
@@ -425,34 +456,34 @@ function onReaderPointerUp(event: PointerEvent) {
 }
 
 async function onReaderContextSelect(key: string) {
-  if (key === '__empty') {
+  if (key === "__empty") {
     return;
   }
 
-  if (key === '__bookmark') {
+  if (key === "__bookmark") {
     const context = contextMenu.context ?? activeSelectionContext;
     closeReaderContextMenu();
     if (!context) {
       return;
     }
     const existing = bookmarksStore.findBookmark(
-      context.bookUrl ?? '',
+      context.bookUrl ?? "",
       context.fileName,
       context.chapterIndex,
       context.text,
     );
     if (existing) {
       await bookmarksStore.removeBookmark(existing.id);
-      message.info('书签已取消');
+      message.info("书签已取消");
     } else {
       await bookmarksStore.addBookmark({
-        bookUrl: context.bookUrl ?? '',
+        bookUrl: context.bookUrl ?? "",
         fileName: context.fileName,
         chapterIndex: context.chapterIndex,
         chapterName: context.chapterName,
         text: context.text,
       });
-      message.success('书签已设置');
+      message.success("书签已设置");
     }
     return;
   }
@@ -478,11 +509,17 @@ watch(content, () => {
 });
 
 onMounted(() => {
-  document.addEventListener('selectionchange', updateSelectionModeFromSelection);
+  document.addEventListener(
+    "selectionchange",
+    updateSelectionModeFromSelection,
+  );
 });
 
 onBeforeUnmount(() => {
-  document.removeEventListener('selectionchange', updateSelectionModeFromSelection);
+  document.removeEventListener(
+    "selectionchange",
+    updateSelectionModeFromSelection,
+  );
   clearLongPressTimer();
 });
 </script>
@@ -511,7 +548,11 @@ onBeforeUnmount(() => {
         box-sizing: border-box;
       "
     >
-      <n-alert type="error" :title="error" style="max-width: 480px; width: 100%">
+      <n-alert
+        type="error"
+        :title="error"
+        style="max-width: 480px; width: 100%"
+      >
         <n-button
           type="error"
           size="small"
@@ -564,6 +605,7 @@ onBeforeUnmount(() => {
       :busy="pagedLoading"
       :layout-debug="settings.layoutDebugMode"
       :tap-zone-debug="tapZoneDebugPreviewVisible"
+      :pagination-measurement="paginationMeasurementData"
       @tap="readerActionsStore.onTap"
       @update:current-page="readerActionsStore.onPagedPageChange"
       @request-prev-chapter="readerActionsStore.gotoPrevBoundary"
@@ -618,7 +660,10 @@ onBeforeUnmount(() => {
     aria-hidden="true"
   />
   <div
-    :ref="(el) => (contentRefs.backgroundMeasureHostRef.value = el as HTMLElement | null)"
+    :ref="
+      (el) =>
+        (contentRefs.backgroundMeasureHostRef.value = el as HTMLElement | null)
+    "
     class="reader-modal__measure-host"
     aria-hidden="true"
   />

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Check, ChevronLeft, Copy, Search } from 'lucide-vue-next';
+import { Check, Copy, Search } from 'lucide-vue-next';
 import type { ReaderSettings, ReaderTypography } from '@/components/reader/types';
+import ReaderSettingsSubHeader from './ReaderSettingsSubHeader.vue';
 
 interface SystemFontItem {
   name: string;
@@ -28,19 +29,17 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="reader-settings__sub-header">
-    <button class="reader-settings__back" @click="emit('back')">
-      <ChevronLeft :size="16" />
-    </button>
-    <span class="reader-settings__sub-title">系统字体</span>
-    <button
-      class="reader-settings__font-toggle"
-      :class="{ 'reader-settings__font-toggle--active': showAllFonts }"
-      @click="showAllFonts = !showAllFonts"
-    >
-      显示全部
-    </button>
-  </div>
+  <ReaderSettingsSubHeader title="系统字体" @back="emit('back')">
+    <template #actions>
+      <button
+        class="reader-settings__font-toggle"
+        :class="{ 'reader-settings__font-toggle--active': showAllFonts }"
+        @click="showAllFonts = !showAllFonts"
+      >
+        显示全部
+      </button>
+    </template>
+  </ReaderSettingsSubHeader>
 
   <div class="reader-settings__font-toolbar">
     <div class="reader-settings__font-search">
@@ -154,37 +153,7 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-.reader-settings__sub-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.reader-settings__back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background 0.15s;
-}
-
-.reader-settings__back:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.reader-settings__sub-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
 .reader-settings__font-toggle {
-  margin-left: auto;
   font-size: 0.6875rem;
   padding: 2px 8px;
   border-radius: 4px;

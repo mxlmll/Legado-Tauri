@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Check, ChevronLeft, Pencil, Trash2, Upload } from 'lucide-vue-next';
+import { Check, Pencil, Trash2, Upload } from 'lucide-vue-next';
 import { ref } from 'vue';
 import type { ReaderSettings, ReaderTypography } from '@/components/reader/types';
 import type { UserFontMeta } from '@/composables/useUserFonts';
+import ReaderSettingsSubHeader from './ReaderSettingsSubHeader.vue';
 
 defineProps<{
   settings: ReaderSettings;
@@ -94,14 +95,14 @@ function cancelRename() {
   >
     <!-- 标题栏 -->
     <div class="uf-header">
-      <button class="uf-back" @click="emit('back')">
-        <ChevronLeft :size="16" />
-      </button>
-      <span class="uf-title">上传字体</span>
-      <button class="uf-upload-btn" :disabled="uploading" @click="triggerUpload">
-        <Upload :size="14" />
-        <span>选择文件</span>
-      </button>
+      <ReaderSettingsSubHeader title="上传字体" @back="emit('back')">
+        <template #actions>
+          <button class="uf-upload-btn" :disabled="uploading" @click="triggerUpload">
+            <Upload :size="14" />
+            <span>选择文件</span>
+          </button>
+        </template>
+      </ReaderSettingsSubHeader>
       <!-- 隐藏的文件选择 input，支持多选，跨平台兼容 -->
       <input
         ref="fileInput"
@@ -236,33 +237,7 @@ function cancelRename() {
 }
 
 .uf-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin-bottom: 8px;
-}
-
-.uf-back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background 0.15s;
-}
-
-.uf-back:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.uf-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  flex: 1;
 }
 
 .uf-upload-btn {

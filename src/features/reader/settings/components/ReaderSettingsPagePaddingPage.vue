@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ChevronLeft } from 'lucide-vue-next';
 import type { ReaderSettings, ReaderPagePadding } from '@/components/reader/types';
+import ReaderSettingsSubHeader from './ReaderSettingsSubHeader.vue';
 
 defineProps<{
   settings: ReaderSettings;
@@ -13,12 +13,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="reader-settings__sub-header">
-    <button class="reader-settings__back" @click="emit('back')">
-      <ChevronLeft :size="16" />
-    </button>
-    <span class="reader-settings__sub-title">页边距设置</span>
-  </div>
+  <ReaderSettingsSubHeader title="页边距设置" @back="emit('back')" />
 
   <div class="reader-settings__row">
     <span class="reader-settings__label">上边距</span>

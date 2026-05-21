@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ChevronLeft } from "lucide-vue-next";
 import { toRef } from "vue";
 import { isMobile } from "@/composables/useEnv";
 import ReaderSettingsCustomFontPage from "@/features/reader/settings/components/ReaderSettingsCustomFontPage.vue";
@@ -8,6 +7,7 @@ import ReaderSettingsMorePage from "@/features/reader/settings/components/Reader
 import ReaderSettingsPagePaddingPage from "@/features/reader/settings/components/ReaderSettingsPagePaddingPage.vue";
 import ReaderSettingsShortcutsPage from "@/features/reader/settings/components/ReaderSettingsShortcutsPage.vue";
 import ReaderSettingsSpacingPage from "@/features/reader/settings/components/ReaderSettingsSpacingPage.vue";
+import ReaderSettingsSubHeader from "@/features/reader/settings/components/ReaderSettingsSubHeader.vue";
 import ReaderSettingsTypographyPage from "@/features/reader/settings/components/ReaderSettingsTypographyPage.vue";
 import ReaderSettingsUploadedFontsPage from "@/features/reader/settings/components/ReaderSettingsUploadedFontsPage.vue";
 import { useReaderSettingsPanelModel } from "@/features/reader/settings/useReaderSettingsPanelModel";
@@ -314,12 +314,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
 
     <!-- ============ L2 点击控制 ============ -->
     <template v-else-if="subPage === 'tapControls'">
-      <div class="reader-settings__sub-header">
-        <button class="reader-settings__back" @click="goBack()">
-          <ChevronLeft :size="16" />
-        </button>
-        <span class="reader-settings__sub-title">点击控制</span>
-      </div>
+      <ReaderSettingsSubHeader title="点击控制" @back="goBack" />
 
       <div class="reader-settings__row">
         <span class="reader-settings__label">左区</span>
@@ -806,36 +801,6 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
   font-weight: 600;
   line-height: 1.2;
   text-align: center;
-}
-
-/* ---- L2 子页面头部 ---- */
-.reader-settings__sub-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.reader-settings__back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background 0.15s;
-}
-
-.reader-settings__back:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.reader-settings__sub-title {
-  font-size: 0.875rem;
-  font-weight: 600;
 }
 
 /* ---- L2 字体列表 ---- */

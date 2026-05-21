@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronLeft } from 'lucide-vue-next';
+import ReaderSettingsSubHeader from './ReaderSettingsSubHeader.vue';
 
 defineProps<{
   volumeKeyPageTurnEnabled: boolean;
@@ -11,12 +11,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="reader-settings__sub-header">
-    <button class="reader-settings__back" @click="emit('back')">
-      <ChevronLeft :size="16" />
-    </button>
-    <span class="reader-settings__sub-title">快捷键说明</span>
-  </div>
+  <ReaderSettingsSubHeader title="快捷键说明" @back="emit('back')" />
 
   <div class="reader-settings__shortcuts">
     <div class="reader-settings__shortcut-row">
@@ -44,35 +39,6 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-.reader-settings__sub-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.reader-settings__back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background 0.15s;
-}
-
-.reader-settings__back:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.reader-settings__sub-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
 .reader-settings__shortcuts {
   display: flex;
   flex-direction: column;

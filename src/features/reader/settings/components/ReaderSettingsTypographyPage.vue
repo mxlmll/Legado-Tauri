@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ChevronLeft } from 'lucide-vue-next';
 import type { ReaderSettings, ReaderTypography } from '@/components/reader/types';
+import ReaderSettingsSubHeader from './ReaderSettingsSubHeader.vue';
 
 defineProps<{
   settings: ReaderSettings;
@@ -18,12 +18,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="reader-settings__sub-header">
-    <button class="reader-settings__back" @click="emit('back')">
-      <ChevronLeft :size="16" />
-    </button>
-    <span class="reader-settings__sub-title">字体样式</span>
-  </div>
+  <ReaderSettingsSubHeader title="字体样式" @back="emit('back')" />
 
   <!-- 斜体 -->
   <div class="reader-settings__row">
@@ -175,3 +170,93 @@ const emit = defineEmits<{
     </div>
   </div>
 </template>
+
+<style scoped>
+.reader-settings__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.reader-settings__label {
+  flex-shrink: 0;
+  width: 44px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 13px;
+  text-align: left;
+}
+
+.reader-settings__val {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.reader-settings__pill-group {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.reader-settings__pill-group .reader-settings__pill {
+  flex: 1;
+  min-width: 0;
+}
+
+.reader-settings__pill {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+  white-space: nowrap;
+}
+
+.reader-settings__pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.reader-settings__pill--active {
+  background: rgba(99, 226, 183, 0.16);
+  color: #63e2b7;
+  font-weight: 500;
+}
+
+.reader-settings__color-swatch {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.reader-settings__color-swatch input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.reader-settings__color-swatch span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  transition: border-color 0.15s;
+}
+
+.reader-settings__color-swatch:hover span {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+</style>

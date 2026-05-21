@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight } from "lucide-vue-next";
+import { ChevronRight } from "lucide-vue-next";
 import type {
   ReaderSettings,
   ReaderTypography,
 } from "@/components/reader/types";
+import ReaderSettingsSubHeader from "./ReaderSettingsSubHeader.vue";
 
 type MoreTarget =
   | "tapControls"
@@ -31,19 +32,17 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="reader-settings__sub-header">
-    <button class="reader-settings__back" @click="emit('back')">
-      <ChevronLeft :size="16" />
-    </button>
-    <span class="reader-settings__sub-title">更多设置</span>
-    <button
-      class="reader-settings__reset-btn"
-      title="恢复所有阅读设置为默认值"
-      @click="emit('reset')"
-    >
-      恢复默认
-    </button>
-  </div>
+  <ReaderSettingsSubHeader title="更多设置" @back="emit('back')">
+    <template #actions>
+      <button
+        class="reader-settings__reset-btn"
+        title="恢复所有阅读设置为默认值"
+        @click="emit('reset')"
+      >
+        恢复默认
+      </button>
+    </template>
+  </ReaderSettingsSubHeader>
 
   <div class="reader-settings__fw-section">
     <div class="reader-settings__fw-header">
@@ -145,35 +144,6 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-.reader-settings__sub-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.reader-settings__back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background 0.15s;
-}
-
-.reader-settings__back:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.reader-settings__sub-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
 .reader-settings__reset-btn,
 .reader-settings__debug-export-btn {
   border-radius: 4px;
@@ -189,7 +159,6 @@ const emit = defineEmits<{
 }
 
 .reader-settings__reset-btn {
-  margin-left: auto;
   padding: 3px 10px;
   font-size: 0.6875rem;
 }

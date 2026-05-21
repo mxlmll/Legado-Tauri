@@ -8,9 +8,9 @@
  *
  * 底层持久化走 useDynamicConfig。
  */
-import { defineStore } from 'pinia';
-import { readonly } from 'vue';
-import { useDynamicConfig } from '@/composables/useDynamicConfig';
+import { defineStore } from "pinia";
+import { readonly } from "vue";
+import { useDynamicConfig } from "@/composables/useDynamicConfig";
 
 // ── 阅读器偏好设置 ───────────────────────────────────────────────────────
 
@@ -32,12 +32,12 @@ export interface ReaderPreferences {
   /** 翻页模式："scroll" | "page" */
   pageMode: string;
   /** 自动繁简转换模式 */
-  chineseConvert: '' | 's2t' | 's2tw' | 's2hk' | 't2s' | 'tw2s' | 'hk2s';
+  chineseConvert: "" | "s2t" | "s2tw" | "s2hk" | "t2s" | "tw2s" | "hk2s";
 }
 
 // ── 视图卡片密度 ──────────────────────────────────────────────────────────
 
-export type ViewDensityMode = 'compact' | 'normal' | 'comfortable';
+export type ViewDensityMode = "compact" | "normal" | "comfortable";
 
 export interface ViewDensityPreferences {
   bookshelf: ViewDensityMode;
@@ -65,6 +65,8 @@ export interface TocAutoUpdatePreferences {
 export interface DevToolsPreferences {
   /** 是否启用 vConsole 调试面板 */
   vConsoleEnabled: boolean;
+  /** 是否开启完全体模式（解除漫画/音乐限制） */
+  fullModeEnabled: boolean;
 }
 
 // ── 搜索偏好 ──────────────────────────────────────────────────────────────
@@ -90,35 +92,35 @@ export interface SearchPreferences {
 
 // ── Store ─────────────────────────────────────────────────────────────────
 
-export const usePreferencesStore = defineStore('preferences', () => {
+export const usePreferencesStore = defineStore("preferences", () => {
   const readerConfig = useDynamicConfig<ReaderPreferences>({
-    namespace: 'preferences.reader',
+    namespace: "preferences.reader",
     version: 1,
     defaults: () => ({
       fontSize: 18,
       lineHeight: 1.75,
       paragraphSpacing: 12,
       paddingH: 20,
-      themePresetId: '',
-      backgroundPresetId: '',
-      backgroundImage: '',
-      pageMode: 'scroll',
-      chineseConvert: '',
+      themePresetId: "",
+      backgroundPresetId: "",
+      backgroundImage: "",
+      pageMode: "scroll",
+      chineseConvert: "",
     }),
   });
 
   const densityConfig = useDynamicConfig<ViewDensityPreferences>({
-    namespace: 'preferences.viewDensity',
+    namespace: "preferences.viewDensity",
     version: 1,
     defaults: () => ({
-      bookshelf: 'normal',
-      search: 'normal',
-      explore: 'normal',
+      bookshelf: "normal",
+      search: "normal",
+      explore: "normal",
     }),
   });
 
   const tocAutoUpdateConfig = useDynamicConfig<TocAutoUpdatePreferences>({
-    namespace: 'preferences.tocAutoUpdate',
+    namespace: "preferences.tocAutoUpdate",
     version: 1,
     defaults: () => ({
       enabled: false,
@@ -130,15 +132,26 @@ export const usePreferencesStore = defineStore('preferences', () => {
   });
 
   const devToolsConfig = useDynamicConfig<DevToolsPreferences>({
-    namespace: 'preferences.devTools',
-    version: 1,
+    namespace: "preferences.devTools",
+    version: 2,
     defaults: () => ({
       vConsoleEnabled: false,
+      fullModeEnabled: false,
     }),
+    migrate: ({ storedVersion, storedData }) => {
+      if (storedVersion === 1) {
+        const old = (storedData ?? {}) as Partial<DevToolsPreferences>;
+        return {
+          vConsoleEnabled: old.vConsoleEnabled ?? false,
+          fullModeEnabled: false,
+        };
+      }
+      return null;
+    },
   });
 
   const searchConfig = useDynamicConfig<SearchPreferences>({
-    namespace: 'preferences.search',
+    namespace: "preferences.search",
     version: 1,
     defaults: () => ({
       lastSourceFileName: null,
@@ -170,14 +183,20 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   // ── 视图密度 Actions ──────────────────────────────────────────────────
 
-  function setViewDensity(view: keyof ViewDensityPreferences, mode: ViewDensityMode) {
+  function setViewDensity(
+    view: keyof ViewDensityPreferences,
+    mode: ViewDensityMode,
+  ) {
     densityConfig.replace({ ...densityConfig.state, [view]: mode });
   }
 
   // ── 搜索偏好 Actions ──────────────────────────────────────────────────
 
   function setLastSearchSource(fileName: string | null) {
-    searchConfig.replace({ ...searchConfig.state, lastSourceFileName: fileName });
+    searchConfig.replace({
+      ...searchConfig.state,
+      lastSourceFileName: fileName,
+    });
   }
 
   function patchSearch(patch: Partial<SearchPreferences>) {
@@ -206,7 +225,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     patchReader,
     resetReader,
     // 目录自动更新
-    tocAutoUpdate: readonly(tocAutoUpdateConfig.state) as TocAutoUpdatePreferences,
+    tocAutoUpdate: readonly(
+      tocAutoUpdateConfig.state,
+    ) as TocAutoUpdatePreferences,
     patchTocAutoUpdate,
     // 视图密度
     viewDensity: readonly(densityConfig.state) as ViewDensityPreferences,
