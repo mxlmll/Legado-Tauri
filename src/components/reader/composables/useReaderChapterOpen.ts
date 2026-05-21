@@ -24,6 +24,7 @@ interface ComicModeApi {
   restoreToScrollRatio?: (ratio: number) => Promise<void>;
   scrollToRatio?: (ratio: number) => void;
   getScrollRatio?: () => number;
+  getReadingScrollRatio?: () => number;
   currentPage?: number;
   totalPages?: number;
 }
@@ -214,7 +215,32 @@ export function useReaderChapterOpen(options: UseReaderChapterOpenOptions) {
     options.restoringPosition.value = true;
     try {
       if (options.isComicMode.value) {
-        writeRestoredPosition(-1, -1);
+        const ready = await waitUntilReady(
+          () =>
+            options.comicModeRef.value?.restoreToScrollRatio ??
+            options.comicModeRef.value?.scrollToRatio ??
+            options.comicModeRef.value?.goToPage,
+        );
+        if (ready && options.comicModeRef.value) {
+          await nextTick();
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          if (scrollRatio >= 0) {
+            const ratio = clampReaderRatio(scrollRatio);
+            if (options.comicModeRef.value.restoreToScrollRatio) {
+              await options.comicModeRef.value.restoreToScrollRatio(ratio);
+            } else {
+              options.comicModeRef.value.scrollToRatio?.(ratio);
+            }
+          } else if (pageIndex >= 0) {
+            options.comicModeRef.value.goToPage?.(pageIndex);
+          }
+          writeRestoredPosition(
+            pageIndex,
+            options.comicModeRef.value.getReadingScrollRatio?.() ??
+              options.comicModeRef.value.getScrollRatio?.() ??
+              scrollRatio,
+          );
+        }
         return;
       }
 

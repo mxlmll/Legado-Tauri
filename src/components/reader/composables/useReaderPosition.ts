@@ -158,8 +158,12 @@ export function useReaderPosition(options: UseReaderPositionOptions) {
       return {
         mode,
         chapterOffset: validChapterOffset(modeRef?.getReadingChapterOffset?.()),
-        pageIndex: -1,
-        scrollRatio: -1,
+        pageIndex: validIndex(modeRef?.getReadingPageIndex?.() ?? options.currentPageIndex.value),
+        scrollRatio: validRatio(
+          modeRef?.getReadingScrollRatio?.() ??
+            modeRef?.getScrollRatio?.() ??
+            options.currentScrollRatio.value,
+        ),
         playbackTime: -1,
       };
     }

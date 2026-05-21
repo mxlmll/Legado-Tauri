@@ -1,4 +1,8 @@
-﻿import type { MessageApi } from "naive-ui";
+/**
+ * bookshelfReaderLauncher — 书架打开阅读器、加载目录和手动刷新目录的业务入口。
+ */
+
+import type { MessageApi } from "naive-ui";
 import { useTocAutoUpdate } from "@/composables/useTocAutoUpdate";
 import { usePreferencesStore } from "@/stores/preferences";
 import {
@@ -140,6 +144,7 @@ export function useBookshelfReaderLauncher(message: MessageApi) {
       return;
     }
     readerStore.refreshingToc = true;
+    bookshelfStore.beginTocRefresh(readerStore.readerShelfId);
     try {
       const info = await scriptBridgeStore.runBookInfo(fileName, bookUrl);
       const tocUrl = (info as { tocUrl?: string }).tocUrl ?? bookUrl;
@@ -176,6 +181,7 @@ export function useBookshelfReaderLauncher(message: MessageApi) {
         `更新目录失败：${error instanceof Error ? error.message : String(error)}`,
       );
     } finally {
+      bookshelfStore.endTocRefresh(readerStore.readerShelfId);
       readerStore.refreshingToc = false;
     }
   }

@@ -54,8 +54,10 @@ export interface ReaderViewBindings {
   nextScrollChapterLoading: ValueSource<boolean>;
   prevComicChapterContent: ValueSource<string>;
   prevComicChapterTitle: ValueSource<string>;
+  prevComicChapterLoading: ValueSource<boolean>;
   nextComicChapterContent: ValueSource<string>;
   nextComicChapterTitle: ValueSource<string>;
+  nextComicChapterLoading: ValueSource<boolean>;
   contentRefs: ReaderContentRefs;
   paginationMeasurementData?: ValueSource<PaginationMeasurementData | null>;
 }
@@ -173,11 +175,17 @@ export const useReaderViewStore = defineStore("readerView", () => {
   const prevComicChapterTitle = computed(() =>
     readSource(bindings.value?.prevComicChapterTitle, ""),
   );
+  const prevComicChapterLoading = computed(() =>
+    readSource(bindings.value?.prevComicChapterLoading, false),
+  );
   const nextComicChapterContent = computed(() =>
     readSource(bindings.value?.nextComicChapterContent, ""),
   );
   const nextComicChapterTitle = computed(() =>
     readSource(bindings.value?.nextComicChapterTitle, ""),
+  );
+  const nextComicChapterLoading = computed(() =>
+    readSource(bindings.value?.nextComicChapterLoading, false),
   );
   const contentRefs = computed(
     () => bindings.value?.contentRefs ?? emptyContentRefs,
@@ -231,8 +239,10 @@ export const useReaderViewStore = defineStore("readerView", () => {
     nextScrollChapterLoading,
     prevComicChapterContent,
     prevComicChapterTitle,
+    prevComicChapterLoading,
     nextComicChapterContent,
     nextComicChapterTitle,
+    nextComicChapterLoading,
     contentRefs,
     paginationMeasurementData,
     bookName,

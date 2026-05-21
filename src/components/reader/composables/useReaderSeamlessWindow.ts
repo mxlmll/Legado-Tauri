@@ -124,8 +124,10 @@ export function useReaderSeamlessWindow(options: UseReaderSeamlessWindowOptions)
   const nextScrollChapterLoading = nextScrollChapterSlot.loading;
   const prevComicChapterContent = prevComicChapterSlot.content;
   const prevComicChapterTitle = prevComicChapterSlot.title;
+  const prevComicChapterLoading = prevComicChapterSlot.loading;
   const nextComicChapterContent = nextComicChapterSlot.content;
   const nextComicChapterTitle = nextComicChapterSlot.title;
+  const nextComicChapterLoading = nextComicChapterSlot.loading;
 
   let prevChapterPrefetchAbort: AbortController | null = null;
   let nextChapterPrefetchAbort: AbortController | null = null;
@@ -354,8 +356,8 @@ export function useReaderSeamlessWindow(options: UseReaderSeamlessWindowOptions)
           ? normalizePageIndex(
               modeRef?.getAdjacentLineAnchor?.(side) ?? modeRef?.getAdjacentParagraphIndex?.(side),
             )
-          : -1,
-      scrollRatio: mode === 'scroll' ? clampRatio(modeRef?.getAdjacentScrollRatio?.(side)) : -1,
+          : normalizePageIndex(modeRef?.getAdjacentPageIndex?.(side)),
+      scrollRatio: clampRatio(modeRef?.getAdjacentScrollRatio?.(side)),
       playbackTime: -1,
     };
   }
@@ -477,8 +479,10 @@ export function useReaderSeamlessWindow(options: UseReaderSeamlessWindowOptions)
     nextScrollChapterLoading,
     prevComicChapterContent,
     prevComicChapterTitle,
+    prevComicChapterLoading,
     nextComicChapterContent,
     nextComicChapterTitle,
+    nextComicChapterLoading,
     clearAllSeamlessSlots,
     syncLinearSeamlessWindow,
     waitForStableWindow,

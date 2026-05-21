@@ -1,13 +1,19 @@
+<!--
+  ShelfBookCard — 书架单本书卡片，展示封面、阅读进度、未读数量和加载状态。
+-->
 <script setup lang="ts">
 import { Loader2 } from 'lucide-vue-next';
+import { computed } from 'vue';
 import type { ShelfBook } from '@/stores';
 import SourceTypeBadge from '../base/SourceTypeBadge.vue';
 import BookCoverImg from '../BookCoverImg.vue';
 
-defineProps<{
+const props = defineProps<{
   book: ShelfBook;
   privacyModeEnabled?: boolean;
   loading?: boolean;
+  loadingBlocksInteraction?: boolean;
+  loadingLabel?: string;
   editMode?: boolean;
   selected?: boolean;
 }>();
@@ -52,6 +58,8 @@ function unreadClass(book: ShelfBook): Record<string, boolean> {
     'shelf-card__unread-bubble--wide': count > 99,
   };
 }
+
+const loadingText = computed(() => props.loadingLabel || '加载中');
 </script>
 
 <template>
@@ -63,7 +71,7 @@ function unreadClass(book: ShelfBook): Record<string, boolean> {
     :class="{
       'shelf-card--private': book.isPrivate,
       'shelf-card--privacy-active': privacyModeEnabled && book.isPrivate,
-      'shelf-card--loading': loading,
+      'shelf-card--loading': loading && loadingBlocksInteraction !== false,
       'shelf-card--edit': editMode,
       'shelf-card--selected': selected,
     }"
@@ -103,6 +111,7 @@ function unreadClass(book: ShelfBook): Record<string, boolean> {
       <!-- 加载中遮罩 -->
       <div v-if="loading" class="shelf-card__loading-overlay">
         <Loader2 class="shelf-card__spinner" :size="24" />
+        <span class="shelf-card__loading-text">{{ loadingText }}</span>
       </div>
       <!-- 未读气泡 -->
       <span
@@ -222,8 +231,10 @@ function unreadClass(book: ShelfBook): Record<string, boolean> {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(2px);
   color: #fff;
@@ -234,6 +245,19 @@ function unreadClass(book: ShelfBook): Record<string, boolean> {
   width: 32px;
   height: 32px;
   animation: shelf-spin 0.9s linear infinite;
+}
+
+.shelf-card__loading-text {
+  max-width: calc(100% - 16px);
+  padding: 2px 6px;
+  border-radius: var(--radius-1);
+  background: rgba(0, 0, 0, 0.42);
+  color: rgba(255, 255, 255, 0.94);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
 }
 
 @keyframes shelf-spin {

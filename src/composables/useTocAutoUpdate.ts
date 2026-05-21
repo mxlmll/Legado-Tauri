@@ -39,6 +39,7 @@ async function refreshBookToc(
   bookshelfStore: ReturnType<typeof useBookshelfStore>,
   scriptBridgeStore: ReturnType<typeof useScriptBridgeStore>,
 ): Promise<number> {
+  bookshelfStore.beginTocRefresh(book.id);
   try {
     const info = await scriptBridgeStore.runBookInfo(book.fileName, book.bookUrl);
     const tocUrl = (info as { tocUrl?: string }).tocUrl ?? book.bookUrl;
@@ -67,6 +68,8 @@ async function refreshBookToc(
     return newCount;
   } catch {
     return -1;
+  } finally {
+    bookshelfStore.endTocRefresh(book.id);
   }
 }
 

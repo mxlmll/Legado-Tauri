@@ -1,23 +1,24 @@
-import { computed, type ComputedRef, type Ref } from 'vue';
-import type { ChapterItem } from '@/stores';
+import { computed, type ComputedRef, type Ref } from "vue";
+import type { ChapterItem } from "@/stores";
+import { LOCAL_TXT_FILE_NAME } from "@/stores/bookshelf";
 import {
   clearChapterRuntimeTextCache,
   clearProcessedRuntimeTextCache,
   createReaderRuntimeTextCache,
-} from '@/features/reader/services/readerContentPipeline';
+} from "@/features/reader/services/readerContentPipeline";
 import type {
   PaginationEngine,
   ReaderPagePadding,
   ReaderTypography,
   TemporaryChapterSourceOverride,
-} from '../types';
-import { usePagedChapterCache } from './usePagedChapterCache';
+} from "../types";
+import { usePagedChapterCache } from "./usePagedChapterCache";
 
 type ReaderPipelineStage =
-  | 'reader.content.raw'
-  | 'reader.content.cleaned'
-  | 'reader.content.beforePaginate'
-  | 'reader.content.beforeRender';
+  | "reader.content.raw"
+  | "reader.content.cleaned"
+  | "reader.content.beforePaginate"
+  | "reader.content.beforeRender";
 type ValueSource<T> = Ref<T> | ComputedRef<T>;
 
 interface ReaderSettingsLike {
@@ -41,7 +42,9 @@ interface UseReaderContentStateOptions {
   sourceType: ValueSource<string | undefined>;
   currentShelfId: ComputedRef<string | undefined>;
   activeChapterIndex: Ref<number>;
-  temporaryChapterOverrides: Ref<Record<number, TemporaryChapterSourceOverride>>;
+  temporaryChapterOverrides: Ref<
+    Record<number, TemporaryChapterSourceOverride>
+  >;
   readIndices: Ref<Set<number>>;
   cachedIndices: Ref<Set<number>>;
   hasPrev: ComputedRef<boolean>;
@@ -50,8 +53,15 @@ interface UseReaderContentStateOptions {
   backgroundMeasureHostRef: Ref<HTMLElement | null>;
   settings: ReaderSettingsLike;
   runChapterContent: (fileName: string, chapterUrl: string) => Promise<unknown>;
-  getContent: (shelfId: string, index: number) => Promise<string | null | undefined>;
-  saveContent: (shelfId: string, index: number, content: string) => Promise<unknown>;
+  getContent: (
+    shelfId: string,
+    index: number,
+  ) => Promise<string | null | undefined>;
+  saveContent: (
+    shelfId: string,
+    index: number,
+    content: string,
+  ) => Promise<unknown>;
   getCachedIndices: (shelfId: string) => Promise<Set<number>>;
   getChapter: (index: number) => ChapterItem | undefined;
   buildReaderContentPayload: (
@@ -87,13 +97,18 @@ export function useReaderContentState(options: UseReaderContentStateOptions) {
     }
 
     try {
-      options.cachedIndices.value = await options.getCachedIndices(options.currentShelfId.value);
+      options.cachedIndices.value = await options.getCachedIndices(
+        options.currentShelfId.value,
+      );
     } catch {
       options.cachedIndices.value = new Set();
     }
 
     const nextRead = new Set<number>();
-    const readUpTo = options.activeChapterIndex.value >= 0 ? options.activeChapterIndex.value : -1;
+    const readUpTo =
+      options.activeChapterIndex.value >= 0
+        ? options.activeChapterIndex.value
+        : -1;
     for (let index = 0; index <= readUpTo; index++) {
       nextRead.add(index);
     }
@@ -104,14 +119,17 @@ export function useReaderContentState(options: UseReaderContentStateOptions) {
     options.readIndices.value.add(index);
   }
 
-  async function fetchRawChapterText(index: number, forceNetwork = false): Promise<string> {
+  async function fetchRawChapterText(
+    index: number,
+    forceNetwork = false,
+  ): Promise<string> {
     const chapter = options.getChapter(index);
     if (!chapter) {
-      return '';
+      return "";
     }
     const chapterOverride = options.temporaryChapterOverrides.value[index];
 
-    const isVideo = readSource(options.sourceType) === 'video';
+    const isVideo = readSource(options.sourceType) === "video";
 
     if (forceNetwork || isVideo) {
       rawChapterTextCache.delete(index);
@@ -136,15 +154,18 @@ export function useReaderContentState(options: UseReaderContentStateOptions) {
           chapterOverride.fileName,
           chapterOverride.chapterUrl,
         );
-        text = typeof raw === 'string' ? raw : String(raw ?? '');
+        text = typeof raw === "string" ? raw : String(raw ?? "");
       }
 
       // 视频类型跳过磁盘缓存读取：m3u8 URL 有时效性，不能复用
       if (!text && !forceNetwork && !isVideo && options.currentShelfId.value) {
         try {
-          const shelfText = await options.getContent(options.currentShelfId.value, index);
-          text = typeof shelfText === 'string' ? shelfText : null;
-          if (readSource(options.sourceType) === 'comic' && text === 'comic') {
+          const shelfText = await options.getContent(
+            options.currentShelfId.value,
+            index,
+          );
+          text = typeof shelfText === "string" ? shelfText : null;
+          if (readSource(options.sourceType) === "comic" && text === "comic") {
             text = null;
           }
         } catch {
@@ -153,15 +174,24 @@ export function useReaderContentState(options: UseReaderContentStateOptions) {
       }
 
       if (!text) {
-        const raw = await options.runChapterContent(readSource(options.fileName), chapter.url);
-        text = typeof raw === 'string' ? raw : String(raw ?? '');
+        const currentFileName = readSource(options.fileName);
+        if (currentFileName === LOCAL_TXT_FILE_NAME) {
+          throw new Error("本地 TXT 章节内容未缓存，请重新导入该书籍");
+        }
+        const raw = await options.runChapterContent(
+          currentFileName,
+          chapter.url,
+        );
+        text = typeof raw === "string" ? raw : String(raw ?? "");
         // 视频类型不写入磁盘缓存：m3u8 URL 有时效性
         if (!isVideo && options.currentShelfId.value && text) {
-          void options.saveContent(options.currentShelfId.value, index, text).catch(() => {});
+          void options
+            .saveContent(options.currentShelfId.value, index, text)
+            .catch(() => {});
         }
       }
 
-      const nextText = text ?? '';
+      const nextText = text ?? "";
       // 视频类型不写入内存缓存
       if (!isVideo) {
         rawChapterTextCache.set(index, nextText);
@@ -187,11 +217,11 @@ export function useReaderContentState(options: UseReaderContentStateOptions) {
 
   async function fetchProcessedChapterText(
     index: number,
-    finalStage: 'reader.content.beforePaginate' | 'reader.content.beforeRender',
+    finalStage: "reader.content.beforePaginate" | "reader.content.beforeRender",
     forceNetwork = false,
   ): Promise<string> {
     const sourceType = readSource(options.sourceType);
-    if (sourceType === 'comic' || sourceType === 'video') {
+    if (sourceType === "comic" || sourceType === "video") {
       return fetchRawChapterText(index, forceNetwork);
     }
 
@@ -214,21 +244,37 @@ export function useReaderContentState(options: UseReaderContentStateOptions) {
     const request = (async () => {
       let nextText = await fetchRawChapterText(index, forceNetwork);
       nextText = await options.runReaderContentPipeline(
-        'reader.content.raw',
-        options.buildReaderContentPayload('reader.content.raw', nextText, index),
+        "reader.content.raw",
+        options.buildReaderContentPayload(
+          "reader.content.raw",
+          nextText,
+          index,
+        ),
       );
       nextText = await options.runReaderContentPipeline(
-        'reader.content.cleaned',
-        options.buildReaderContentPayload('reader.content.cleaned', nextText, index),
+        "reader.content.cleaned",
+        options.buildReaderContentPayload(
+          "reader.content.cleaned",
+          nextText,
+          index,
+        ),
       );
       nextText = await options.runReaderContentPipeline(
-        'reader.content.beforePaginate',
-        options.buildReaderContentPayload('reader.content.beforePaginate', nextText, index),
+        "reader.content.beforePaginate",
+        options.buildReaderContentPayload(
+          "reader.content.beforePaginate",
+          nextText,
+          index,
+        ),
       );
-      if (finalStage === 'reader.content.beforeRender') {
+      if (finalStage === "reader.content.beforeRender") {
         nextText = await options.runReaderContentPipeline(
-          'reader.content.beforeRender',
-          options.buildReaderContentPayload('reader.content.beforeRender', nextText, index),
+          "reader.content.beforeRender",
+          options.buildReaderContentPayload(
+            "reader.content.beforeRender",
+            nextText,
+            index,
+          ),
         );
       }
       processedChapterTextCache.set(cacheKey, nextText);
@@ -250,24 +296,33 @@ export function useReaderContentState(options: UseReaderContentStateOptions) {
     activeHostRef: options.measureHostRef,
     backgroundHostRef: options.backgroundMeasureHostRef,
     loadChapterText: (index, forceNetwork) =>
-      fetchProcessedChapterText(index, 'reader.content.beforePaginate', forceNetwork),
-    getChapterTitle: (index) => options.getChapter(index)?.name ?? '',
+      fetchProcessedChapterText(
+        index,
+        "reader.content.beforePaginate",
+        forceNetwork,
+      ),
+    getChapterTitle: (index) => options.getChapter(index)?.name ?? "",
     getTypography: () => options.settings.typography,
     getPadding: () => options.settings.pagePadding,
     getPaginationEngine: () => options.settings.paginationEngine,
   });
 
-  const activePagedPages = computed(() => pagedCache.getPages(options.activeChapterIndex.value));
+  const activePagedPages = computed(() =>
+    pagedCache.getPages(options.activeChapterIndex.value),
+  );
   const prevBoundaryPage = computed(() =>
     options.hasPrev.value
-      ? pagedCache.getBoundaryPage(options.activeChapterIndex.value - 1, 'last')
-      : '',
+      ? pagedCache.getBoundaryPage(options.activeChapterIndex.value - 1, "last")
+      : "",
   );
   const nextBoundaryPage = computed(() => {
     if (!options.hasNext.value) {
       return PAGED_END_SCREEN;
     }
-    return pagedCache.getBoundaryPage(options.activeChapterIndex.value + 1, 'first');
+    return pagedCache.getBoundaryPage(
+      options.activeChapterIndex.value + 1,
+      "first",
+    );
   });
 
   function clearChapterRuntimeCache(index: number) {

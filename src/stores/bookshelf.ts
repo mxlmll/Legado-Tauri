@@ -1,3 +1,7 @@
+/**
+ * bookshelf store — 书架列表、章节缓存、阅读进度和目录检查状态。
+ */
+
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import type {
@@ -30,6 +34,9 @@ export const useBookshelfStore = defineStore('bookshelf', () => {
   /** bookUrl|fileName → id 的索引，用于快速判断是否在书架 */
   const shelfIndex = ref(new Map<string, string>());
   const loading = ref(false);
+  /** 正在检测目录更新的书籍 ID 集合，用于书架卡片显示后台检查状态。 */
+  const tocRefreshingBookIds = ref(new Set<string>());
+  const tocRefreshCounts = new Map<string, number>();
   let initialized = false;
 
   function buildIndex(list: ShelfBook[]) {
@@ -252,6 +259,35 @@ export const useBookshelfStore = defineStore('bookshelf', () => {
     return invokeWithTimeout<CachedChapter[]>('bookshelf_get_chapters', { id }, TIMEOUT);
   }
 
+  function beginTocRefresh(id: string): void {
+    if (!id) {
+      return;
+    }
+    tocRefreshCounts.set(id, (tocRefreshCounts.get(id) ?? 0) + 1);
+    if (!tocRefreshingBookIds.value.has(id)) {
+      tocRefreshingBookIds.value = new Set(tocRefreshingBookIds.value).add(id);
+    }
+  }
+
+  function endTocRefresh(id: string): void {
+    if (!id) {
+      return;
+    }
+    const nextCount = (tocRefreshCounts.get(id) ?? 0) - 1;
+    if (nextCount > 0) {
+      tocRefreshCounts.set(id, nextCount);
+      return;
+    }
+    tocRefreshCounts.delete(id);
+    if (tocRefreshingBookIds.value.has(id)) {
+      const next = new Set(tocRefreshingBookIds.value);
+      next.delete(id);
+      tocRefreshingBookIds.value = next;
+    }
+  }
+
+  const tocRefreshingCount = computed(() => tocRefreshingBookIds.value.size);
+
   /** 更新书籍元信息，可选替换章节目录 */
   async function updateBook(
     book: UpdateShelfBookPayload,
@@ -419,6 +455,8 @@ export const useBookshelfStore = defineStore('bookshelf', () => {
     books,
     shelfIndex,
     loading,
+    tocRefreshingBookIds,
+    tocRefreshingCount,
     getBookById,
     loadBooks,
     ensureLoaded,
@@ -430,6 +468,8 @@ export const useBookshelfStore = defineStore('bookshelf', () => {
     setBookPrivate,
     saveChapters,
     getChapters,
+    beginTocRefresh,
+    endTocRefresh,
     updateBook,
     patchBook,
     restoreSourceSwitch,

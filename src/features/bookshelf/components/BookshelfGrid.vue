@@ -1,3 +1,6 @@
+<!--
+  BookshelfGrid — 书架滚动网格和下拉刷新容器。
+-->
 <script setup lang="ts">
 import { BookOpen } from 'lucide-vue-next';
 import type { ShelfBook } from '@/stores';
@@ -10,6 +13,7 @@ const props = defineProps<{
   filteredBooks: ShelfBook[];
   privacyModeEnabled: boolean;
   openingBookId: string | null;
+  tocRefreshingBookIds: Set<string>;
   editMode?: boolean;
   selectedBookIds?: Set<string>;
 }>();
@@ -113,7 +117,9 @@ const { pullDistance, isRefreshing, isReady, onTouchStart, onTouchMove, onTouchE
             :key="book.id"
             :book="book"
             :privacy-mode-enabled="privacyModeEnabled"
-            :loading="openingBookId === book.id"
+            :loading="openingBookId === book.id || tocRefreshingBookIds.has(book.id)"
+            :loading-blocks-interaction="openingBookId === book.id"
+            :loading-label="tocRefreshingBookIds.has(book.id) ? '检查更新中' : '加载中'"
             :edit-mode="editMode"
             :selected="selectedBookIds?.has(book.id)"
             @select="emit('select', $event)"

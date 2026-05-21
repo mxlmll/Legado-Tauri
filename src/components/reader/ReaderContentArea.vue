@@ -52,12 +52,14 @@ const {
   legacyPagedMode,
   nextBoundaryPage,
   nextComicChapterContent,
+  nextComicChapterLoading,
   nextComicChapterTitle,
   nextScrollChapterLoading,
   nextScrollChapterContent,
   nextScrollChapterTitle,
   prevBoundaryPage,
   prevComicChapterContent,
+  prevComicChapterLoading,
   prevComicChapterTitle,
   prevScrollChapterLoading,
   prevScrollChapterContent,
@@ -577,8 +579,10 @@ onBeforeUnmount(() => {
       :has-next="hasNext"
       :prev-chapter-content="prevComicChapterContent"
       :prev-chapter-title="prevComicChapterTitle"
+      :prev-chapter-loading="prevComicChapterLoading"
       :next-chapter-content="nextComicChapterContent"
       :next-chapter-title="nextComicChapterTitle"
+      :next-chapter-loading="nextComicChapterLoading"
       @tap="readerActionsStore.onTap"
       @progress="readerActionsStore.onComicProgress"
       @prev-chapter="readerActionsStore.gotoPrevChapter"

@@ -32,7 +32,7 @@ const readerStore = useBookshelfReaderStore();
 const frontendPluginsStore = useFrontendPluginsStore();
 const privacyModeStore = usePrivacyModeStore();
 
-const { books, loading } = storeToRefs(bookshelfStore);
+const { books, loading, tocRefreshingBookIds, tocRefreshingCount } = storeToRefs(bookshelfStore);
 const {
   searchKw,
   openingBookId,
@@ -342,7 +342,7 @@ onMounted(async () => {
       :groups="groupsWithAll"
       :active-group-id="shelfGroupsState.activeGroupId"
       :show-group-menu="showGroupMenu"
-      :loading="loading"
+      :loading="loading || tocRefreshingCount > 0"
       @set-size="(key: CardSizeKey) => setSize(key)"
       @set-mobile-cols="setMobileCols"
       @toggle-privacy="togglePrivacyMode"
@@ -360,6 +360,7 @@ onMounted(async () => {
       :filtered-books="searchedBooks"
       :privacy-mode-enabled="privacyModeEnabled"
       :opening-book-id="editMode ? null : openingBookId"
+      :toc-refreshing-book-ids="tocRefreshingBookIds"
       :edit-mode="editMode"
       :selected-book-ids="selectedBookIds"
       @select="editMode ? toggleBookSelect($event.id) : readerLauncher.openBook($event)"

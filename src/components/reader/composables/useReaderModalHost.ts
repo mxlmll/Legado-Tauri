@@ -162,8 +162,10 @@ interface UseReaderModalHostOptions {
   nextScrollChapterLoading: Ref<boolean>;
   prevComicChapterContent: Ref<string>;
   prevComicChapterTitle: Ref<string>;
+  prevComicChapterLoading: Ref<boolean>;
   nextComicChapterContent: Ref<string>;
   nextComicChapterTitle: Ref<string>;
+  nextComicChapterLoading: Ref<boolean>;
   contentRefs: Record<string, unknown>;
   pagedLoading: Ref<boolean>;
   readerBodyRef: Ref<HTMLElement | null>;
@@ -307,8 +309,10 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
     nextScrollChapterLoading: options.nextScrollChapterLoading,
     prevComicChapterContent: options.prevComicChapterContent,
     prevComicChapterTitle: options.prevComicChapterTitle,
+    prevComicChapterLoading: options.prevComicChapterLoading,
     nextComicChapterContent: options.nextComicChapterContent,
     nextComicChapterTitle: options.nextComicChapterTitle,
+    nextComicChapterLoading: options.nextComicChapterLoading,
     contentRefs: options.contentRefs,
     paginationMeasurementData: options.pagedCache.paginationMeasurementData,
   };
