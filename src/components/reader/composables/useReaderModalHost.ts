@@ -16,6 +16,7 @@ import type { CachedChapter } from "@/types";
 import { eventListenSync } from "@/composables/useEventBus";
 import { FRONTEND_PLUGIN_TOAST_EVENT } from "@/composables/useFrontendPlugins";
 import { useOverlayBackstack } from "@/composables/useOverlayBackstack";
+import { useUserFonts } from "@/composables/useUserFonts";
 import { createReaderCacheController } from "@/features/reader/services/readerCache";
 import {
   createReaderLifecycleController,
@@ -78,6 +79,7 @@ interface ReaderActionsStoreLike {
 interface ReaderUiStoreLike {
   openMenu: () => void;
   resetLayers: () => void;
+  setReaderHostVisible: (hostId: symbol, visible: boolean) => void;
 }
 
 interface ReaderSessionStoreLike {
@@ -270,10 +272,12 @@ interface UseReaderModalHostOptions {
 const REPAGINATE_DEBOUNCE_MS = 120;
 
 export function useReaderModalHost(options: UseReaderModalHostOptions) {
+  const readerHostId = Symbol("reader-modal-host");
   let resizeObserver: ResizeObserver | null = null;
   let resizeRaf = 0;
   let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let unlistenPluginToast: (() => void) | null = null;
+  const { loadUserFonts } = useUserFonts();
 
   // 将 bindings 对象保存为局部变量，以便在 show 变为 true 时重新绑定。
   // 多个 ChapterReaderModal 实例（书架视图 + 发现视图）同时挂载时共享同一个
@@ -709,6 +713,7 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
     pendingResumePlaybackTime: options.pendingResumePlaybackTime,
     isPagedMode: options.isPagedMode,
     ensureFrontendPlugins: options.ensureFrontendPlugins,
+    ensureUserFontsLoaded: loadUserFonts,
     getShelfBook: options.getShelfBook,
     activateBookSettings: options.activateBookSettings,
     deactivateBookSettings: options.deactivateBookSettings,
@@ -880,6 +885,7 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
   watch(
     () => options.getShow(),
     (visible) => {
+      options.readerUiStore.setReaderHostVisible(readerHostId, visible);
       // 多个 ChapterReaderModal 同时挂载时，只有当前显示的那个拥有 readerViewStore/readerActionsStore 绑定权。
       // 每次 show 变为 true 时重新抢占，防止其他视图的弹层在挂载时覆盖本实例的绑定。
       if (visible) {
@@ -934,6 +940,7 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
   });
 
   onBeforeUnmount(() => {
+    options.readerUiStore.setReaderHostVisible(readerHostId, false);
     syncNativeVolumeKeyPageTurn(false);
     window.removeEventListener("keydown", onPageTurnKeyDownCapture, true);
     window.removeEventListener("keydown", onKeyDown);

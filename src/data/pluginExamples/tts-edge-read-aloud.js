@@ -20,7 +20,7 @@ legado.registerPlugin({
     var DEFAULT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
     var DEFAULT_CHROMIUM_VERSION = "143.0.3650.75";
     var currentAudio = null;
-    var currentSocket = null;
+    var activeSockets = [];
     var currentUrl = "";
 
     var voices = [
@@ -42,25 +42,33 @@ legado.registerPlugin({
       { id: "zh-CN-XiaozhenNeural", name: "晓甄", language: "zh-CN" },
     ];
 
-    function stopCurrent() {
+    function stopAudio() {
       if (currentAudio) {
         currentAudio.pause();
         currentAudio.onended = null;
         currentAudio.onerror = null;
         currentAudio = null;
       }
-      if (currentSocket) {
-        try {
-          currentSocket.close();
-        } catch (error) {
-          api.log("关闭 Edge TTS socket 失败", error);
-        }
-        currentSocket = null;
-      }
       if (currentUrl) {
         URL.revokeObjectURL(currentUrl);
         currentUrl = "";
       }
+    }
+
+    function stopCurrent() {
+      stopAudio();
+      for (
+        var socketIndex = 0;
+        socketIndex < activeSockets.length;
+        socketIndex++
+      ) {
+        try {
+          activeSockets[socketIndex].close();
+        } catch (error) {
+          api.log("关闭 Edge TTS socket 失败", error);
+        }
+      }
+      activeSockets = [];
     }
 
     function uuidSimple() {
@@ -257,7 +265,7 @@ legado.registerPlugin({
         var chunks = [];
         var settled = false;
         var socket = new WebSocket(url);
-        currentSocket = socket;
+        activeSockets.push(socket);
         socket.binaryType = "arraybuffer";
 
         function settle(fn, value) {
@@ -265,9 +273,9 @@ legado.registerPlugin({
             return;
           }
           settled = true;
-          if (currentSocket === socket) {
-            currentSocket = null;
-          }
+          activeSockets = activeSockets.filter(function (item) {
+            return item !== socket;
+          });
           try {
             socket.close();
           } catch (error) {
@@ -317,7 +325,7 @@ legado.registerPlugin({
       if (!blob || context.signal.aborted) {
         return;
       }
-      stopCurrent();
+      stopAudio();
       currentUrl = URL.createObjectURL(blob);
       currentAudio = new Audio(currentUrl);
       currentAudio.playbackRate = context.rate || 1;
@@ -327,17 +335,17 @@ legado.registerPlugin({
         context.signal.addEventListener(
           "abort",
           function () {
-            stopCurrent();
+            stopAudio();
             resolve();
           },
           { once: true },
         );
         currentAudio.onended = function () {
-          stopCurrent();
+          stopAudio();
           resolve();
         };
         currentAudio.onerror = function () {
-          stopCurrent();
+          stopAudio();
           reject(new Error("Edge TTS 音频播放失败"));
         };
         currentAudio.play().catch(reject);
@@ -380,8 +388,12 @@ legado.registerPlugin({
           getVoices: function () {
             return voices;
           },
+          preload: function (context) {
+            return synthesize(context.text, context);
+          },
           speak: async function (context) {
-            var blob = await synthesize(context.text, context);
+            var blob =
+              context.preloaded || (await synthesize(context.text, context));
             await playBlob(blob, context);
           },
           stop: function () {

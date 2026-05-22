@@ -150,6 +150,10 @@ export interface RuntimeTtsEngineDefinition {
   getVoices?: (
     api: FrontendPluginApi,
   ) => TtsVoiceDefinition[] | Promise<TtsVoiceDefinition[]>;
+  preload?: (
+    context: TtsSpeakContext,
+    api: FrontendPluginApi,
+  ) => unknown | Promise<unknown>;
   speak: (
     context: TtsSpeakContext,
     api: FrontendPluginApi,
@@ -348,6 +352,7 @@ export function normalizeTtsEngineDefinitions(
         description: definition.description?.trim() ?? "",
         category: (definition.category?.trim() ?? record.category) || "其他",
         getVoices: definition.getVoices,
+        preload: definition.preload,
         speak: definition.speak,
         stop: definition.stop,
         pause: definition.pause,

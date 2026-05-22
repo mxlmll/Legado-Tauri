@@ -2,26 +2,23 @@
   阅读器菜单层，承载顶部栏、底部栏、目录、TTS 控制和换源入口。
 -->
 <script setup lang="ts">
-import { Bookmark } from 'lucide-vue-next';
-import { storeToRefs } from 'pinia';
-import { computed, ref } from 'vue';
-import { isMobile } from '@/composables/useEnv';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
-import ReaderSourceSwitchBridge from '@/features/reader/components/ReaderSourceSwitchBridge.vue';
+import { Bookmark } from "lucide-vue-next";
+import { storeToRefs } from "pinia";
+import { computed, ref } from "vue";
+import { useOverlayBackstack } from "@/composables/useOverlayBackstack";
+import ReaderSourceSwitchBridge from "@/features/reader/components/ReaderSourceSwitchBridge.vue";
 import {
   useReaderActionsStore,
-  useReaderSettingsStore,
   useReaderSessionStore,
   useReaderUiStore,
   useReaderViewStore,
-} from '@/stores';
-import ReaderBottomBar from '../reader/ReaderBottomBar.vue';
-import ReaderTocPanel from '../reader/ReaderTocPanel.vue';
-import ReaderTopBar from '../reader/ReaderTopBar.vue';
-import TtsControlBar from '../reader/TtsControlBar.vue';
+} from "@/stores";
+import ReaderBottomBar from "../reader/ReaderBottomBar.vue";
+import ReaderTocPanel from "../reader/ReaderTocPanel.vue";
+import ReaderTopBar from "../reader/ReaderTopBar.vue";
+import TtsControlBar from "../reader/TtsControlBar.vue";
 
 const readerActionsStore = useReaderActionsStore();
-const readerSettingsStore = useReaderSettingsStore();
 const readerUiStore = useReaderUiStore();
 const readerSessionStore = useReaderSessionStore();
 const readerViewStore = useReaderViewStore();
@@ -54,12 +51,7 @@ const {
   ttsProgressText,
 } = storeToRefs(readerViewStore);
 const bottomBarRef = ref<InstanceType<typeof ReaderBottomBar> | null>(null);
-const showTopBar = computed(
-  () =>
-    showMenu.value &&
-    !settingsVisible.value &&
-    !(isMobile.value && readerSettingsStore.settings.hideTopBarOnMobile),
-);
+const showTopBar = computed(() => showMenu.value && !settingsVisible.value);
 
 function closeSettings() {
   bottomBarRef.value?.closeSettings();
@@ -91,7 +83,11 @@ defineExpose({ closeSettings });
 <template>
   <!-- 菜单遮罩 -->
   <Transition name="reader-fade">
-    <div v-if="showMenu" class="reader-modal__overlay" @click="onOverlayClick" />
+    <div
+      v-if="showMenu"
+      class="reader-modal__overlay"
+      @click="onOverlayClick"
+    />
   </Transition>
 
   <!-- 顶部工具栏 -->
@@ -134,7 +130,7 @@ defineExpose({ closeSettings });
       @click="readerActionsStore.handleAddToShelf"
     >
       <Bookmark :size="16" aria-hidden="true" />
-      {{ addingToShelf ? '加入中…' : '加入书架' }}
+      {{ addingToShelf ? "加入中…" : "加入书架" }}
     </button>
   </Transition>
 
@@ -193,7 +189,9 @@ defineExpose({ closeSettings });
     :current-chapter-url="currentChapterUrl"
     :current-shelf-id="currentShelfId"
     @update:show="showSourceSwitchDialog = $event"
-    @chapter-temp-switched="readerActionsStore.handleTemporaryChapterSourceSwitched"
+    @chapter-temp-switched="
+      readerActionsStore.handleTemporaryChapterSourceSwitched
+    "
     @whole-book-switched="readerActionsStore.handleWholeBookSourceSwitched"
   />
 </template>

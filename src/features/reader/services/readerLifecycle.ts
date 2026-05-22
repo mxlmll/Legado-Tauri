@@ -1,5 +1,5 @@
-import type { ComputedRef, Ref } from 'vue';
-import type { OpenChapterOptions } from '@/components/reader/composables/useReaderChapterOpen';
+import type { ComputedRef, Ref } from "vue";
+import type { OpenChapterOptions } from "@/components/reader/composables/useReaderChapterOpen";
 
 export interface ShelfReaderSettingsSnapshot {
   readerSettings?: string;
@@ -20,6 +20,7 @@ interface ReaderLifecycleControllerOptions {
   pendingResumePlaybackTime: Ref<number>;
   isPagedMode: ComputedRef<boolean>;
   ensureFrontendPlugins: () => Promise<void>;
+  ensureUserFontsLoaded?: () => Promise<void>;
   getShelfBook: (shelfBookId: string) => Promise<ShelfReaderSettingsSnapshot>;
   activateBookSettings: (bookId: string, savedJson?: string) => void;
   deactivateBookSettings: () => void;
@@ -46,13 +47,15 @@ interface ReaderLifecycleControllerOptions {
   trackSessionOpen: (payload: Record<string, unknown>) => void;
 }
 
-export function createReaderLifecycleController(options: ReaderLifecycleControllerOptions) {
+export function createReaderLifecycleController(
+  options: ReaderLifecycleControllerOptions,
+) {
   async function prepareShelfData(shelfBookId: string): Promise<void> {
     try {
       const book = await options.getShelfBook(shelfBookId);
       options.activateBookSettings(shelfBookId, book.readerSettings);
       const savedIndex =
-        typeof book.readChapterIndex === 'number' && book.readChapterIndex >= 0
+        typeof book.readChapterIndex === "number" && book.readChapterIndex >= 0
           ? book.readChapterIndex
           : options.getCurrentIndex();
       if (savedIndex >= 0) {
@@ -68,6 +71,9 @@ export function createReaderLifecycleController(options: ReaderLifecycleControll
 
   async function openReader() {
     await options.ensureFrontendPlugins();
+    const userFontsReady = options.ensureUserFontsLoaded?.().catch((error) => {
+      console.warn("[Reader] 加载用户上传字体失败，继续打开阅读器:", error);
+    });
     options.observeReaderBody();
     options.resetReaderSessionForOpen(options.getCurrentIndex());
     options.resetReaderUiLayers();
@@ -88,6 +94,9 @@ export function createReaderLifecycleController(options: ReaderLifecycleControll
     if (shelfDataReady) {
       await shelfDataReady;
     }
+    if (userFontsReady) {
+      await userFontsReady;
+    }
 
     if (options.isPagedMode.value) {
       const restorePageIndex = options.pendingRestorePageIndex.value;
@@ -96,7 +105,7 @@ export function createReaderLifecycleController(options: ReaderLifecycleControll
       options.pendingRestoreScrollRatio.value = -1;
       const hasRestorePos = restoreScrollRatio >= 0 || restorePageIndex >= 0;
       await options.openChapter(options.activeChapterIndex.value, {
-        position: hasRestorePos ? 'resume' : 'first',
+        position: hasRestorePos ? "resume" : "first",
         pageIndex: restorePageIndex >= 0 ? restorePageIndex : undefined,
         pageRatio: restoreScrollRatio >= 0 ? restoreScrollRatio : undefined,
       });

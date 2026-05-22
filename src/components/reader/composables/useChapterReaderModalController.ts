@@ -39,6 +39,7 @@ declare global {
   interface Window {
     LegadoAndroidInput?: {
       setVolumeKeyPageTurnEnabled?: (enabled: boolean) => void;
+      setReaderImmersiveModeEnabled?: (enabled: boolean) => void;
     };
   }
 }
@@ -393,7 +394,7 @@ export function useChapterReaderModalController(
       if (activePagedPages.value.length === 0 && !error.value) {
         return true;
       }
-      return pagedLoading.value && openingChapter.value;
+      return false;
     }
     if (isScrollMode.value) {
       return false;

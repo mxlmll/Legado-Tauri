@@ -9,10 +9,14 @@ import {
 import { invokeWithTimeout } from "./useInvoke";
 
 const SYSTEM_ENGINE_ID = "system";
-const PRELOAD_AHEAD = 6;
-const MAX_SEGMENT_CHARS = 200;
+const QUEUE_LOAD_AHEAD = 6;
+const TTS_PRELOAD_AHEAD = 2;
+export const TTS_MAX_PARAGRAPH_CHARS = 300;
 const COMMAND_TIMEOUT_MS = 12_000;
+const SYSTEM_TTS_READY_TIMEOUT_MS = 30_000;
+const SYSTEM_TTS_SPEAK_TIMEOUT_MS = 35_000;
 const POLL_INTERVAL_MS = 180;
+const READY_POLL_INTERVAL_MS = 300;
 const SETTINGS_KEY = "legado.tts.settings";
 
 export interface TtsOptions {
@@ -53,6 +57,20 @@ interface QueueItem {
   globalIdx: number;
 }
 
+interface TtsPreloadEntry {
+  globalIdx: number;
+  key: string;
+  controller: AbortController;
+  promise: Promise<unknown | undefined>;
+  loaded: boolean;
+  value?: unknown;
+}
+
+interface TtsPreparedValue {
+  loaded: boolean;
+  value?: unknown;
+}
+
 interface PersistedTtsSettings {
   engineId?: string;
   voiceId?: string;
@@ -63,6 +81,19 @@ interface PersistedTtsSettings {
 
 interface SystemTtsSpeakingState {
   speaking: boolean;
+}
+
+interface SystemTtsInitializedState {
+  initialized: boolean;
+  voiceCount: number;
+}
+
+interface SystemTtsEventPayload {
+  eventType?: string;
+  id?: string;
+  error?: string;
+  interrupted?: boolean;
+  reason?: string;
 }
 
 interface SystemTtsSpeakPayload {
@@ -131,48 +162,68 @@ function nonEmpty(value: string | undefined): string | undefined {
   return trimmed;
 }
 
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const timer = window.setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+function splitLongParagraph(paragraph: string): string[] {
+  const text = paragraph.trim();
+  if (!text) {
+    return [];
+  }
+  if (text.length <= TTS_MAX_PARAGRAPH_CHARS) {
+    return [text];
+  }
+
+  const segments: string[] = [];
+  let remaining = text;
+  while (remaining.length > TTS_MAX_PARAGRAPH_CHARS) {
+    let cutAt = TTS_MAX_PARAGRAPH_CHARS;
+    for (
+      let index = TTS_MAX_PARAGRAPH_CHARS - 1;
+      index > Math.floor(TTS_MAX_PARAGRAPH_CHARS * 0.55);
+      index--
+    ) {
+      if (/[。！？…；.!?;,，、]/.test(remaining[index] ?? "")) {
+        cutAt = index + 1;
+        break;
+      }
+    }
+
+    const segment = remaining.slice(0, cutAt).trim();
+    if (segment) {
+      segments.push(segment);
+    }
+    remaining = remaining.slice(cutAt).trim();
+  }
+  if (remaining) {
+    segments.push(remaining);
+  }
+  return segments;
+}
+
 export function splitIntoSegments(text: string): string[] {
   if (!text.trim()) {
     return [];
   }
-  const lines = text.split(/\n+/).filter((line) => line.trim());
-  const segments: string[] = [];
-
-  for (const line of lines) {
-    const parts = line.split(/(?<=[。！？…；!?])/u);
-    for (const part of parts) {
-      const trimmed = part.trim();
-      if (!trimmed) {
-        continue;
-      }
-      if (trimmed.length <= MAX_SEGMENT_CHARS) {
-        segments.push(trimmed);
-        continue;
-      }
-
-      let remaining = trimmed;
-      while (remaining.length > MAX_SEGMENT_CHARS) {
-        let cutAt = MAX_SEGMENT_CHARS;
-        for (
-          let index = MAX_SEGMENT_CHARS - 1;
-          index > MAX_SEGMENT_CHARS / 2;
-          index--
-        ) {
-          if (/[。！？…；!?,，、]/.test(remaining[index])) {
-            cutAt = index + 1;
-            break;
-          }
-        }
-        segments.push(remaining.slice(0, cutAt).trim());
-        remaining = remaining.slice(cutAt).trim();
-      }
-      if (remaining) {
-        segments.push(remaining);
-      }
-    }
-  }
-
-  return segments.filter(Boolean);
+  return text
+    .split(/\r?\n+/)
+    .flatMap((paragraph) => splitLongParagraph(paragraph))
+    .filter(Boolean);
 }
 
 function getBrowserSpeechVoices(): TtsVoice[] {
@@ -214,6 +265,26 @@ async function stopSystemSpeech(): Promise<void> {
   }
 }
 
+async function waitForSystemTtsReady(signal: AbortSignal): Promise<void> {
+  const startedAt = Date.now();
+
+  while (!signal.aborted) {
+    const state = await invokeWithTimeout<SystemTtsInitializedState>(
+      "tts_is_initialized",
+      undefined,
+      COMMAND_TIMEOUT_MS,
+    );
+    if (state.initialized) {
+      return;
+    }
+    if (Date.now() - startedAt >= SYSTEM_TTS_READY_TIMEOUT_MS) {
+      throw new Error("系统 TTS 初始化超时，请确认系统语音引擎已安装并启用");
+    }
+    await delay(READY_POLL_INTERVAL_MS, signal);
+  }
+  throw new Error("系统 TTS 初始化已取消");
+}
+
 function waitForSystemSpeechDone(
   signal: AbortSignal,
   text: string,
@@ -221,7 +292,7 @@ function waitForSystemSpeechDone(
   const startedAt = Date.now();
   const estimatedMs = clamp(text.length * 180, 1_000, 45_000);
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let resolved = false;
     let sawSpeaking = false;
     let pollTimer: number | null = null;
@@ -247,9 +318,26 @@ function waitForSystemSpeechDone(
       resolve();
     }
 
-    async function registerFinishEvent(eventName: string) {
+    function fail(message: string) {
+      if (resolved) {
+        return;
+      }
+      resolved = true;
+      cleanup();
+      reject(new Error(message));
+    }
+
+    async function registerSpeechEvent(
+      eventName: string,
+      handler: (payload: SystemTtsEventPayload) => void,
+    ) {
       try {
-        const unlisten = await eventListen(eventName, finish);
+        const unlisten = await eventListen<SystemTtsEventPayload>(
+          eventName,
+          (event) => {
+            handler(event.payload ?? {});
+          },
+        );
         if (resolved) {
           unlisten();
         } else {
@@ -291,8 +379,11 @@ function waitForSystemSpeechDone(
     }
 
     signal.addEventListener("abort", finish, { once: true });
-    void registerFinishEvent("tts://speech:finish");
-    void registerFinishEvent("tts://speech:cancel");
+    void registerSpeechEvent("tts://speech:finish", finish);
+    void registerSpeechEvent("tts://speech:cancel", finish);
+    void registerSpeechEvent("tts://speech:error", (payload) => {
+      fail(payload.error ?? "系统 TTS 朗读失败");
+    });
     pollTimer = window.setTimeout(pollSpeakingState, POLL_INTERVAL_MS);
   });
 }
@@ -374,10 +465,15 @@ async function speakWithSystemEngine(
   const waitController = new AbortController();
   const abortWait = () => waitController.abort();
   context.signal.addEventListener("abort", abortWait, { once: true });
-  const done = waitForSystemSpeechDone(waitController.signal, text);
 
   try {
-    await invokeWithTimeout("tts_speak", { payload }, COMMAND_TIMEOUT_MS);
+    await waitForSystemTtsReady(context.signal);
+    const done = waitForSystemSpeechDone(waitController.signal, text);
+    await invokeWithTimeout(
+      "tts_speak",
+      { payload },
+      SYSTEM_TTS_SPEAK_TIMEOUT_MS,
+    );
     await done;
   } catch (error) {
     waitController.abort();
@@ -450,6 +546,8 @@ let endReached = false;
 let loadMorePromise: Promise<void> | null = null;
 let currentAbort: AbortController | null = null;
 let playGeneration = 0;
+const ttsPreloadEntries = new Map<number, TtsPreloadEntry>();
+const ttsPreloadUnsupportedEngineIds = new Set<string>();
 
 function saveCurrentSettings(): void {
   writePersistedSettings({
@@ -489,6 +587,9 @@ async function loadMore(): Promise<void> {
       const more = await activeOptions?.onNeedMore?.();
       if (more && more.length > 0) {
         appendSegments(more);
+        if (hasSession.value && isPlaying.value) {
+          scheduleTtsPreloadBuffer(playGeneration);
+        }
       } else {
         endReached = true;
         syncProgressRefs();
@@ -506,7 +607,7 @@ function maybeLoadMore(): void {
   if (!activeOptions?.onNeedMore || endReached || loadingMore) {
     return;
   }
-  if (items.length - playIndex <= PRELOAD_AHEAD) {
+  if (items.length - playIndex <= QUEUE_LOAD_AHEAD) {
     void loadMore();
   }
 }
@@ -540,12 +641,16 @@ function interruptCurrentSpeech(): void {
   }
 }
 
-function buildSpeakContext(signal: AbortSignal): TtsSpeakContext {
+function buildSpeakContext(
+  text: string,
+  signal: AbortSignal,
+  preloaded?: unknown,
+): TtsSpeakContext {
   const voice = availableVoices.value.find(
     (item) => item.id === selectedVoiceId.value,
   );
-  return {
-    text: currentSegmentText.value,
+  const context: TtsSpeakContext = {
+    text,
     voiceId:
       nonEmpty(selectedVoiceId.value) ??
       nonEmpty(activeOptions?.voiceId) ??
@@ -557,20 +662,177 @@ function buildSpeakContext(signal: AbortSignal): TtsSpeakContext {
     volume: volume.value,
     signal,
   };
+  if (preloaded !== undefined) {
+    context.preloaded = preloaded;
+  }
+  return context;
+}
+
+function buildTtsPreloadKey(item: QueueItem): string {
+  const voice = availableVoices.value.find(
+    (candidate) => candidate.id === selectedVoiceId.value,
+  );
+  return JSON.stringify({
+    engineId: selectedEngine.value.id,
+    voiceId:
+      nonEmpty(selectedVoiceId.value) ??
+      nonEmpty(activeOptions?.voiceId) ??
+      nonEmpty(activeOptions?.voice) ??
+      "",
+    language:
+      nonEmpty(activeOptions?.language) ?? nonEmpty(voice?.language) ?? "zh-CN",
+    rate: playbackRate.value,
+    pitch: pitch.value,
+    text: item.text,
+  });
+}
+
+function abortTtsPreloadEntry(entry: TtsPreloadEntry): void {
+  entry.controller.abort();
+}
+
+function clearTtsPreloadCache(): void {
+  for (const entry of ttsPreloadEntries.values()) {
+    abortTtsPreloadEntry(entry);
+  }
+  ttsPreloadEntries.clear();
+}
+
+function abortPendingTtsPreloads(): void {
+  for (const [globalIdx, entry] of ttsPreloadEntries) {
+    if (!entry.loaded) {
+      abortTtsPreloadEntry(entry);
+      ttsPreloadEntries.delete(globalIdx);
+    }
+  }
+}
+
+function pruneTtsPreloadCache(): void {
+  const activeWindow = new Set(
+    items
+      .slice(playIndex, playIndex + TTS_PRELOAD_AHEAD + 1)
+      .map((item) => item.globalIdx),
+  );
+  for (const [globalIdx, entry] of ttsPreloadEntries) {
+    if (!activeWindow.has(globalIdx)) {
+      abortTtsPreloadEntry(entry);
+      ttsPreloadEntries.delete(globalIdx);
+    }
+  }
+}
+
+function ensureTtsPreloadEntry(
+  item: QueueItem,
+  generation: number,
+): TtsPreloadEntry | null {
+  const engineId = selectedEngine.value.id;
+  if (
+    engineId === SYSTEM_ENGINE_ID ||
+    ttsPreloadUnsupportedEngineIds.has(engineId)
+  ) {
+    return null;
+  }
+
+  const key = buildTtsPreloadKey(item);
+  const existing = ttsPreloadEntries.get(item.globalIdx);
+  if (existing?.key === key) {
+    return existing;
+  }
+  if (existing) {
+    abortTtsPreloadEntry(existing);
+    ttsPreloadEntries.delete(item.globalIdx);
+  }
+
+  const controller = new AbortController();
+  const context = buildSpeakContext(item.text, controller.signal);
+  const entry: TtsPreloadEntry = {
+    globalIdx: item.globalIdx,
+    key,
+    controller,
+    loaded: false,
+    promise: Promise.resolve(undefined),
+  };
+
+  entry.promise = frontendPlugins
+    .preloadTtsEngine(engineId, context)
+    .then((result) => {
+      if (!result.supported) {
+        ttsPreloadUnsupportedEngineIds.add(engineId);
+        if (ttsPreloadEntries.get(item.globalIdx) === entry) {
+          ttsPreloadEntries.delete(item.globalIdx);
+        }
+        return undefined;
+      }
+      if (
+        controller.signal.aborted ||
+        generation !== playGeneration ||
+        !hasSession.value
+      ) {
+        return undefined;
+      }
+      entry.loaded = true;
+      entry.value = result.value;
+      return result.value;
+    })
+    .catch(() => undefined);
+
+  ttsPreloadEntries.set(item.globalIdx, entry);
+  return entry;
+}
+
+async function getPreparedTtsValue(
+  item: QueueItem,
+  generation: number,
+): Promise<TtsPreparedValue> {
+  const entry = ensureTtsPreloadEntry(item, generation);
+  if (!entry) {
+    return { loaded: false };
+  }
+
+  await entry.promise;
+  if (generation !== playGeneration || !hasSession.value || !entry.loaded) {
+    return { loaded: false };
+  }
+  return { loaded: true, value: entry.value };
+}
+
+function scheduleTtsPreloadBuffer(generation: number): void {
+  if (generation !== playGeneration || !hasSession.value || !isPlaying.value) {
+    return;
+  }
+
+  maybeLoadMore();
+  pruneTtsPreloadCache();
+  for (let offset = 1; offset <= TTS_PRELOAD_AHEAD; offset++) {
+    const item = items[playIndex + offset];
+    if (item) {
+      ensureTtsPreloadEntry(item, generation);
+    }
+  }
 }
 
 async function speakCurrentItem(
   item: QueueItem,
   signal: AbortSignal,
+  generation: number,
 ): Promise<void> {
   currentSegmentText.value = item.text;
-  const context = buildSpeakContext(signal);
-  context.text = item.text;
 
   if (selectedEngine.value.id === SYSTEM_ENGINE_ID) {
+    const context = buildSpeakContext(item.text, signal);
     await speakWithSystemEngine(item.text, context);
     return;
   }
+
+  const prepared = await getPreparedTtsValue(item, generation);
+  if (prepared.loaded) {
+    scheduleTtsPreloadBuffer(generation);
+  }
+  const context = buildSpeakContext(
+    item.text,
+    signal,
+    prepared.loaded ? prepared.value : undefined,
+  );
   await frontendPlugins.speakWithTtsEngine(selectedEngine.value.id, context);
 }
 
@@ -607,6 +869,7 @@ async function playLoop(generation: number): Promise<void> {
       playIndex = item.globalIdx;
     }
     syncProgressRefs();
+    pruneTtsPreloadCache();
     activeOptions?.onSegmentStart?.(item.globalIdx);
     maybeLoadMore();
 
@@ -621,7 +884,7 @@ async function playLoop(generation: number): Promise<void> {
     try {
       isLoading.value = true;
       error.value = null;
-      await speakCurrentItem(item, controller.signal);
+      await speakCurrentItem(item, controller.signal, generation);
     } catch (err) {
       if (!controller.signal.aborted && generation === playGeneration) {
         error.value = err instanceof Error ? err.message : String(err);
@@ -645,6 +908,7 @@ async function playLoop(generation: number): Promise<void> {
     }
     playIndex += 1;
     syncProgressRefs();
+    scheduleTtsPreloadBuffer(generation);
   }
 }
 
@@ -668,6 +932,7 @@ function restartPlaybackIfNeeded(wasPlaying: boolean): void {
 
 async function refreshEngines(): Promise<void> {
   await frontendPlugins.ensureInitialized();
+  ttsPreloadUnsupportedEngineIds.clear();
   if (
     !availableEngines.value.some(
       (engine) => engine.id === selectedEngineId.value,
@@ -740,6 +1005,7 @@ function startReading(options: TtsStartOptions): void {
   playIndex = 0;
   endReached = false;
   items.length = 0;
+  clearTtsPreloadCache();
   appendSegments(options.initialSegments);
   hasSession.value = true;
   isPlaying.value = true;
@@ -765,11 +1031,13 @@ function pause(): void {
   isPlaying.value = false;
   playGeneration += 1;
   interruptCurrentSpeech();
+  abortPendingTtsPreloads();
 }
 
 function stop(): void {
   playGeneration += 1;
   interruptCurrentSpeech();
+  clearTtsPreloadCache();
   isPlaying.value = false;
   isLoading.value = false;
   hasSession.value = false;
@@ -796,9 +1064,11 @@ function nextSegment(): void {
   isPlaying.value = false;
   playGeneration += 1;
   interruptCurrentSpeech();
+  abortPendingTtsPreloads();
   playIndex = endReached
     ? Math.min(playIndex + 1, Math.max(items.length - 1, 0))
     : playIndex + 1;
+  pruneTtsPreloadCache();
   restartPlaybackIfNeeded(wasPlaying);
 }
 
@@ -810,7 +1080,9 @@ function prevSegment(): void {
   isPlaying.value = false;
   playGeneration += 1;
   interruptCurrentSpeech();
+  abortPendingTtsPreloads();
   playIndex = Math.max(0, playIndex - 1);
+  pruneTtsPreloadCache();
   restartPlaybackIfNeeded(wasPlaying);
 }
 
@@ -822,7 +1094,9 @@ function seekToIndex(index: number): void {
   isPlaying.value = false;
   playGeneration += 1;
   interruptCurrentSpeech();
+  abortPendingTtsPreloads();
   playIndex = Math.max(0, Math.min(Math.round(index), items.length - 1));
+  pruneTtsPreloadCache();
   restartPlaybackIfNeeded(wasPlaying);
 }
 
@@ -832,8 +1106,11 @@ function setPlaybackRate(rate: number): void {
   if (isPlaying.value) {
     const index = playIndex;
     pause();
+    clearTtsPreloadCache();
     playIndex = index;
     play();
+  } else {
+    clearTtsPreloadCache();
   }
 }
 
@@ -845,6 +1122,7 @@ function setVolume(nextVolume: number): void {
 function setPitch(nextPitch: number): void {
   pitch.value = clamp(nextPitch, 0.5, 2);
   saveCurrentSettings();
+  clearTtsPreloadCache();
 }
 
 async function setEngineId(engineId: string): Promise<void> {
@@ -862,6 +1140,7 @@ async function setEngineId(engineId: string): Promise<void> {
   isPlaying.value = false;
   playGeneration += 1;
   interruptCurrentSpeech();
+  clearTtsPreloadCache();
   selectedEngineId.value = nextEngineId;
   selectedVoiceId.value = "";
   saveCurrentSettings();
@@ -871,6 +1150,7 @@ async function setEngineId(engineId: string): Promise<void> {
 
 function setVoiceId(voiceId: string): void {
   selectedVoiceId.value = voiceId;
+  clearTtsPreloadCache();
   saveCurrentSettings();
 }
 

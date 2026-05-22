@@ -368,6 +368,7 @@ export interface TtsSpeakContext {
   pitch: number;
   volume: number;
   signal: AbortSignal;
+  preloaded?: unknown;
 }
 
 type TtsEngineVoiceResolver = (
@@ -377,6 +378,10 @@ type TtsEngineSpeaker = (
   context: TtsSpeakContext,
   api: FrontendPluginApi,
 ) => void | Promise<void>;
+type TtsEnginePreloader = (
+  context: TtsSpeakContext,
+  api: FrontendPluginApi,
+) => unknown | Promise<unknown>;
 type TtsEngineController = (api: FrontendPluginApi) => void | Promise<void>;
 type TtsEnginePreviewer = (
   voiceId: string,
@@ -389,6 +394,7 @@ export interface TtsEngineDefinition {
   description?: string;
   category?: string;
   getVoices?: TtsEngineVoiceResolver;
+  preload?: TtsEnginePreloader;
   speak: TtsEngineSpeaker;
   stop?: TtsEngineController;
   pause?: TtsEngineController;

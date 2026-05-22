@@ -19,6 +19,7 @@ import {
   onMounted,
   onBeforeUnmount,
   nextTick,
+  type Ref,
 } from "vue";
 import { useAppConfigStore } from "@/stores";
 import {
@@ -93,12 +94,14 @@ interface ComicPageFailedPayload {
   error?: string;
 }
 
+type ComicPageSize = [number, number] | null;
+
 const _appCfg = useAppConfigStore();
 const { comicCacheEnabled } = storeToRefs(_appCfg);
 const containerRef = ref<HTMLDivElement | null>(null);
 const pages = ref<ComicPage[]>([]);
 /** 每页原始像素尺寸（来自 Rust 后端 _sizes.json 缓存），用于在图片加载前即设定正确 aspect-ratio */
-const pageSizes = ref<Array<[number, number] | null>>([]);
+const pageSizes = ref<ComicPageSize[]>([]);
 const visibleImages = ref<Set<number>>(new Set());
 const loading = ref(false);
 const error = ref("");
@@ -117,10 +120,16 @@ const nextSectionRef = ref<HTMLDivElement | null>(null);
 const nextChapterSentinelRef = ref<HTMLDivElement | null>(null);
 const prevPages = ref<ComicPage[]>([]);
 const nextPages = ref<ComicPage[]>([]);
+const prevPageSizes = ref<ComicPageSize[]>([]);
+const nextPageSizes = ref<ComicPageSize[]>([]);
 
 // ── 无缝切章 ────────────────────────────────────────────────────────
 let seamlessSwapAnchorOffset: number | null = null;
 let seamlessSwapFallbackOffset = -1;
+let seamlessPromotedPageSizes: ComicPageSize[] | null = null;
+const pendingAdjacentPageSizes: Partial<
+  Record<"prev" | "next", ComicPageSize[]>
+> = {};
 /** 向上无缝翻章标志：不重置 scrollTop */
 let isBackwardSeamless = false;
 /** 上一章进入事件是否已触发（每次 prevContent 变化后重置） */
@@ -129,8 +138,96 @@ const atTop = ref(true);
 const atBottom = ref(false);
 let prevBoundaryFallbackFired = false;
 let nextBoundaryFallbackFired = false;
+let seamlessCurrentTopCorrectionRaf = 0;
+let seamlessCurrentTopCorrectionToken = 0;
+let seamlessCorrectionElement: HTMLElement | null = null;
+
+function clonePageSizes(sizes: ComicPageSize[]): ComicPageSize[] {
+  return sizes.map((size) => (size ? [size[0], size[1]] : null));
+}
+
+function normalizePageSizes(
+  sizes: ComicPageSize[] | undefined | null,
+  length: number,
+): ComicPageSize[] {
+  return Array.from({ length }, (_, idx) => {
+    const size = sizes?.[idx];
+    return size && size[0] > 0 && size[1] > 0 ? [size[0], size[1]] : null;
+  });
+}
+
+function mergePageSizes(
+  current: ComicPageSize[],
+  incoming: ComicPageSize[] | undefined | null,
+  length: number,
+): ComicPageSize[] {
+  const normalizedCurrent = normalizePageSizes(current, length);
+  const normalizedIncoming = normalizePageSizes(incoming, length);
+  return normalizedIncoming.map(
+    (size, idx) => size ?? normalizedCurrent[idx] ?? null,
+  );
+}
+
+function stopSeamlessCurrentTopCorrection() {
+  seamlessCurrentTopCorrectionToken += 1;
+  if (seamlessCurrentTopCorrectionRaf) {
+    cancelAnimationFrame(seamlessCurrentTopCorrectionRaf);
+    seamlessCurrentTopCorrectionRaf = 0;
+  }
+  if (seamlessCorrectionElement) {
+    seamlessCorrectionElement.style.scrollBehavior = "";
+    seamlessCorrectionElement = null;
+  }
+}
+
+function startSeamlessCurrentTopCorrection() {
+  stopSeamlessCurrentTopCorrection();
+  const el = containerRef.value;
+  const section = currentSectionRef.value;
+  if (!el || !section) {
+    return;
+  }
+
+  seamlessCorrectionElement = el;
+  const token = ++seamlessCurrentTopCorrectionToken;
+  let lastTop = section.offsetTop;
+  let frames = 0;
+
+  const tick = () => {
+    if (token !== seamlessCurrentTopCorrectionToken) {
+      return;
+    }
+    const currentEl = containerRef.value;
+    const currentSection = currentSectionRef.value;
+    if (!currentEl || !currentSection) {
+      stopSeamlessCurrentTopCorrection();
+      return;
+    }
+
+    const currentTop = currentSection.offsetTop;
+    const delta = currentTop - lastTop;
+    if (Math.abs(delta) >= 1) {
+      currentEl.style.scrollBehavior = "auto";
+      currentEl.scrollTop = Math.max(0, currentEl.scrollTop + delta);
+    }
+    lastTop = currentTop;
+    frames += 1;
+
+    if (frames < 45) {
+      seamlessCurrentTopCorrectionRaf = requestAnimationFrame(tick);
+      return;
+    }
+
+    stopSeamlessCurrentTopCorrection();
+  };
+
+  seamlessCurrentTopCorrectionRaf = requestAnimationFrame(tick);
+}
 
 function prepareSeamlessSwap(prevSectionHeight: number) {
+  stopSeamlessCurrentTopCorrection();
+  seamlessPromotedPageSizes = clonePageSizes(nextPageSizes.value);
+  pendingAdjacentPageSizes.prev = clonePageSizes(pageSizes.value);
   const el = containerRef.value;
   const nextTop =
     nextSectionRef.value?.offsetTop ?? nextChapterSentinelRef.value?.offsetTop;
@@ -144,6 +241,9 @@ function prepareSeamlessSwap(prevSectionHeight: number) {
 }
 
 function prepareSeamlessSwapBack() {
+  stopSeamlessCurrentTopCorrection();
+  seamlessPromotedPageSizes = clonePageSizes(prevPageSizes.value);
+  pendingAdjacentPageSizes.next = clonePageSizes(pageSizes.value);
   isBackwardSeamless = true;
 }
 
@@ -242,11 +342,15 @@ function createPages(urls: string[], holdForProxy = false): ComicPage[] {
   }));
 }
 
-function resetPages(urls: string[], holdForProxy = false) {
+function resetPages(
+  urls: string[],
+  holdForProxy = false,
+  initialPageSizes?: ComicPageSize[] | null,
+) {
   // 换章时清除旧观察，避免已从 DOM 移除的元素持续占用 observer 内存
   observer?.disconnect();
   visibleImages.value = new Set();
-  pageSizes.value = [];
+  pageSizes.value = normalizePageSizes(initialPageSizes, urls.length);
   pages.value = createPages(urls, holdForProxy);
 }
 
@@ -317,7 +421,10 @@ function setScrollTopInstantly(el: HTMLElement, top: number) {
 }
 
 /** 加载图片（根据缓存开关选择模式） */
-async function loadImages(afterInitialRender?: InitialRenderCallback) {
+async function loadImages(
+  afterInitialRender?: InitialRenderCallback,
+  initialPageSizes?: ComicPageSize[] | null,
+) {
   const currentVersion = ++loadVersion;
   const urls = parseImageUrls(props.content);
   error.value = "";
@@ -337,7 +444,7 @@ async function loadImages(afterInitialRender?: InitialRenderCallback) {
   }
 
   // 先用占位承住布局，随后统一向后端换成本地缓存或 proxy URL，避免 WebView 直连 CDN。
-  resetPages(urls, true);
+  resetPages(urls, true, initialPageSizes);
   await nextTick();
   await afterInitialRender?.();
 
@@ -369,7 +476,7 @@ async function loadImages(afterInitialRender?: InitialRenderCallback) {
           props.chapterIndex,
         );
         if (currentVersion === loadVersion) {
-          pageSizes.value = sizes;
+          pageSizes.value = mergePageSizes(pageSizes.value, sizes, urls.length);
         }
       } catch {
         // 查询失败不影响正常阅读，pageSizes 保持空数组，DOM 使用默认 3:4 占位
@@ -396,9 +503,13 @@ async function loadAdjacentPages(
 ) {
   const version = ++adjacentLoadVersion[side];
   const target = side === "prev" ? prevPages : nextPages;
+  const targetSizes = side === "prev" ? prevPageSizes : nextPageSizes;
+  const initialPageSizes = pendingAdjacentPageSizes[side];
+  pendingAdjacentPageSizes[side] = undefined;
   const urls = raw ? parseImageUrls(raw) : [];
   if (urls.length === 0) {
     target.value = [];
+    targetSizes.value = [];
     return;
   }
 
@@ -408,6 +519,7 @@ async function loadAdjacentPages(
       ? chapterIndex
       : fallbackIndex;
   const effectiveChapterUrl = chapterUrl || props.chapterUrl;
+  targetSizes.value = normalizePageSizes(initialPageSizes, urls.length);
   target.value = createPages(urls, true);
 
   try {
@@ -424,6 +536,26 @@ async function loadAdjacentPages(
       return;
     }
     applyResolvedSourcesToPageList(target.value, resolvedSources);
+
+    if (comicCacheEnabled.value) {
+      try {
+        const sizes = await comicGetPageSizes(
+          props.fileName,
+          props.bookUrl,
+          props.bookName,
+          effectiveChapterIndex,
+        );
+        if (version === adjacentLoadVersion[side]) {
+          targetSizes.value = mergePageSizes(
+            targetSizes.value,
+            sizes,
+            urls.length,
+          );
+        }
+      } catch {
+        // 相邻章节尺寸只是稳定布局的优化，失败不影响继续阅读。
+      }
+    }
   } catch (cause) {
     if (version !== adjacentLoadVersion[side]) {
       return;
@@ -448,8 +580,10 @@ watch(
   async () => {
     const anchorOffset = seamlessSwapAnchorOffset;
     const fallbackOffset = seamlessSwapFallbackOffset;
+    const initialPageSizes = seamlessPromotedPageSizes;
     seamlessSwapAnchorOffset = null;
     seamlessSwapFallbackOffset = -1;
+    seamlessPromotedPageSizes = null;
     const backward = isBackwardSeamless;
     isBackwardSeamless = false;
     prevChapterEnteredFired = false;
@@ -478,15 +612,17 @@ watch(
         } else {
           setScrollTopInstantly(el, el.scrollTop - fallbackOffset);
         }
+        startSeamlessCurrentTopCorrection();
       } else if (backward) {
         // 向上无缝翻章：旧上一章内容现在是 current，位置不变
+        startSeamlessCurrentTopCorrection();
       } else {
         // 普通翻章：滚到当前章节起始（跳过上方预渲染的上一章区域）
         setScrollTopInstantly(el, prevSectionRef.value?.offsetHeight ?? 0);
       }
     };
 
-    await loadImages(applyInitialPosition);
+    await loadImages(applyInitialPosition, initialPageSizes);
     await applyInitialPosition();
   },
   { immediate: true },
@@ -646,16 +782,24 @@ function setupObserver() {
 
 const shouldShow = (idx: number) => visibleImages.value.has(idx);
 
-function updatePageNaturalSize(idx: number, img: HTMLImageElement) {
-  if (pageSizes.value[idx]) {
+function updatePageNaturalSizeIn(
+  sizeList: Ref<ComicPageSize[]>,
+  idx: number,
+  img: HTMLImageElement,
+) {
+  if (sizeList.value[idx]) {
     return;
   }
   if (img.naturalWidth <= 0 || img.naturalHeight <= 0) {
     return;
   }
-  const next = [...pageSizes.value];
+  const next = [...sizeList.value];
   next[idx] = [img.naturalWidth, img.naturalHeight];
-  pageSizes.value = next;
+  sizeList.value = next;
+}
+
+function updatePageNaturalSize(idx: number, img: HTMLImageElement) {
+  updatePageNaturalSizeIn(pageSizes, idx, img);
 }
 
 function scheduleRestoreCorrection() {
@@ -701,7 +845,17 @@ function onImageError(idx: number) {
   page.decoding = false;
 }
 
-function onAdjacentImageLoad(page: ComicPage) {
+function onAdjacentImageLoad(
+  side: "prev" | "next",
+  idx: number,
+  page: ComicPage,
+  event: Event,
+) {
+  updatePageNaturalSizeIn(
+    side === "prev" ? prevPageSizes : nextPageSizes,
+    idx,
+    event.target as HTMLImageElement,
+  );
   page.loaded = true;
   page.failed = false;
   page.failureReason = "";
@@ -760,6 +914,7 @@ onMounted(async () => {
   );
 });
 onBeforeUnmount(() => {
+  stopSeamlessCurrentTopCorrection();
   cancelAnimationFrame(restoreCorrectionRaf);
   observer?.disconnect();
   unlistenComicPageCached?.();
@@ -896,8 +1051,7 @@ const isRestoring = ref(false);
 const restoreRatio = ref(-1);
 
 /** 获取指定页的内联样式：如果有缓存尺寸则使用真实 aspect-ratio，否则不设置（CSS 默认 3:4） */
-function pageStyle(idx: number): Record<string, string> {
-  const size = pageSizes.value[idx];
+function sizeToPageStyle(size: ComicPageSize): Record<string, string> {
   if (size) {
     const [w, h] = size;
     if (w > 0 && h > 0) {
@@ -905,6 +1059,19 @@ function pageStyle(idx: number): Record<string, string> {
     }
   }
   return {};
+}
+
+function pageStyle(idx: number): Record<string, string> {
+  return sizeToPageStyle(pageSizes.value[idx]);
+}
+
+function adjacentPageStyle(
+  side: "prev" | "next",
+  idx: number,
+): Record<string, string> {
+  return sizeToPageStyle(
+    side === "prev" ? prevPageSizes.value[idx] : nextPageSizes.value[idx],
+  );
 }
 
 /**
@@ -1080,6 +1247,7 @@ defineExpose({
               v-for="(page, idx) in prevPages"
               :key="`prev-${idx}`"
               class="comic-mode__page comic-mode__page--prev"
+              :style="adjacentPageStyle('prev', idx)"
             >
               <template v-if="page.pending">
                 <div
@@ -1098,7 +1266,7 @@ defineExpose({
                     { 'comic-mode__img--ready': page.loaded },
                   ]"
                   loading="lazy"
-                  @load="onAdjacentImageLoad(page)"
+                  @load="onAdjacentImageLoad('prev', idx, page, $event)"
                   @error="onAdjacentImageError(page)"
                 />
                 <div
@@ -1239,6 +1407,7 @@ defineExpose({
               v-for="(page, idx) in nextPages"
               :key="`next-${idx}`"
               class="comic-mode__page comic-mode__page--next"
+              :style="adjacentPageStyle('next', idx)"
             >
               <template v-if="page.pending">
                 <div
@@ -1257,7 +1426,7 @@ defineExpose({
                     { 'comic-mode__img--ready': page.loaded },
                   ]"
                   loading="lazy"
-                  @load="onAdjacentImageLoad(page)"
+                  @load="onAdjacentImageLoad('next', idx, page, $event)"
                   @error="onAdjacentImageError(page)"
                 />
                 <div

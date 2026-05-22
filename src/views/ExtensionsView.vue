@@ -33,11 +33,13 @@ import {
 import { EXAMPLE_SCRIPTS, type ExampleScript } from '../data/extensionExamples';
 import { saveExportFile } from '../utils/exportFile';
 
+type ExtensionListItem = ExtensionMeta & { builtin?: boolean };
+
 const message = useMessage();
 const dialog = useDialog();
 
 const activeTab = ref<'installed' | 'examples'>('installed');
-const extensions = ref<ExtensionMeta[]>([]);
+const extensions = ref<ExtensionListItem[]>([]);
 const extDir = ref('');
 const loading = ref(false);
 const reloadingAll = ref(false);
@@ -112,6 +114,31 @@ const runtimeByFileName = computed(
   () => new Map(runtimePlugins.value.map((plugin) => [plugin.fileName, plugin])),
 );
 
+function runtimePluginToExtensionItem(
+  plugin: (typeof runtimePlugins.value)[number],
+): ExtensionListItem {
+  return {
+    fileName: plugin.fileName,
+    name: plugin.name,
+    namespace: plugin.pluginId,
+    version: plugin.version,
+    description: plugin.description,
+    author: plugin.author,
+    matchPatterns: ['*'],
+    grants: [],
+    runAt: 'document-idle',
+    category: plugin.category,
+    enabled: plugin.enabled,
+    fileSize: plugin.source.length,
+    modifiedAt: 0,
+    builtin: true,
+  };
+}
+
+function isBuiltinExtension(ext: ExtensionListItem): boolean {
+  return ext.builtin === true;
+}
+
 const shortExtDir = computed(() => {
   if (!extDir.value) {
     return '';
@@ -182,8 +209,12 @@ async function loadExtensions() {
   try {
     await ensureFrontendPlugins();
     const [list, dir] = await Promise.all([listExtensions(), getExtensionDir()]);
+    const diskFileNames = new Set(list.map((item) => item.fileName));
+    const builtinItems = runtimePlugins.value
+      .filter((plugin) => !diskFileNames.has(plugin.fileName))
+      .map(runtimePluginToExtensionItem);
     const orderMap = new Map(runtimePlugins.value.map((plugin, index) => [plugin.fileName, index]));
-    extensions.value = [...list].toSorted(
+    extensions.value = [...list, ...builtinItems].toSorted(
       (left, right) =>
         (orderMap.get(left.fileName) ?? Number.MAX_SAFE_INTEGER) -
         (orderMap.get(right.fileName) ?? Number.MAX_SAFE_INTEGER),
@@ -220,7 +251,11 @@ async function openDirInExplorer() {
   }
 }
 
-async function onToggle(ext: ExtensionMeta) {
+async function onToggle(ext: ExtensionListItem) {
+  if (isBuiltinExtension(ext)) {
+    message.info('内置插件随应用启用，可通过设置调整行为');
+    return;
+  }
   try {
     await toggleExtension(ext.fileName, !ext.enabled);
     await loadExtensions();
@@ -229,7 +264,11 @@ async function onToggle(ext: ExtensionMeta) {
   }
 }
 
-function confirmDelete(ext: ExtensionMeta) {
+function confirmDelete(ext: ExtensionListItem) {
+  if (isBuiltinExtension(ext)) {
+    message.info('内置插件不能删除');
+    return;
+  }
   dialog.warning({
     title: '删除扩展',
     content: `确认删除「${ext.name}」？此操作将删除磁盘文件，不可恢复。`,
@@ -247,8 +286,12 @@ function confirmDelete(ext: ExtensionMeta) {
   });
 }
 
-async function openEditor(ext?: ExtensionMeta) {
+async function openEditor(ext?: ExtensionListItem) {
   if (ext) {
+    if (isBuiltinExtension(ext)) {
+      message.info('内置插件源码可查看，但不能直接编辑');
+      return;
+    }
     editorTitle.value = `编辑：${ext.name}`;
     editorFile.value = ext.fileName;
     try {
@@ -300,9 +343,12 @@ async function openEditorInVscode() {
   }
 }
 
-async function viewInstalledCode(ext: ExtensionMeta) {
+async function viewInstalledCode(ext: ExtensionListItem) {
   try {
-    previewSource.value = await readExtension(ext.fileName);
+    const runtimeInfo = runtimeByFileName.value.get(ext.fileName);
+    previewSource.value = isBuiltinExtension(ext)
+      ? (runtimeInfo?.source ?? '')
+      : await readExtension(ext.fileName);
     previewTitle.value = ext.name;
     previewExampleId.value = null;
     showPreview.value = true;
@@ -373,9 +419,12 @@ function importFromFile() {
   input.click();
 }
 
-async function exportExtension(ext: ExtensionMeta) {
+async function exportExtension(ext: ExtensionListItem) {
   try {
-    const source = await readExtension(ext.fileName);
+    const runtimeInfo = runtimeByFileName.value.get(ext.fileName);
+    const source = isBuiltinExtension(ext)
+      ? (runtimeInfo?.source ?? '')
+      : await readExtension(ext.fileName);
     const saved = await saveExportFile({
       defaultName: ext.fileName,
       mime: 'text/javascript;charset=utf-8',
@@ -675,6 +724,7 @@ onUnmounted(() => {
                 v-for="ext in filtered"
                 :key="ext.fileName"
                 :ext="ext"
+                :builtin="ext.builtin"
                 :runtime-info="runtimeByFileName.get(ext.fileName)"
                 @toggle="onToggle(ext)"
                 @move="(dir) => moveExtensionItem(ext.fileName, dir)"

@@ -23,12 +23,29 @@ interface UseReaderTtsManagerOptions {
   gotoNextChapter: () => Promise<void>;
 }
 
-/** 从页面 HTML 字符串中提取所有 .reader-line 的纯文本 */
-function extractPageLines(html: string): string[] {
+interface PagedTtsSegmentMeta {
+  page: number;
+  chapterIdx: number;
+  paragraphIndex: number;
+}
+
+/** 从页面 HTML 字符串中提取段落块文本，避免按视觉行朗读 */
+function extractPageParagraphs(html: string): string[] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
-  return Array.from(doc.querySelectorAll(".reader-line"))
-    .map((el) => el.textContent.trim())
+  return Array.from(
+    doc.querySelectorAll(".reader-block--paragraph, .reader-block--title"),
+  )
+    .map((block) => {
+      const lines = Array.from(block.querySelectorAll(".reader-line"));
+      if (lines.length === 0) {
+        return block.textContent?.trim() ?? "";
+      }
+      return lines
+        .map((line) => line.textContent ?? "")
+        .join("")
+        .trim();
+    })
     .filter(Boolean);
 }
 
@@ -61,12 +78,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
   const ttsScrollHighlightIdx = ref(-1);
 
   // TTS 分页模式状态（跨章节持续累计）
-  let ttsPageRanges: {
-    page: number;
-    chapterIdx: number;
-    start: number;
-    end: number;
-  }[] = [];
+  let ttsPagedSegmentMetas: PagedTtsSegmentMeta[] = [];
   let ttsFeedPage = 0;
   let ttsFeedChapter = -1;
 
@@ -103,25 +115,44 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
       return null;
     }
 
-    ttsPageRanges = [];
+    ttsPagedSegmentMetas = [];
     ttsFeedPage = startPage;
     ttsFeedChapter = activeChapterIndex.value;
     let globalIdx = 0;
 
+    const collectPageSegments = (
+      page: number,
+      chapterIdx: number,
+      pageHtml: string,
+    ): string[] => {
+      const paragraphs = extractPageParagraphs(pageHtml);
+      const segments: string[] = [];
+      paragraphs.forEach((paragraph, paragraphIndex) => {
+        const paragraphSegments = splitIntoSegments(paragraph);
+        for (const segment of paragraphSegments) {
+          ttsPagedSegmentMetas[globalIdx] = {
+            page,
+            chapterIdx,
+            paragraphIndex,
+          };
+          globalIdx += 1;
+          segments.push(segment);
+        }
+      });
+      return segments;
+    };
+
     const initialSegments: string[] = [];
     for (let page = startPage; page < pages.length; page++) {
-      const lines = extractPageLines(pages[page] ?? "");
-      if (lines.length === 0) {
+      const pageSegments = collectPageSegments(
+        page,
+        ttsFeedChapter,
+        pages[page] ?? "",
+      );
+      if (pageSegments.length === 0) {
         continue;
       }
-      ttsPageRanges.push({
-        page,
-        chapterIdx: ttsFeedChapter,
-        start: globalIdx,
-        end: globalIdx + lines.length,
-      });
-      globalIdx += lines.length;
-      initialSegments.push(...lines);
+      initialSegments.push(...pageSegments);
       ttsFeedPage = page;
     }
 
@@ -135,17 +166,12 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
 
       if (nextPage < currentPages.length) {
         ttsFeedPage = nextPage;
-        const lines = extractPageLines(currentPages[nextPage] ?? "");
-        if (lines.length > 0) {
-          ttsPageRanges.push({
-            page: nextPage,
-            chapterIdx: ttsFeedChapter,
-            start: globalIdx,
-            end: globalIdx + lines.length,
-          });
-          globalIdx += lines.length;
-        }
-        return lines.length > 0 ? lines : onNeedMore();
+        const pageSegments = collectPageSegments(
+          nextPage,
+          ttsFeedChapter,
+          currentPages[nextPage] ?? "",
+        );
+        return pageSegments.length > 0 ? pageSegments : onNeedMore();
       }
 
       if (!hasNext.value) {
@@ -161,44 +187,38 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
         return null;
       }
 
-      const lines = extractPageLines(newPages[0] ?? "");
-      if (lines.length > 0) {
-        ttsPageRanges.push({
-          page: 0,
-          chapterIdx: ttsFeedChapter,
-          start: globalIdx,
-          end: globalIdx + lines.length,
-        });
-        globalIdx += lines.length;
-      }
-      return lines.length > 0 ? lines : onNeedMore();
+      const pageSegments = collectPageSegments(
+        0,
+        ttsFeedChapter,
+        newPages[0] ?? "",
+      );
+      return pageSegments.length > 0 ? pageSegments : onNeedMore();
     };
 
     const onSegmentStart = (gIdx: number) => {
-      const range = ttsPageRanges.find((r) => gIdx >= r.start && gIdx < r.end);
-      if (!range) {
+      const meta = ttsPagedSegmentMetas[gIdx];
+      if (!meta) {
         return;
       }
 
-      const localIdx = gIdx - range.start;
       const total =
-        range.chapterIdx === activeChapterIndex.value
+        meta.chapterIdx === activeChapterIndex.value
           ? activePagedPages.value.length
           : 0;
       ttsProgressText.value =
         total > 0
-          ? `第 ${range.page + 1}/${total} 页`
-          : `第 ${range.page + 1} 页`;
+          ? `第 ${meta.page + 1}/${total} 页`
+          : `第 ${meta.page + 1} 页`;
 
       if (
-        range.chapterIdx === activeChapterIndex.value &&
-        range.page !== pagedPageIndex.value
+        meta.chapterIdx === activeChapterIndex.value &&
+        meta.page !== pagedPageIndex.value
       ) {
-        setPagedPage(range.page);
+        setPagedPage(meta.page);
       }
 
       void nextTick(() => {
-        pagedModeRef.value?.highlightLine?.(localIdx);
+        pagedModeRef.value?.highlightParagraph?.(meta.paragraphIndex);
       });
     };
 

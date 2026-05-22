@@ -85,6 +85,11 @@ const SETTINGS_STORAGE_KEY = PLUGIN_STORAGE_KEYS.settings;
 
 export const FRONTEND_PLUGIN_TOAST_EVENT = "frontend-plugin:toast";
 
+export interface TtsEnginePreloadResult {
+  supported: boolean;
+  value?: unknown;
+}
+
 export type {
   ReaderPluginSlot,
   ReaderContentHookStage,
@@ -1051,6 +1056,28 @@ async function speakWithTtsEngine(
   }
 }
 
+async function preloadTtsEngine(
+  engineId: string,
+  context: TtsSpeakContext,
+): Promise<TtsEnginePreloadResult> {
+  await ensureInitialized();
+  const { record, engine } = resolveRuntimeTtsEngine(engineId);
+  if (!engine.preload) {
+    return { supported: false };
+  }
+  try {
+    return {
+      supported: true,
+      value: await engine.preload(context, createPluginApi(record)),
+    };
+  } catch (error) {
+    if (context.signal.aborted) {
+      return { supported: true };
+    }
+    throw error;
+  }
+}
+
 async function stopTtsEngine(engineId: string): Promise<void> {
   await ensureInitialized();
   const { record, engine } = resolveRuntimeTtsEngine(engineId);
@@ -1216,6 +1243,7 @@ export function useFrontendPlugins() {
     runBookshelfAction,
     runReaderContextAction,
     runCoverGenerator,
+    preloadTtsEngine,
     speakWithTtsEngine,
     stopTtsEngine,
     previewTtsEngineVoice,
