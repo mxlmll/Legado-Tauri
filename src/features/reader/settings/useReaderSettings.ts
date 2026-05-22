@@ -37,7 +37,11 @@ const READER_DEFAULTS_NAMESPACE = 'reader.defaults.lastEffective';
 const READER_DEFAULTS_STORAGE_NAMESPACE = `dynamic-config.${READER_DEFAULTS_NAMESPACE}`;
 const READER_DEFAULTS_STATE_KEY = 'state';
 const READER_DEFAULTS_VERSION = 1;
-const BOOK_LEVEL_GLOBAL_FIELDS: (keyof ReaderSettings)[] = ['paginationEngine'];
+const BOOK_LEVEL_GLOBAL_FIELDS: (keyof ReaderSettings)[] = [
+  'paginationEngine',
+  'hideTopBarOnMobile',
+  'volumeKeyPageTurnEnabled',
+];
 
 type StoredReaderSettings = Partial<ReaderSettings> & {
   debugMode?: boolean;
@@ -127,7 +131,10 @@ function extractStoredReaderSettings(raw: unknown): StoredReaderSettings | null 
     record.values && typeof record.values === 'object'
       ? (record.values as Record<string, unknown>)
       : record;
-  const next = { ...source } as StoredReaderSettings & { version?: unknown; updatedAt?: unknown };
+  const next = { ...source } as StoredReaderSettings & {
+    version?: unknown;
+    updatedAt?: unknown;
+  };
   delete next.version;
   delete next.updatedAt;
   return next;
@@ -425,7 +432,7 @@ export function useReaderSettings() {
   }
 
   /** 获取当前设置的 JSON 快照，用于写入书架持久化。
-   * 全局兼容策略类字段（如 paginationEngine）不落到单书，避免覆盖前端动态默认值。
+   * 全局策略类字段（如 paginationEngine）不落到单书，避免覆盖前端动态默认值。
    */
   function getSettingsJson(): string {
     const stored = cloneSettings(settings) as StoredReaderSettings;

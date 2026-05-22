@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { ChevronDown } from 'lucide-vue-next';
-import { NTag, NSwitch, NButton } from 'naive-ui';
-import { ref } from 'vue';
-import type { ExtensionMeta } from '@/composables/useExtension';
-import type { FrontendPluginRecord } from '@/composables/useFrontendPlugins';
+import { ChevronDown } from "lucide-vue-next";
+import { NTag, NSwitch, NButton } from "naive-ui";
+import { ref } from "vue";
+import type { ExtensionMeta } from "@/composables/useExtension";
+import type { FrontendPluginRecord } from "@/composables/useFrontendPlugins";
 import {
   catDot,
   catType,
   runAtLabel,
   runtimeStatusType,
   runtimeStatusLabel,
-} from '@/utils/extensionDisplayUtils';
+} from "@/utils/extensionDisplayUtils";
 
 const props = defineProps<{
   ext: ExtensionMeta;
@@ -21,7 +21,7 @@ const emit = defineEmits<{
   toggle: [];
   move: [direction: -1 | 1];
   reload: [];
-  'view-code': [];
+  "view-code": [];
   edit: [];
   delete: [];
   settings: [];
@@ -33,17 +33,26 @@ const showDetails = ref(false);
 
 <template>
   <div class="ext-card" :class="{ 'ext-card--off': !props.ext.enabled }">
-    <div class="ext-card__stripe" :style="{ background: catDot(props.ext.category) }" />
+    <div
+      class="ext-card__stripe"
+      :style="{ background: catDot(props.ext.category) }"
+    />
     <div class="ext-card__body">
       <div class="ext-card__name-row">
         <span class="ext-card__name">{{ props.ext.name }}</span>
-        <n-tag :type="catType(props.ext.category) as any" size="tiny" :bordered="false">
-          {{ props.ext.category || '其他' }}
+        <n-tag
+          :type="catType(props.ext.category) as any"
+          size="tiny"
+          :bordered="false"
+        >
+          {{ props.ext.category || "其他" }}
         </n-tag>
         <n-tag
           size="tiny"
           :bordered="false"
-          style="background: var(--color-surface-secondary, rgba(0, 0, 0, 0.04))"
+          style="
+            background: var(--color-surface-secondary, rgba(0, 0, 0, 0.04));
+          "
         >
           {{ runAtLabel(props.ext.runAt) }}
         </n-tag>
@@ -55,15 +64,17 @@ const showDetails = ref(false);
           {{ runtimeStatusLabel(props.runtimeInfo?.status) }}
         </n-tag>
       </div>
-      <p class="ext-card__desc">{{ props.ext.description || '暂无描述' }}</p>
+      <p class="ext-card__desc">{{ props.ext.description || "暂无描述" }}</p>
       <div v-if="props.runtimeInfo?.status === 'error'" class="ext-card__error">
         <span class="ext-card__error-title">运行错误</span>
-        <span class="ext-card__error-msg">{{ props.runtimeInfo?.runtimeError }}</span>
+        <span class="ext-card__error-msg">{{
+          props.runtimeInfo?.runtimeError
+        }}</span>
       </div>
       <div class="ext-card__meta">
         <span>v{{ props.ext.version }}</span>
         <span class="ext-card__dot" />
-        <span>{{ props.ext.author || '未知作者' }}</span>
+        <span>{{ props.ext.author || "未知作者" }}</span>
         <template v-if="props.runtimeInfo">
           <span class="ext-card__dot" />
           <span> hooks {{ props.runtimeInfo?.runtimeHooks.length ?? 0 }} </span>
@@ -79,12 +90,20 @@ const showDetails = ref(false);
             covers
             {{ props.runtimeInfo?.runtimeCoverGenerators.length ?? 0 }}
           </span>
+          <span class="ext-card__dot" />
+          <span>
+            tts
+            {{ props.runtimeInfo?.runtimeTtsEngines.length ?? 0 }}
+          </span>
         </template>
         <template v-if="props.ext.grants.length">
           <span class="ext-card__dot" />
-          <span v-for="g in props.ext.grants.slice(0, 3)" :key="g" class="ext-card__grant">{{
-            g
-          }}</span>
+          <span
+            v-for="g in props.ext.grants.slice(0, 3)"
+            :key="g"
+            class="ext-card__grant"
+            >{{ g }}</span
+          >
           <span v-if="props.ext.grants.length > 3" class="ext-card__grant"
             >+{{ props.ext.grants.length - 3 }}</span
           >
@@ -93,9 +112,13 @@ const showDetails = ref(false);
     </div>
     <div class="ext-card__actions">
       <div class="ext-card__toggle">
-        <n-switch :value="props.ext.enabled" size="small" @update:value="emit('toggle')" />
+        <n-switch
+          :value="props.ext.enabled"
+          size="small"
+          @update:value="emit('toggle')"
+        />
         <span class="ext-card__toggle-text">
-          {{ props.ext.enabled ? '已启用' : '已禁用' }}
+          {{ props.ext.enabled ? "已启用" : "已禁用" }}
         </span>
       </div>
       <div class="ext-card__action-list">
@@ -106,13 +129,21 @@ const showDetails = ref(false);
           @click="emit('settings')"
           >设置</n-button
         >
-        <n-button size="tiny" quaternary @click="emit('move', -1)">上移</n-button>
-        <n-button size="tiny" quaternary @click="emit('move', 1)">下移</n-button>
+        <n-button size="tiny" quaternary @click="emit('move', -1)"
+          >上移</n-button
+        >
+        <n-button size="tiny" quaternary @click="emit('move', 1)"
+          >下移</n-button
+        >
         <n-button size="tiny" quaternary @click="emit('reload')">重载</n-button>
-        <n-button size="tiny" quaternary @click="emit('view-code')">查看代码</n-button>
+        <n-button size="tiny" quaternary @click="emit('view-code')"
+          >查看代码</n-button
+        >
         <n-button size="tiny" quaternary @click="emit('edit')">编辑</n-button>
         <n-button size="tiny" quaternary @click="emit('export')">导出</n-button>
-        <n-button size="tiny" quaternary type="error" @click="emit('delete')">删除</n-button>
+        <n-button size="tiny" quaternary type="error" @click="emit('delete')"
+          >删除</n-button
+        >
         <n-button
           v-if="props.runtimeInfo"
           size="tiny"
@@ -121,14 +152,20 @@ const showDetails = ref(false);
           @click="showDetails = !showDetails"
         >
           <template #icon>
-            <ChevronDown :size="13" :style="showDetails ? 'transform: rotate(180deg)' : ''" />
+            <ChevronDown
+              :size="13"
+              :style="showDetails ? 'transform: rotate(180deg)' : ''"
+            />
           </template>
         </n-button>
       </div>
     </div>
     <transition name="ext-details">
       <div v-if="showDetails && props.runtimeInfo" class="ext-card__details">
-        <div v-if="props.runtimeInfo.runtimeHooks.length" class="ext-card__detail-row">
+        <div
+          v-if="props.runtimeInfo.runtimeHooks.length"
+          class="ext-card__detail-row"
+        >
           <span class="ext-card__detail-label">Hooks</span>
           <div class="ext-card__detail-tags">
             <n-tag
@@ -140,7 +177,10 @@ const showDetails = ref(false);
             >
           </div>
         </div>
-        <div v-if="props.runtimeInfo.runtimeSlots.length" class="ext-card__detail-row">
+        <div
+          v-if="props.runtimeInfo.runtimeSlots.length"
+          class="ext-card__detail-row"
+        >
           <span class="ext-card__detail-label">Slots</span>
           <div class="ext-card__detail-tags">
             <n-tag
@@ -153,17 +193,31 @@ const showDetails = ref(false);
             >
           </div>
         </div>
-        <div v-if="props.runtimeInfo.runtimeBookshelfActions?.length" class="ext-card__detail-row">
+        <div
+          v-if="props.runtimeInfo.runtimeBookshelfActions?.length"
+          class="ext-card__detail-row"
+        >
           <span class="ext-card__detail-label">书架动作</span>
           <span class="ext-card__detail-value">{{
-            props.runtimeInfo.runtimeBookshelfActions.join(', ')
+            props.runtimeInfo.runtimeBookshelfActions.join(", ")
+          }}</span>
+        </div>
+        <div
+          v-if="props.runtimeInfo.runtimeTtsEngines?.length"
+          class="ext-card__detail-row"
+        >
+          <span class="ext-card__detail-label">TTS 引擎</span>
+          <span class="ext-card__detail-value">{{
+            props.runtimeInfo.runtimeTtsEngines.join(", ")
           }}</span>
         </div>
         <div class="ext-card__detail-row">
           <span class="ext-card__detail-label">插件 ID</span>
-          <span class="ext-card__detail-value" style="font-family: monospace; font-size: 11px">{{
-            props.runtimeInfo.pluginId
-          }}</span>
+          <span
+            class="ext-card__detail-value"
+            style="font-family: monospace; font-size: 11px"
+            >{{ props.runtimeInfo.pluginId }}</span
+          >
         </div>
       </div>
     </transition>
@@ -253,7 +307,7 @@ const showDetails = ref(false);
   flex-shrink: 0;
 }
 .ext-card__grant {
-  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 0.65rem;
   background: var(--color-surface-secondary, rgba(0, 0, 0, 0.04));
   padding: 1px 5px;

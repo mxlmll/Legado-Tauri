@@ -40,11 +40,15 @@ const props = defineProps<{
   hasNext: boolean;
   /** 预加载的上一章图片内容（JSON 数组或换行分隔 URL），空字符串表示尚未加载 */
   prevChapterContent?: string;
+  prevChapterUrl?: string;
+  prevChapterIndex?: number;
   /** 预加载的上一章章节名 */
   prevChapterTitle?: string;
   prevChapterLoading?: boolean;
   /** 预加载的下一章图片内容（JSON 数组或换行分隔 URL），空字符串表示尚未加载 */
   nextChapterContent?: string;
+  nextChapterUrl?: string;
+  nextChapterIndex?: number;
   /** 预加载的下一章章节名 */
   nextChapterTitle?: string;
   nextChapterLoading?: boolean;
@@ -67,8 +71,10 @@ interface ComicPage {
   cachedSrc: string | null;
   loaded: boolean;
   failed: boolean;
+  failureReason: string;
   /** 书源需要图片解码时，等待 Rust 后台处理完成，期间不渲染 <img> 避免显示乱序原图 */
   pending: boolean;
+  decoding: boolean;
   /** Rust 后台经三次重试后仍下载失败，前端可手动触发重新加载 */
   retryFailed: boolean;
 }
@@ -84,6 +90,7 @@ interface ComicPageFailedPayload {
   file_name: string;
   chapter_url: string;
   page_index: number;
+  error?: string;
 }
 
 const _appCfg = useAppConfigStore();
@@ -100,6 +107,7 @@ let unlistenComicPageCached: (() => void) | null = null;
 let unlistenComicPageFailed: (() => void) | null = null;
 let observer: IntersectionObserver | null = null;
 let restoreCorrectionRaf = 0;
+const adjacentLoadVersion = { prev: 0, next: 0 };
 
 type InitialRenderCallback = () => Promise<void> | void;
 
@@ -220,29 +228,34 @@ function toRenderableSrc(src: string): string {
   return isDirectSrc(src) ? src : toFileSrcSync(src);
 }
 
-function createPages(urls: string[]): ComicPage[] {
+function createPages(urls: string[], holdForProxy = false): ComicPage[] {
   return urls.map((url) => ({
     remoteUrl: url,
-    src: url,
+    src: holdForProxy ? "" : url,
     cachedSrc: null,
     loaded: false,
     failed: false,
-    pending: false,
+    failureReason: "",
+    pending: holdForProxy,
+    decoding: false,
     retryFailed: false,
   }));
 }
 
-function resetPages(urls: string[]) {
+function resetPages(urls: string[], holdForProxy = false) {
   // 换章时清除旧观察，避免已从 DOM 移除的元素持续占用 observer 内存
   observer?.disconnect();
   visibleImages.value = new Set();
   pageSizes.value = [];
-  pages.value = createPages(urls);
+  pages.value = createPages(urls, holdForProxy);
 }
 
-function applyResolvedSources(sources: string[]) {
+function applyResolvedSourcesToPageList(
+  pageList: ComicPage[],
+  sources: string[],
+) {
   for (const [idx, source] of sources.entries()) {
-    const page = pages.value[idx];
+    const page = pageList[idx];
     if (!page) {
       continue;
     }
@@ -252,13 +265,20 @@ function applyResolvedSources(sources: string[]) {
       continue;
     }
     const renderable = toRenderableSrc(source);
+    page.decoding = source.includes("mode=decode");
     page.cachedSrc = renderable === page.remoteUrl ? null : renderable;
     if (page.src !== renderable) {
       page.src = renderable;
       page.loaded = false;
       page.failed = false;
+      page.failureReason = "";
     }
+    page.pending = false;
   }
+}
+
+function applyResolvedSources(sources: string[]) {
+  applyResolvedSourcesToPageList(pages.value, sources);
 }
 
 function applyCachedPage(pageIndex: number, localPath: string) {
@@ -269,6 +289,7 @@ function applyCachedPage(pageIndex: number, localPath: string) {
 
   const localSrc = toRenderableSrc(localPath);
   page.cachedSrc = localSrc;
+  page.decoding = false;
 
   if (page.pending) {
     // 解码完成：解除占位，切换到处理后的本地文件
@@ -281,6 +302,7 @@ function applyCachedPage(pageIndex: number, localPath: string) {
     page.src = localSrc;
     page.loaded = false;
     page.failed = false;
+    page.failureReason = "";
   }
 
   scheduleRestoreCorrection();
@@ -314,20 +336,13 @@ async function loadImages(afterInitialRender?: InitialRenderCallback) {
     return;
   }
 
-  // 先把整章 URL 放给页面，确保只要拿到图片列表就能开始阅读。
-  resetPages(urls);
+  // 先用占位承住布局，随后统一向后端换成本地缓存或 proxy URL，避免 WebView 直连 CDN。
+  resetPages(urls, true);
   await nextTick();
   await afterInitialRender?.();
 
-  // 直读模式：不经过 Rust 后端，直接使用原始 URL
-  if (!comicCacheEnabled.value) {
-    loading.value = false;
-    loadResolve?.();
-    return;
-  }
-
-  // 缓存模式：立即返回“已缓存本地路径 + 未缓存远程 URL”的混合结果，
-  // 同时由 Rust 后端继续后台顺序下载，并通过事件逐页通知前端替换。
+  // 后端返回“已缓存本地路径 + 未缓存 proxy URL”的混合结果。
+  // 关闭漫画缓存时也会返回 proxy URL，但 proxy 只补请求头并转发，不写入磁盘。
   loading.value = true;
   try {
     const resolvedSources = await comicDownloadImages(
@@ -337,25 +352,28 @@ async function loadImages(afterInitialRender?: InitialRenderCallback) {
       props.chapterUrl,
       props.chapterIndex,
       urls,
+      comicCacheEnabled.value,
     );
     if (currentVersion !== loadVersion) {
       return;
     }
     applyResolvedSources(resolvedSources);
 
-    // 查询后端缓存的每页原始像素尺寸，用于在图片加载前设定正确的 aspect-ratio
-    try {
-      const sizes = await comicGetPageSizes(
-        props.fileName,
-        props.bookUrl,
-        props.bookName,
-        props.chapterIndex,
-      );
-      if (currentVersion === loadVersion) {
-        pageSizes.value = sizes;
+    if (comicCacheEnabled.value) {
+      // 查询后端缓存的每页原始像素尺寸，用于在图片加载前设定正确的 aspect-ratio
+      try {
+        const sizes = await comicGetPageSizes(
+          props.fileName,
+          props.bookUrl,
+          props.bookName,
+          props.chapterIndex,
+        );
+        if (currentVersion === loadVersion) {
+          pageSizes.value = sizes;
+        }
+      } catch {
+        // 查询失败不影响正常阅读，pageSizes 保持空数组，DOM 使用默认 3:4 占位
       }
-    } catch {
-      // 查询失败不影响正常阅读，pageSizes 保持空数组，DOM 使用默认 3:4 占位
     }
   } catch (e: unknown) {
     if (currentVersion !== loadVersion) {
@@ -366,6 +384,56 @@ async function loadImages(afterInitialRender?: InitialRenderCallback) {
     if (currentVersion === loadVersion) {
       loading.value = false;
       loadResolve?.();
+    }
+  }
+}
+
+async function loadAdjacentPages(
+  side: "prev" | "next",
+  raw: string | undefined,
+  chapterUrl: string | undefined,
+  chapterIndex: number | undefined,
+) {
+  const version = ++adjacentLoadVersion[side];
+  const target = side === "prev" ? prevPages : nextPages;
+  const urls = raw ? parseImageUrls(raw) : [];
+  if (urls.length === 0) {
+    target.value = [];
+    return;
+  }
+
+  const fallbackIndex = props.chapterIndex + (side === "prev" ? -1 : 1);
+  const effectiveChapterIndex =
+    typeof chapterIndex === "number" && chapterIndex >= 0
+      ? chapterIndex
+      : fallbackIndex;
+  const effectiveChapterUrl = chapterUrl || props.chapterUrl;
+  target.value = createPages(urls, true);
+
+  try {
+    const resolvedSources = await comicDownloadImages(
+      props.fileName,
+      props.bookUrl,
+      props.bookName,
+      effectiveChapterUrl,
+      effectiveChapterIndex,
+      urls,
+      comicCacheEnabled.value,
+    );
+    if (version !== adjacentLoadVersion[side]) {
+      return;
+    }
+    applyResolvedSourcesToPageList(target.value, resolvedSources);
+  } catch (cause) {
+    if (version !== adjacentLoadVersion[side]) {
+      return;
+    }
+    for (const page of target.value) {
+      page.pending = false;
+      page.failed = true;
+      page.failureReason =
+        cause instanceof Error ? cause.message : String(cause);
+      page.loaded = false;
     }
   }
 }
@@ -426,11 +494,17 @@ watch(
 
 // ── 上一章内容变化：预渲染到顶部，补偿 scrollTop ─────────────────────────
 watch(
-  () => props.prevChapterContent,
-  async (val, oldVal) => {
-    const wasEmpty = !oldVal;
+  () =>
+    [
+      props.prevChapterContent,
+      props.prevChapterUrl,
+      props.prevChapterIndex,
+      comicCacheEnabled.value,
+    ] as const,
+  async ([val, chapterUrl, chapterIndex], oldVal) => {
+    const wasEmpty = !oldVal?.[0];
     const isNowFilled = !!val;
-    prevPages.value = val ? createPages(parseImageUrls(val)) : [];
+    void loadAdjacentPages("prev", val, chapterUrl, chapterIndex);
     prevChapterEnteredFired = false;
     prevBoundaryFallbackFired = false;
 
@@ -450,9 +524,16 @@ watch(
 
 // ── 下一章内容变化 ──────────────────────────────────────────────────
 watch(
-  () => [props.nextChapterContent, props.nextChapterLoading] as const,
-  async ([val, isLoading]) => {
-    nextPages.value = val ? createPages(parseImageUrls(val)) : [];
+  () =>
+    [
+      props.nextChapterContent,
+      props.nextChapterUrl,
+      props.nextChapterIndex,
+      props.nextChapterLoading,
+      comicCacheEnabled.value,
+    ] as const,
+  async ([val, chapterUrl, chapterIndex, isLoading]) => {
+    void loadAdjacentPages("next", val, chapterUrl, chapterIndex);
     nextBoundaryFallbackFired = false;
     teardownSentinel();
     if (val || isLoading) {
@@ -595,6 +676,8 @@ function onImageLoad(idx: number, event: Event) {
   updatePageNaturalSize(idx, event.target as HTMLImageElement);
   page.loaded = true;
   page.failed = false;
+  page.failureReason = "";
+  page.decoding = false;
   scheduleRestoreCorrection();
 }
 
@@ -608,11 +691,28 @@ function onImageError(idx: number) {
     page.src = page.cachedSrc;
     page.loaded = false;
     page.failed = false;
+    page.failureReason = "";
     return;
   }
 
   page.failed = true;
+  page.failureReason = "浏览器无法加载后端返回的图片地址";
   page.loaded = false;
+  page.decoding = false;
+}
+
+function onAdjacentImageLoad(page: ComicPage) {
+  page.loaded = true;
+  page.failed = false;
+  page.failureReason = "";
+  page.decoding = false;
+}
+
+function onAdjacentImageError(page: ComicPage) {
+  page.loaded = false;
+  page.failed = true;
+  page.failureReason = "浏览器无法加载后端返回的图片地址";
+  page.decoding = false;
 }
 
 onMounted(async () => {
@@ -654,6 +754,7 @@ onMounted(async () => {
       if (page) {
         page.retryFailed = true;
         page.failed = true;
+        page.failureReason = payload.error ?? "后端下载失败";
       }
     },
   );
@@ -903,6 +1004,7 @@ async function retryPage(idx: number) {
       props.chapterUrl,
       props.chapterIndex,
       pages.value.map((p) => p.remoteUrl),
+      comicCacheEnabled.value,
     );
     applyResolvedSources(resolvedSources);
   } catch {
@@ -910,6 +1012,7 @@ async function retryPage(idx: number) {
     if (pages.value[idx]) {
       pages.value[idx].retryFailed = true;
       pages.value[idx].failed = true;
+      pages.value[idx].failureReason = "重新触发后端下载失败";
     }
   }
 }
@@ -978,12 +1081,45 @@ defineExpose({
               :key="`prev-${idx}`"
               class="comic-mode__page comic-mode__page--prev"
             >
-              <img
-                :src="page.src"
-                :alt="`上一章第 ${idx + 1} 页`"
-                class="comic-mode__img comic-mode__img--ready"
-                loading="lazy"
-              />
+              <template v-if="page.pending">
+                <div
+                  class="comic-mode__placeholder comic-mode__placeholder--overlay"
+                >
+                  <n-spin size="small" />
+                  <span>上一章第 {{ idx + 1 }} 页准备中...</span>
+                </div>
+              </template>
+              <template v-else>
+                <img
+                  :src="page.src"
+                  :alt="`上一章第 ${idx + 1} 页`"
+                  :class="[
+                    'comic-mode__img',
+                    { 'comic-mode__img--ready': page.loaded },
+                  ]"
+                  loading="lazy"
+                  @load="onAdjacentImageLoad(page)"
+                  @error="onAdjacentImageError(page)"
+                />
+                <div
+                  v-if="!page.loaded"
+                  class="comic-mode__placeholder comic-mode__placeholder--overlay"
+                >
+                  <n-spin v-if="!page.failed" size="small" />
+                  <span>{{
+                    page.failed
+                      ? "图片加载失败"
+                      : page.decoding
+                        ? `上一章第 ${idx + 1} 页解码中...`
+                        : `上一章第 ${idx + 1} 页加载中...`
+                  }}</span>
+                  <span
+                    v-if="page.failed && page.failureReason"
+                    class="comic-mode__fail-detail"
+                    >{{ page.failureReason }}</span
+                  >
+                </div>
+              </template>
             </div>
           </template>
           <div v-else class="comic-mode__chapter-loading">
@@ -1040,6 +1176,11 @@ defineExpose({
                   <span class="comic-mode__fail-text"
                     >第 {{ idx + 1 }} 页下载失败</span
                   >
+                  <span
+                    v-if="page.failureReason"
+                    class="comic-mode__fail-detail"
+                    >{{ page.failureReason }}</span
+                  >
                   <n-button
                     size="small"
                     type="primary"
@@ -1050,8 +1191,17 @@ defineExpose({
                   </n-button>
                 </template>
                 <span v-else>{{
-                  page.failed ? "图片加载失败" : `第 ${idx + 1} 页加载中...`
+                  page.failed
+                    ? "图片加载失败"
+                    : page.decoding
+                      ? `第 ${idx + 1} 页解码中...`
+                      : `第 ${idx + 1} 页加载中...`
                 }}</span>
+                <span
+                  v-if="page.failed && page.failureReason"
+                  class="comic-mode__fail-detail"
+                  >{{ page.failureReason }}</span
+                >
               </div>
             </template>
           </template>
@@ -1082,7 +1232,7 @@ defineExpose({
           class="comic-mode__sentinel"
           aria-hidden="true"
         />
-        <!-- 下一章图片（直接显示，不经过内容缓存） -->
+        <!-- 下一章图片：先经漫画缓存/代理解析，避免 WebView 直连 CDN 被拦截。 -->
         <div ref="nextSectionRef">
           <template v-if="hasNextChapterContent">
             <div
@@ -1090,12 +1240,45 @@ defineExpose({
               :key="`next-${idx}`"
               class="comic-mode__page comic-mode__page--next"
             >
-              <img
-                :src="page.src"
-                :alt="`下一章第 ${idx + 1} 页`"
-                class="comic-mode__img comic-mode__img--ready"
-                loading="lazy"
-              />
+              <template v-if="page.pending">
+                <div
+                  class="comic-mode__placeholder comic-mode__placeholder--overlay"
+                >
+                  <n-spin size="small" />
+                  <span>下一章第 {{ idx + 1 }} 页准备中...</span>
+                </div>
+              </template>
+              <template v-else>
+                <img
+                  :src="page.src"
+                  :alt="`下一章第 ${idx + 1} 页`"
+                  :class="[
+                    'comic-mode__img',
+                    { 'comic-mode__img--ready': page.loaded },
+                  ]"
+                  loading="lazy"
+                  @load="onAdjacentImageLoad(page)"
+                  @error="onAdjacentImageError(page)"
+                />
+                <div
+                  v-if="!page.loaded"
+                  class="comic-mode__placeholder comic-mode__placeholder--overlay"
+                >
+                  <n-spin v-if="!page.failed" size="small" />
+                  <span>{{
+                    page.failed
+                      ? "图片加载失败"
+                      : page.decoding
+                        ? `下一章第 ${idx + 1} 页解码中...`
+                        : `下一章第 ${idx + 1} 页加载中...`
+                  }}</span>
+                  <span
+                    v-if="page.failed && page.failureReason"
+                    class="comic-mode__fail-detail"
+                    >{{ page.failureReason }}</span
+                  >
+                </div>
+              </template>
             </div>
           </template>
           <div v-else class="comic-mode__chapter-loading">
@@ -1217,6 +1400,15 @@ defineExpose({
 .comic-mode__fail-text {
   color: #ff7875;
   font-size: 0.9rem;
+}
+
+.comic-mode__fail-detail {
+  max-width: min(92%, 680px);
+  color: #8c8c8c;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  text-align: center;
+  word-break: break-word;
 }
 
 .comic-mode__error--inline {

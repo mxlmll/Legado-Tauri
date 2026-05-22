@@ -1,7 +1,7 @@
-import type { ComputedRef, Ref } from 'vue';
-import { nextTick, ref, watch } from 'vue';
-import { useTts, splitIntoSegments } from '@/composables/useTts';
-import type { PagedModeApi, ScrollModeApi } from './useReaderModeBridge';
+import type { ComputedRef, Ref } from "vue";
+import { nextTick, ref, watch } from "vue";
+import { useTts, splitIntoSegments } from "@/composables/useTts";
+import type { PagedModeApi, ScrollModeApi } from "./useReaderModeBridge";
 
 interface UseReaderTtsManagerOptions {
   activeChapterIndex: Ref<number>;
@@ -17,6 +17,7 @@ interface UseReaderTtsManagerOptions {
   pagedModeRef: Ref<PagedModeApi | null>;
   scrollModeRef: Ref<ScrollModeApi | null>;
   blockingLoading: ComputedRef<boolean>;
+  showTtsBar: Ref<boolean>;
   setPagedPage: (page: number) => void;
   fetchRawChapterText: (index: number) => Promise<string>;
   gotoNextChapter: () => Promise<void>;
@@ -25,8 +26,8 @@ interface UseReaderTtsManagerOptions {
 /** 从页面 HTML 字符串中提取所有 .reader-line 的纯文本 */
 function extractPageLines(html: string): string[] {
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  return Array.from(doc.querySelectorAll('.reader-line'))
+  const doc = parser.parseFromString(html, "text/html");
+  return Array.from(doc.querySelectorAll(".reader-line"))
     .map((el) => el.textContent.trim())
     .filter(Boolean);
 }
@@ -46,6 +47,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
     pagedModeRef,
     scrollModeRef,
     blockingLoading,
+    showTtsBar,
     setPagedPage,
     fetchRawChapterText,
     gotoNextChapter,
@@ -55,12 +57,16 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
   void _isPagedMode;
 
   const tts = useTts();
-  const ttsProgressText = ref('—');
+  const ttsProgressText = ref("—");
   const ttsScrollHighlightIdx = ref(-1);
-  const showTtsBar = ref(false);
 
   // TTS 分页模式状态（跨章节持续累计）
-  let ttsPageRanges: { page: number; chapterIdx: number; start: number; end: number }[] = [];
+  let ttsPageRanges: {
+    page: number;
+    chapterIdx: number;
+    start: number;
+    end: number;
+  }[] = [];
   let ttsFeedPage = 0;
   let ttsFeedChapter = -1;
 
@@ -102,15 +108,25 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
     ttsFeedChapter = activeChapterIndex.value;
     let globalIdx = 0;
 
-    const firstLines = extractPageLines(pages[startPage] ?? '');
-    if (firstLines.length > 0) {
+    const initialSegments: string[] = [];
+    for (let page = startPage; page < pages.length; page++) {
+      const lines = extractPageLines(pages[page] ?? "");
+      if (lines.length === 0) {
+        continue;
+      }
       ttsPageRanges.push({
-        page: startPage,
+        page,
         chapterIdx: ttsFeedChapter,
-        start: 0,
-        end: firstLines.length,
+        start: globalIdx,
+        end: globalIdx + lines.length,
       });
-      globalIdx = firstLines.length;
+      globalIdx += lines.length;
+      initialSegments.push(...lines);
+      ttsFeedPage = page;
+    }
+
+    if (initialSegments.length === 0) {
+      return null;
     }
 
     const onNeedMore = async (): Promise<string[] | null> => {
@@ -119,7 +135,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
 
       if (nextPage < currentPages.length) {
         ttsFeedPage = nextPage;
-        const lines = extractPageLines(currentPages[nextPage] ?? '');
+        const lines = extractPageLines(currentPages[nextPage] ?? "");
         if (lines.length > 0) {
           ttsPageRanges.push({
             page: nextPage,
@@ -145,7 +161,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
         return null;
       }
 
-      const lines = extractPageLines(newPages[0] ?? '');
+      const lines = extractPageLines(newPages[0] ?? "");
       if (lines.length > 0) {
         ttsPageRanges.push({
           page: 0,
@@ -166,11 +182,18 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
 
       const localIdx = gIdx - range.start;
       const total =
-        range.chapterIdx === activeChapterIndex.value ? activePagedPages.value.length : 0;
+        range.chapterIdx === activeChapterIndex.value
+          ? activePagedPages.value.length
+          : 0;
       ttsProgressText.value =
-        total > 0 ? `第 ${range.page + 1}/${total} 页` : `第 ${range.page + 1} 页`;
+        total > 0
+          ? `第 ${range.page + 1}/${total} 页`
+          : `第 ${range.page + 1} 页`;
 
-      if (range.chapterIdx === activeChapterIndex.value && range.page !== pagedPageIndex.value) {
+      if (
+        range.chapterIdx === activeChapterIndex.value &&
+        range.page !== pagedPageIndex.value
+      ) {
         setPagedPage(range.page);
       }
 
@@ -180,7 +203,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
     };
 
     return {
-      initialSegments: firstLines,
+      initialSegments,
       onNeedMore,
       onSegmentStart,
       onAllDone: () => {
@@ -195,7 +218,9 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
     ttsFeedChapter = activeChapterIndex.value;
 
     const paragraphs = content.value.split(/\n+/).filter((p) => p.trim());
-    const initialSegs = paragraphs.slice(startPara).flatMap((p) => splitIntoSegments(p));
+    const initialSegs = paragraphs
+      .slice(startPara)
+      .flatMap((p) => splitIntoSegments(p));
 
     if (initialSegs.length === 0) {
       return null;
@@ -203,13 +228,11 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
 
     const segToParaMap: number[] = [];
     for (let pi = startPara; pi < paragraphs.length; pi++) {
-      const segs = splitIntoSegments(paragraphs[pi] ?? '');
+      const segs = splitIntoSegments(paragraphs[pi] ?? "");
       for (let si = 0; si < segs.length; si++) {
         segToParaMap.push(pi);
       }
     }
-    let totalInitialSegs = initialSegs.length;
-
     const onNeedMore = async (): Promise<string[] | null> => {
       if (!hasNext.value) {
         return null;
@@ -220,12 +243,11 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
       const newParas = content.value.split(/\n+/).filter((p) => p.trim());
       const newSegs = newParas.flatMap((p) => splitIntoSegments(p));
       for (let pi = 0; pi < newParas.length; pi++) {
-        const segs = splitIntoSegments(newParas[pi] ?? '');
+        const segs = splitIntoSegments(newParas[pi] ?? "");
         for (let si = 0; si < segs.length; si++) {
           segToParaMap.push(pi);
         }
       }
-      totalInitialSegs += newSegs.length;
       return newSegs.length > 0 ? newSegs : null;
     };
 
@@ -243,8 +265,12 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
           if (!container) {
             return;
           }
-          const paras = container.querySelectorAll<HTMLElement>('.scroll-mode__para');
-          paras[paraIdx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const paras =
+            container.querySelectorAll<HTMLElement>(".scroll-mode__para");
+          paras[paraIdx]?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         });
       }
     };
@@ -281,7 +307,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
     }
 
     showTtsBar.value = true;
-    ttsProgressText.value = '—';
+    ttsProgressText.value = "—";
     tts.startReading(opts);
   }
 
@@ -293,7 +319,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
         tts.stop();
         ttsScrollHighlightIdx.value = -1;
         pagedModeRef.value?.clearTtsHighlight?.();
-        ttsProgressText.value = '—';
+        ttsProgressText.value = "—";
       }
     },
   );

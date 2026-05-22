@@ -1,76 +1,142 @@
-/**
- * useTts v2 — TTS（文字转语音）流式播放引擎
- *
- * 设计：
- * - 动态队列：调用方通过 TtsStartOptions.initialSegments 提供首批段落，
- *   队列耗尽时通过 onNeedMore 回调获取下一批（可跨章节/翻页）。
- * - 预合成：播放第 N 段时提前在后台合成 N+1 ~ N+PRELOAD_AHEAD 段。
- * - 回调驱动：onSegmentStart 通知高亮，onAllDone 通知结束，
- *   onNeedMore 获取下一批（返回 null 表示无更多内容）。
- * - 降级：invoke 失败时自动切换 speechSynthesis。
- * - 跨平台兼容：Tauri 壳与纯 Web/WS 模式均可用。
- */
+import { computed, readonly, ref } from "vue";
+import { eventListen } from "./useEventBus";
+import {
+  useFrontendPlugins,
+  type FrontendTtsEngineRecord,
+  type TtsSpeakContext,
+  type TtsVoiceDefinition,
+} from "./useFrontendPlugins";
+import { invokeWithTimeout } from "./useInvoke";
 
-import { ref, readonly } from 'vue';
-import { invokeWithTimeout } from './useInvoke';
-
-// ── 常量 ─────────────────────────────────────────────────────────────────
-
-/** 预加载窗口：播放第 N 段时，提前合成后续 PRELOAD_AHEAD 段 */
-const PRELOAD_AHEAD = 3;
-
-/** 单段最大字数（用于 splitIntoSegments 辅助函数） */
+const SYSTEM_ENGINE_ID = "system";
+const PRELOAD_AHEAD = 6;
 const MAX_SEGMENT_CHARS = 200;
-
-/** TTS 合成 invoke 超时（ms） */
-const TTS_TIMEOUT_MS = 30_000;
-
-/** 历史回退缓冲大小 */
-const MAX_HISTORY = 8;
-
-// ── 类型 ─────────────────────────────────────────────────────────────────
+const COMMAND_TIMEOUT_MS = 12_000;
+const POLL_INTERVAL_MS = 180;
+const SETTINGS_KEY = "legado.tts.settings";
 
 export interface TtsOptions {
+  engineId?: string;
+  voiceId?: string;
   voice?: string;
-  rate?: string;
-  volume?: string;
-  pitch?: string;
+  language?: string;
+  rate?: number;
+  volume?: number;
+  pitch?: number;
 }
 
-/**
- * TTS 启动选项（流式队列模式）。
- *
- * 调用方负责将文本切段，并通过 onNeedMore 回调实现跨页/跨章节的流式推进。
- */
 export interface TtsStartOptions extends TtsOptions {
-  /** 第一批要朗读的文本段落 */
   initialSegments: string[];
-  /**
-   * 队列剩余段落 <= PRELOAD_AHEAD 时调用。
-   * 返回下一批段落；返回 null 表示没有更多内容，播完后触发 onAllDone。
-   * 允许异步（例如：需要等章节加载完毕）。
-   */
   onNeedMore?: () => Promise<string[] | null>;
-  /**
-   * 每段开始播放时触发，传入该段的全局累计索引（0-based）。
-   * 用于更新 DOM 高亮、自动翻页等。
-   */
   onSegmentStart?: (globalIdx: number) => void;
-  /** 所有段落全部播完且 onNeedMore 返回 null 后触发 */
   onAllDone?: () => void;
 }
 
-// ── 段落分割工具（供外部调用方使用） ─────────────────────────────────────
+export interface TtsVoice {
+  id: string;
+  name: string;
+  language?: string;
+}
 
-/**
- * 将连续文本拆分为适合 TTS 朗读的段落数组。
- */
+export interface TtsEngineRecord {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  source: "system" | "plugin";
+  pluginId?: string;
+  fileName?: string;
+}
+
+interface QueueItem {
+  text: string;
+  globalIdx: number;
+}
+
+interface PersistedTtsSettings {
+  engineId?: string;
+  voiceId?: string;
+  playbackRate?: number;
+  volume?: number;
+  pitch?: number;
+}
+
+interface SystemTtsSpeakingState {
+  speaking: boolean;
+}
+
+interface SystemTtsSpeakPayload {
+  text: string;
+  language?: string;
+  voiceId?: string;
+  rate: number;
+  pitch: number;
+  volume: number;
+  queueMode: "flush" | "add";
+}
+
+const frontendPlugins = useFrontendPlugins();
+
+const systemEngine: TtsEngineRecord = {
+  id: SYSTEM_ENGINE_ID,
+  name: "系统 TTS",
+  description: "使用操作系统原生朗读引擎",
+  category: "内置",
+  source: "system",
+};
+
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, value));
+}
+
+function readPersistedSettings(): PersistedTtsSettings {
+  try {
+    const raw = window.localStorage?.getItem(SETTINGS_KEY);
+    return raw ? (JSON.parse(raw) as PersistedTtsSettings) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePersistedSettings(values: PersistedTtsSettings): void {
+  try {
+    window.localStorage?.setItem(SETTINGS_KEY, JSON.stringify(values));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function normalizePluginEngine(
+  record: FrontendTtsEngineRecord,
+): TtsEngineRecord {
+  return {
+    id: record.id,
+    name: record.name,
+    description: record.description,
+    category: record.category,
+    source: "plugin",
+    pluginId: record.pluginId,
+    fileName: record.fileName,
+  };
+}
+
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed;
+}
+
 export function splitIntoSegments(text: string): string[] {
   if (!text.trim()) {
     return [];
   }
-  const lines = text.split(/\n+/).filter((l) => l.trim());
-  const rawSegments: string[] = [];
+  const lines = text.split(/\n+/).filter((line) => line.trim());
+  const segments: string[] = [];
 
   for (const line of lines) {
     const parts = line.split(/(?<=[。！？…；!?])/u);
@@ -80,335 +146,616 @@ export function splitIntoSegments(text: string): string[] {
         continue;
       }
       if (trimmed.length <= MAX_SEGMENT_CHARS) {
-        rawSegments.push(trimmed);
-      } else {
-        let remaining = trimmed;
-        while (remaining.length > MAX_SEGMENT_CHARS) {
-          let cutAt = MAX_SEGMENT_CHARS;
-          for (let i = MAX_SEGMENT_CHARS - 1; i > MAX_SEGMENT_CHARS / 2; i--) {
-            if (/[。！？…；!?,，、]/.test(remaining[i])) {
-              cutAt = i + 1;
-              break;
-            }
+        segments.push(trimmed);
+        continue;
+      }
+
+      let remaining = trimmed;
+      while (remaining.length > MAX_SEGMENT_CHARS) {
+        let cutAt = MAX_SEGMENT_CHARS;
+        for (
+          let index = MAX_SEGMENT_CHARS - 1;
+          index > MAX_SEGMENT_CHARS / 2;
+          index--
+        ) {
+          if (/[。！？…；!?,，、]/.test(remaining[index])) {
+            cutAt = index + 1;
+            break;
           }
-          rawSegments.push(remaining.slice(0, cutAt).trim());
-          remaining = remaining.slice(cutAt).trim();
         }
-        if (remaining) {
-          rawSegments.push(remaining);
-        }
+        segments.push(remaining.slice(0, cutAt).trim());
+        remaining = remaining.slice(cutAt).trim();
+      }
+      if (remaining) {
+        segments.push(remaining);
       }
     }
   }
-  return rawSegments.filter((s) => s.length > 0);
+
+  return segments.filter(Boolean);
 }
 
-// ── base64 → Blob URL ────────────────────────────────────────────────────
-
-function base64ToBlobUrl(b64: string): string {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+function getBrowserSpeechVoices(): TtsVoice[] {
+  if (!("speechSynthesis" in window)) {
+    return [];
   }
-  return URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
+  return window.speechSynthesis.getVoices().map((voice) => ({
+    id: voice.voiceURI || voice.name,
+    name: voice.name,
+    language: voice.lang,
+  }));
 }
 
-// ── 全局单例状态 ─────────────────────────────────────────────────────────
-
-interface QueueItem {
-  text: string;
-  globalIdx: number;
+async function waitForBrowserVoices(): Promise<TtsVoice[]> {
+  const voices = getBrowserSpeechVoices();
+  if (voices.length > 0 || !("speechSynthesis" in window)) {
+    return voices;
+  }
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(
+      () => resolve(getBrowserSpeechVoices()),
+      800,
+    );
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.clearTimeout(timer);
+      resolve(getBrowserSpeechVoices());
+    };
+  });
 }
+
+async function stopSystemSpeech(): Promise<void> {
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+  try {
+    await invokeWithTimeout<void>("tts_stop", undefined, COMMAND_TIMEOUT_MS);
+  } catch {
+    // Browser/Web fallback may not have the native command available.
+  }
+}
+
+function waitForSystemSpeechDone(
+  signal: AbortSignal,
+  text: string,
+): Promise<void> {
+  const startedAt = Date.now();
+  const estimatedMs = clamp(text.length * 180, 1_000, 45_000);
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    let sawSpeaking = false;
+    let pollTimer: number | null = null;
+    const unlisteners: Array<() => void> = [];
+
+    const cleanup = () => {
+      if (pollTimer !== null) {
+        window.clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+      signal.removeEventListener("abort", finish);
+      for (const unlisten of unlisteners.splice(0)) {
+        unlisten();
+      }
+    };
+
+    function finish() {
+      if (resolved) {
+        return;
+      }
+      resolved = true;
+      cleanup();
+      resolve();
+    }
+
+    async function registerFinishEvent(eventName: string) {
+      try {
+        const unlisten = await eventListen(eventName, finish);
+        if (resolved) {
+          unlisten();
+        } else {
+          unlisteners.push(unlisten);
+        }
+      } catch {
+        // Some browser/Web fallback modes do not provide native TTS events.
+      }
+    }
+
+    async function pollSpeakingState() {
+      if (resolved || signal.aborted) {
+        finish();
+        return;
+      }
+
+      try {
+        const state = await invokeWithTimeout<SystemTtsSpeakingState>(
+          "tts_is_speaking",
+          undefined,
+          COMMAND_TIMEOUT_MS,
+        );
+        if (state.speaking) {
+          sawSpeaking = true;
+        }
+        if (sawSpeaking && !state.speaking) {
+          finish();
+          return;
+        }
+      } catch {
+        // Keep the estimated timer path alive when polling is unavailable.
+      }
+
+      if (!sawSpeaking && Date.now() - startedAt > estimatedMs) {
+        finish();
+        return;
+      }
+      pollTimer = window.setTimeout(pollSpeakingState, POLL_INTERVAL_MS);
+    }
+
+    signal.addEventListener("abort", finish, { once: true });
+    void registerFinishEvent("tts://speech:finish");
+    void registerFinishEvent("tts://speech:cancel");
+    pollTimer = window.setTimeout(pollSpeakingState, POLL_INTERVAL_MS);
+  });
+}
+
+async function speakWithBrowserSpeech(
+  text: string,
+  options: Required<Pick<TtsOptions, "rate" | "volume" | "pitch">> & {
+    voiceId?: string;
+    language?: string;
+  },
+  signal: AbortSignal,
+): Promise<void> {
+  if (!("speechSynthesis" in window)) {
+    throw new Error("当前环境没有可用的系统朗读引擎");
+  }
+
+  await waitForBrowserVoices();
+  if (signal.aborted) {
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    const voice = voices.find(
+      (item) =>
+        item.voiceURI === options.voiceId || item.name === options.voiceId,
+    );
+    if (voice) {
+      utterance.voice = voice;
+      utterance.lang = voice.lang;
+    } else if (options.language) {
+      utterance.lang = options.language;
+    }
+    utterance.rate = clamp(options.rate, 0.1, 4);
+    utterance.volume = clamp(options.volume, 0, 1);
+    utterance.pitch = clamp(options.pitch, 0.5, 2);
+
+    const cleanup = () => {
+      utterance.onend = null;
+      utterance.onerror = null;
+    };
+    utterance.onend = () => {
+      cleanup();
+      resolve();
+    };
+    utterance.onerror = (event) => {
+      cleanup();
+      reject(new Error(`浏览器朗读失败: ${event.error}`));
+    };
+    signal.addEventListener(
+      "abort",
+      () => {
+        cleanup();
+        window.speechSynthesis.cancel();
+        resolve();
+      },
+      { once: true },
+    );
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
+async function speakWithSystemEngine(
+  text: string,
+  context: TtsSpeakContext,
+): Promise<void> {
+  const payload: SystemTtsSpeakPayload = {
+    text,
+    language: context.language,
+    voiceId: context.voiceId,
+    rate: context.rate,
+    pitch: context.pitch,
+    volume: context.volume,
+    queueMode: "flush",
+  };
+
+  const waitController = new AbortController();
+  const abortWait = () => waitController.abort();
+  context.signal.addEventListener("abort", abortWait, { once: true });
+  const done = waitForSystemSpeechDone(waitController.signal, text);
+
+  try {
+    await invokeWithTimeout("tts_speak", { payload }, COMMAND_TIMEOUT_MS);
+    await done;
+  } catch (error) {
+    waitController.abort();
+    if (context.signal.aborted) {
+      return;
+    }
+    await speakWithBrowserSpeech(text, context, context.signal).catch(() => {
+      throw error;
+    });
+  } finally {
+    context.signal.removeEventListener("abort", abortWait);
+  }
+}
+
+function normalizePluginVoices(value: TtsVoiceDefinition[]): TtsVoice[] {
+  return value.map((voice) => ({
+    id: voice.id,
+    name: voice.name,
+    language: voice.language,
+  }));
+}
+
+const persisted = readPersistedSettings();
 
 const isPlaying = ref(false);
 const isLoading = ref(false);
-const playbackRate = ref(1.0);
+const hasSession = ref(false);
+const playbackRate = ref(clamp(persisted.playbackRate ?? 1, 0.5, 2));
+const volume = ref(clamp(persisted.volume ?? 1, 0, 1));
+const pitch = ref(clamp(persisted.pitch ?? 1, 0.5, 2));
 const error = ref<string | null>(null);
 const currentGlobalIdx = ref(-1);
+const currentSegmentIndex = ref(0);
+const totalSegmentsKnown = ref(0);
+const totalFinalized = ref(false);
+const currentSegmentText = ref("");
+const selectedEngineId = ref(nonEmpty(persisted.engineId) ?? SYSTEM_ENGINE_ID);
+const selectedVoiceId = ref(nonEmpty(persisted.voiceId) ?? "");
+const availableVoices = ref<TtsVoice[]>([]);
+const voicesLoading = ref(false);
 
-/** 待播放队列 */
-const queue: QueueItem[] = [];
-/** 已播放历史，用于 prevSegment */
-const playedHistory: QueueItem[] = [];
-/** 正在播放中的当前条目 */
-let currentItem: QueueItem | null = null;
+const availableEngines = computed<TtsEngineRecord[]>(() => [
+  systemEngine,
+  ...frontendPlugins.ttsEngines.value.map(normalizePluginEngine),
+]);
+const selectedEngine = computed(
+  () =>
+    availableEngines.value.find(
+      (engine) => engine.id === selectedEngineId.value,
+    ) ?? systemEngine,
+);
+const currentSegmentOrdinal = computed(() =>
+  totalSegmentsKnown.value > 0
+    ? Math.min(currentSegmentIndex.value + 1, totalSegmentsKnown.value)
+    : 0,
+);
+const progressRatio = computed(() => {
+  if (totalSegmentsKnown.value <= 0) {
+    return 0;
+  }
+  return currentSegmentOrdinal.value / totalSegmentsKnown.value;
+});
 
-/** Blob URL 缓存：globalIdx → URL */
-const blobUrlCache = new Map<number, string>();
-/** 合成中 Promise，防止重复请求 */
-const synthInFlight = new Map<number, Promise<string | null>>();
-
+const items: QueueItem[] = [];
 let nextGlobalIdx = 0;
+let playIndex = 0;
 let activeOptions: TtsStartOptions | null = null;
-let audioEl: HTMLAudioElement | null = null;
-let speechSynthesisFallback = false;
-let stopped = false;
 let loadingMore = false;
-/** 当 loadMore 完成时 resolve 的 Promise，用于 playNext 等待 */
-let loadMoreResolve: (() => void) | null = null;
+let endReached = false;
+let loadMorePromise: Promise<void> | null = null;
+let currentAbort: AbortController | null = null;
+let playGeneration = 0;
 
-// ── speechSynthesis 降级 ─────────────────────────────────────────────────
-
-function cancelSpeechSynthesis(): void {
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
-  }
+function saveCurrentSettings(): void {
+  writePersistedSettings({
+    engineId: selectedEngineId.value,
+    voiceId: selectedVoiceId.value,
+    playbackRate: playbackRate.value,
+    volume: volume.value,
+    pitch: pitch.value,
+  });
 }
 
-// ── 合成 ─────────────────────────────────────────────────────────────────
-
-async function synthesizeItem(item: QueueItem): Promise<string | null> {
-  const { globalIdx, text } = item;
-  if (blobUrlCache.has(globalIdx)) {
-    return blobUrlCache.get(globalIdx)!;
-  }
-  if (synthInFlight.has(globalIdx)) {
-    return synthInFlight.get(globalIdx)!;
-  }
-  if (speechSynthesisFallback) {
-    return null;
-  }
-
-  const opts = activeOptions;
-  const p = (async (): Promise<string | null> => {
-    try {
-      const b64 = await invokeWithTimeout<string>(
-        'tts_synthesize',
-        {
-          text,
-          voice: opts?.voice,
-          rate: opts?.rate,
-          volume: opts?.volume,
-          pitch: opts?.pitch,
-        },
-        TTS_TIMEOUT_MS,
-      );
-      const url = base64ToBlobUrl(b64);
-      blobUrlCache.set(globalIdx, url);
-      return url;
-    } catch (e) {
-      console.warn('[TTS] 后端合成失败，切换降级模式', e);
-      speechSynthesisFallback = true;
-      return null;
-    } finally {
-      synthInFlight.delete(globalIdx);
-    }
-  })();
-  synthInFlight.set(globalIdx, p);
-  return p;
+function syncProgressRefs(): void {
+  currentSegmentIndex.value = Math.max(0, playIndex);
+  totalSegmentsKnown.value = items.length;
+  totalFinalized.value = endReached;
 }
 
-/** 预合成队列前 PRELOAD_AHEAD 个段落 */
-function triggerPreload(): void {
-  for (let i = 0; i < Math.min(PRELOAD_AHEAD, queue.length); i++) {
-    const item = queue[i];
-    if (!blobUrlCache.has(item.globalIdx) && !synthInFlight.has(item.globalIdx)) {
-      void synthesizeItem(item);
+function appendSegments(segments: string[]): void {
+  for (const text of segments) {
+    const trimmed = text.trim();
+    if (trimmed) {
+      items.push({ text: trimmed, globalIdx: nextGlobalIdx++ });
     }
   }
+  syncProgressRefs();
 }
 
-// ── 加载更多 ─────────────────────────────────────────────────────────────
-
-async function maybeLoadMore(): Promise<void> {
-  if (loadingMore || !activeOptions?.onNeedMore) {
-    return;
-  }
-  if (queue.length > PRELOAD_AHEAD) {
-    return;
+async function loadMore(): Promise<void> {
+  if (loadingMore || endReached || !activeOptions?.onNeedMore) {
+    return loadMorePromise ?? Promise.resolve();
   }
 
   loadingMore = true;
-  try {
-    const more = await activeOptions.onNeedMore();
-    if (more && more.length > 0) {
-      for (const text of more) {
-        queue.push({ text, globalIdx: nextGlobalIdx++ });
+  isLoading.value = true;
+  loadMorePromise = (async () => {
+    try {
+      const more = await activeOptions?.onNeedMore?.();
+      if (more && more.length > 0) {
+        appendSegments(more);
+      } else {
+        endReached = true;
+        syncProgressRefs();
       }
-      triggerPreload();
+    } finally {
+      loadingMore = false;
+      isLoading.value = false;
+      loadMorePromise = null;
     }
-    // null → 无更多，playNext 会处理队列为空的情况
-  } finally {
-    loadingMore = false;
-    loadMoreResolve?.();
-    loadMoreResolve = null;
+  })();
+  return loadMorePromise;
+}
+
+function maybeLoadMore(): void {
+  if (!activeOptions?.onNeedMore || endReached || loadingMore) {
+    return;
+  }
+  if (items.length - playIndex <= PRELOAD_AHEAD) {
+    void loadMore();
   }
 }
 
-// ── 播放核心 ─────────────────────────────────────────────────────────────
+async function ensurePlayableItem(
+  generation: number,
+): Promise<QueueItem | null> {
+  for (;;) {
+    if (generation !== playGeneration || !hasSession.value) {
+      return null;
+    }
+    if (playIndex < items.length) {
+      break;
+    }
+    if (endReached || !activeOptions?.onNeedMore) {
+      return null;
+    }
+    await loadMore();
+  }
+  return items[playIndex] ?? null;
+}
 
-async function playNext(): Promise<void> {
-  if (stopped || !isPlaying.value) {
+function interruptCurrentSpeech(): void {
+  currentAbort?.abort();
+  currentAbort = null;
+  const engineId = selectedEngine.value.id;
+  if (engineId === SYSTEM_ENGINE_ID) {
+    void stopSystemSpeech();
+  } else {
+    void frontendPlugins.stopTtsEngine(engineId).catch(() => {});
+  }
+}
+
+function buildSpeakContext(signal: AbortSignal): TtsSpeakContext {
+  const voice = availableVoices.value.find(
+    (item) => item.id === selectedVoiceId.value,
+  );
+  return {
+    text: currentSegmentText.value,
+    voiceId:
+      nonEmpty(selectedVoiceId.value) ??
+      nonEmpty(activeOptions?.voiceId) ??
+      nonEmpty(activeOptions?.voice),
+    language:
+      nonEmpty(activeOptions?.language) ?? nonEmpty(voice?.language) ?? "zh-CN",
+    rate: playbackRate.value,
+    pitch: pitch.value,
+    volume: volume.value,
+    signal,
+  };
+}
+
+async function speakCurrentItem(
+  item: QueueItem,
+  signal: AbortSignal,
+): Promise<void> {
+  currentSegmentText.value = item.text;
+  const context = buildSpeakContext(signal);
+  context.text = item.text;
+
+  if (selectedEngine.value.id === SYSTEM_ENGINE_ID) {
+    await speakWithSystemEngine(item.text, context);
     return;
   }
+  await frontendPlugins.speakWithTtsEngine(selectedEngine.value.id, context);
+}
 
-  // 触发后台加载（不等待）
-  void maybeLoadMore();
+function finishAll(): void {
+  isPlaying.value = false;
+  hasSession.value = false;
+  currentGlobalIdx.value = -1;
+  currentSegmentText.value = "";
+  activeOptions?.onAllDone?.();
+}
 
-  // 队列为空时等待加载
-  if (queue.length === 0) {
-    if (loadingMore) {
+async function playLoop(generation: number): Promise<void> {
+  for (;;) {
+    if (
+      generation !== playGeneration ||
+      !hasSession.value ||
+      !isPlaying.value
+    ) {
+      return;
+    }
+    const item = await ensurePlayableItem(generation);
+    if (!item) {
+      if (generation === playGeneration && hasSession.value) {
+        finishAll();
+      }
+      return;
+    }
+
+    currentGlobalIdx.value = item.globalIdx;
+    playIndex = items.findIndex(
+      (candidate) => candidate.globalIdx === item.globalIdx,
+    );
+    if (playIndex < 0) {
+      playIndex = item.globalIdx;
+    }
+    syncProgressRefs();
+    activeOptions?.onSegmentStart?.(item.globalIdx);
+    maybeLoadMore();
+
+    const controller = new AbortController();
+    currentAbort = controller;
+    const loadingTimer = window.setTimeout(() => {
+      if (generation === playGeneration && currentAbort === controller) {
+        isLoading.value = false;
+      }
+    }, 450);
+
+    try {
       isLoading.value = true;
-      await new Promise<void>((resolve) => {
-        loadMoreResolve = resolve;
-      });
+      error.value = null;
+      await speakCurrentItem(item, controller.signal);
+    } catch (err) {
+      if (!controller.signal.aborted && generation === playGeneration) {
+        error.value = err instanceof Error ? err.message : String(err);
+        isPlaying.value = false;
+        return;
+      }
+    } finally {
+      window.clearTimeout(loadingTimer);
+      if (currentAbort === controller) {
+        currentAbort = null;
+      }
       isLoading.value = false;
     }
-    if (stopped || !isPlaying.value) {
+
+    if (
+      controller.signal.aborted ||
+      generation !== playGeneration ||
+      !isPlaying.value
+    ) {
       return;
     }
-    if (queue.length === 0) {
-      // 确实没有更多内容
-      isPlaying.value = false;
-      activeOptions?.onAllDone?.();
-      return;
-    }
+    playIndex += 1;
+    syncProgressRefs();
   }
+}
 
-  const item = queue.shift()!;
-  currentItem = item;
-  currentGlobalIdx.value = item.globalIdx;
-  activeOptions?.onSegmentStart?.(item.globalIdx);
-
-  // 推入历史
-  playedHistory.push(item);
-  if (playedHistory.length > MAX_HISTORY) {
-    playedHistory.shift();
-  }
-
-  if (speechSynthesisFallback) {
-    const utter = new SpeechSynthesisUtterance(item.text);
-    utter.rate = playbackRate.value;
-    utter.onend = () => {
-      currentItem = null;
-      if (!stopped && isPlaying.value) {
-        void playNext();
-      }
-    };
-    utter.onerror = () => {
-      currentItem = null;
-      if (!stopped && isPlaying.value) {
-        void playNext();
-      }
-    };
-    window.speechSynthesis?.speak(utter);
+function restartPlaybackIfNeeded(wasPlaying: boolean): void {
+  if (!hasSession.value) {
     return;
   }
-
-  isLoading.value = true;
-  error.value = null;
-  const url = await synthesizeItem(item);
-  isLoading.value = false;
-  if (stopped || !isPlaying.value) {
+  if (!wasPlaying) {
+    syncProgressRefs();
+    const item = items[playIndex];
+    if (item) {
+      currentGlobalIdx.value = item.globalIdx;
+      activeOptions?.onSegmentStart?.(item.globalIdx);
+    }
     return;
   }
+  isPlaying.value = true;
+  const generation = ++playGeneration;
+  void playLoop(generation);
+}
 
-  if (!url) {
-    // 合成失败降级
-    const utter = new SpeechSynthesisUtterance(item.text);
-    utter.rate = playbackRate.value;
-    utter.onend = () => {
-      currentItem = null;
-      if (!stopped && isPlaying.value) {
-        void playNext();
-      }
-    };
-    window.speechSynthesis?.speak(utter);
-    return;
+async function refreshEngines(): Promise<void> {
+  await frontendPlugins.ensureInitialized();
+  if (
+    !availableEngines.value.some(
+      (engine) => engine.id === selectedEngineId.value,
+    )
+  ) {
+    selectedEngineId.value = SYSTEM_ENGINE_ID;
+    selectedVoiceId.value = "";
+    saveCurrentSettings();
   }
+}
 
-  const audio = new Audio(url);
-  audioEl = audio;
-  audio.playbackRate = playbackRate.value;
-  audio.onended = () => {
-    currentItem = null;
-    audioEl = null;
-    if (!stopped && isPlaying.value) {
-      void playNext();
-    }
-  };
-  audio.onerror = () => {
-    currentItem = null;
-    audioEl = null;
-    error.value = '音频播放出错';
-    if (!stopped && isPlaying.value) {
-      void playNext();
-    }
-  };
+async function loadVoices(): Promise<void> {
+  voicesLoading.value = true;
   try {
-    await audio.play();
-  } catch (e) {
-    error.value = `播放失败: ${e}`;
-    if (!stopped && isPlaying.value) {
-      void playNext();
+    await refreshEngines();
+    if (selectedEngine.value.id === SYSTEM_ENGINE_ID) {
+      try {
+        const voices = await invokeWithTimeout<TtsVoice[]>(
+          "tts_get_voices",
+          { language: undefined },
+          COMMAND_TIMEOUT_MS,
+        );
+        availableVoices.value = voices;
+      } catch {
+        availableVoices.value = await waitForBrowserVoices();
+      }
+    } else {
+      availableVoices.value = normalizePluginVoices(
+        await frontendPlugins.getTtsEngineVoices(selectedEngine.value.id),
+      );
     }
+
+    if (
+      selectedVoiceId.value &&
+      !availableVoices.value.some((voice) => voice.id === selectedVoiceId.value)
+    ) {
+      selectedVoiceId.value = "";
+      saveCurrentSettings();
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+    availableVoices.value = [];
+  } finally {
+    voicesLoading.value = false;
   }
 }
 
-// ── 清理 ─────────────────────────────────────────────────────────────────
-
-function clearAudio(): void {
-  if (audioEl) {
-    audioEl.pause();
-    audioEl.onended = null;
-    audioEl.onerror = null;
-    audioEl = null;
-  }
-  cancelSpeechSynthesis();
-}
-
-function revokeBlobUrls(): void {
-  for (const url of blobUrlCache.values()) {
-    URL.revokeObjectURL(url);
-  }
-  blobUrlCache.clear();
-  synthInFlight.clear();
-}
-
-// ── 公开 API ─────────────────────────────────────────────────────────────
-
-/**
- * 开始朗读。调用方通过 TtsStartOptions 提供段落和回调。
- */
 function startReading(options: TtsStartOptions): void {
   stop();
-  stopped = false;
-  speechSynthesisFallback = false;
   activeOptions = options;
-  nextGlobalIdx = 0;
-  currentGlobalIdx.value = -1;
-  error.value = null;
-  currentItem = null;
-  playedHistory.length = 0;
-
-  for (const text of options.initialSegments) {
-    queue.push({ text, globalIdx: nextGlobalIdx++ });
+  if (options.engineId) {
+    selectedEngineId.value = options.engineId;
   }
-  triggerPreload();
+  const nextVoiceId = nonEmpty(options.voiceId) ?? nonEmpty(options.voice);
+  if (nextVoiceId) {
+    selectedVoiceId.value = nextVoiceId;
+  }
+  if (typeof options.rate === "number") {
+    playbackRate.value = clamp(options.rate, 0.5, 2);
+  }
+  if (typeof options.volume === "number") {
+    volume.value = clamp(options.volume, 0, 1);
+  }
+  if (typeof options.pitch === "number") {
+    pitch.value = clamp(options.pitch, 0.5, 2);
+  }
+  saveCurrentSettings();
+
+  nextGlobalIdx = 0;
+  playIndex = 0;
+  endReached = false;
+  items.length = 0;
+  appendSegments(options.initialSegments);
+  hasSession.value = true;
   isPlaying.value = true;
-  void playNext();
+  error.value = null;
+  void loadVoices();
+  const generation = ++playGeneration;
+  void playLoop(generation);
 }
 
 function play(): void {
-  if (isPlaying.value) {
-    return;
-  }
-  if (!activeOptions && queue.length === 0) {
+  if (!hasSession.value || isPlaying.value) {
     return;
   }
   isPlaying.value = true;
-  if (currentItem) {
-    // 恢复暂停的音频
-    if (audioEl) {
-      audioEl.play().catch(() => {});
-      return;
-    }
-    // 音频已清除，重新播放当前 item
-    queue.unshift(currentItem);
-    currentItem = null;
-  }
-  void playNext();
+  const generation = ++playGeneration;
+  void playLoop(generation);
 }
 
 function pause(): void {
@@ -416,73 +763,169 @@ function pause(): void {
     return;
   }
   isPlaying.value = false;
-  if (audioEl) {
-    audioEl.pause();
-  }
-  cancelSpeechSynthesis();
+  playGeneration += 1;
+  interruptCurrentSpeech();
 }
 
 function stop(): void {
-  stopped = true;
+  playGeneration += 1;
+  interruptCurrentSpeech();
   isPlaying.value = false;
   isLoading.value = false;
+  hasSession.value = false;
   error.value = null;
-  clearAudio();
-  revokeBlobUrls();
-  queue.length = 0;
-  playedHistory.length = 0;
-  currentItem = null;
-  activeOptions = null;
   currentGlobalIdx.value = -1;
+  currentSegmentIndex.value = 0;
+  totalSegmentsKnown.value = 0;
+  totalFinalized.value = false;
+  currentSegmentText.value = "";
+  activeOptions = null;
   loadingMore = false;
-  loadMoreResolve?.();
-  loadMoreResolve = null;
+  endReached = false;
+  loadMorePromise = null;
+  nextGlobalIdx = 0;
+  playIndex = 0;
+  items.length = 0;
 }
 
 function nextSegment(): void {
-  clearAudio();
-  currentItem = null;
-  if (isPlaying.value) {
-    void playNext();
+  if (!hasSession.value) {
+    return;
   }
+  const wasPlaying = isPlaying.value;
+  isPlaying.value = false;
+  playGeneration += 1;
+  interruptCurrentSpeech();
+  playIndex = endReached
+    ? Math.min(playIndex + 1, Math.max(items.length - 1, 0))
+    : playIndex + 1;
+  restartPlaybackIfNeeded(wasPlaying);
 }
 
 function prevSegment(): void {
-  if (playedHistory.length < 2) {
+  if (!hasSession.value) {
     return;
   }
-  // 当前已在 history 末尾，取倒数第二个
-  const current = playedHistory.pop()!;
-  const prev = playedHistory[playedHistory.length - 1];
-  // 放回队列头
-  if (currentItem) {
-    queue.unshift(currentItem);
+  const wasPlaying = isPlaying.value;
+  isPlaying.value = false;
+  playGeneration += 1;
+  interruptCurrentSpeech();
+  playIndex = Math.max(0, playIndex - 1);
+  restartPlaybackIfNeeded(wasPlaying);
+}
+
+function seekToIndex(index: number): void {
+  if (!hasSession.value || items.length === 0) {
+    return;
   }
-  queue.unshift(current);
-  queue.unshift(prev);
-  currentItem = null;
-  clearAudio();
-  if (isPlaying.value) {
-    void playNext();
-  }
+  const wasPlaying = isPlaying.value;
+  isPlaying.value = false;
+  playGeneration += 1;
+  interruptCurrentSpeech();
+  playIndex = Math.max(0, Math.min(Math.round(index), items.length - 1));
+  restartPlaybackIfNeeded(wasPlaying);
 }
 
 function setPlaybackRate(rate: number): void {
-  playbackRate.value = rate;
-  if (audioEl) {
-    audioEl.playbackRate = rate;
+  playbackRate.value = clamp(rate, 0.5, 2);
+  saveCurrentSettings();
+  if (isPlaying.value) {
+    const index = playIndex;
+    pause();
+    playIndex = index;
+    play();
   }
 }
 
-// ── 导出 ─────────────────────────────────────────────────────────────────
+function setVolume(nextVolume: number): void {
+  volume.value = clamp(nextVolume, 0, 1);
+  saveCurrentSettings();
+}
+
+function setPitch(nextPitch: number): void {
+  pitch.value = clamp(nextPitch, 0.5, 2);
+  saveCurrentSettings();
+}
+
+async function setEngineId(engineId: string): Promise<void> {
+  await refreshEngines();
+  const nextEngineId = availableEngines.value.some(
+    (engine) => engine.id === engineId,
+  )
+    ? engineId
+    : SYSTEM_ENGINE_ID;
+  if (selectedEngineId.value === nextEngineId) {
+    return;
+  }
+
+  const wasPlaying = isPlaying.value;
+  isPlaying.value = false;
+  playGeneration += 1;
+  interruptCurrentSpeech();
+  selectedEngineId.value = nextEngineId;
+  selectedVoiceId.value = "";
+  saveCurrentSettings();
+  await loadVoices();
+  restartPlaybackIfNeeded(wasPlaying);
+}
+
+function setVoiceId(voiceId: string): void {
+  selectedVoiceId.value = voiceId;
+  saveCurrentSettings();
+}
+
+async function previewVoice(voiceId = selectedVoiceId.value): Promise<void> {
+  if (!voiceId) {
+    return;
+  }
+  if (selectedEngine.value.id === SYSTEM_ENGINE_ID) {
+    try {
+      await invokeWithTimeout(
+        "tts_preview_voice",
+        { voiceId, text: "这是一段系统朗读试听。" },
+        COMMAND_TIMEOUT_MS,
+      );
+    } catch {
+      await speakWithBrowserSpeech(
+        "这是一段系统朗读试听。",
+        {
+          voiceId,
+          language: availableVoices.value.find((voice) => voice.id === voiceId)
+            ?.language,
+          rate: playbackRate.value,
+          volume: volume.value,
+          pitch: pitch.value,
+        },
+        new AbortController().signal,
+      );
+    }
+    return;
+  }
+  await frontendPlugins.previewTtsEngineVoice(selectedEngine.value.id, voiceId);
+}
 
 export function useTts() {
   return {
     isPlaying: readonly(isPlaying),
     isLoading: readonly(isLoading),
+    hasSession: readonly(hasSession),
     playbackRate: readonly(playbackRate),
+    volume: readonly(volume),
+    pitch: readonly(pitch),
     currentGlobalIdx: readonly(currentGlobalIdx),
+    currentSegmentIndex: readonly(currentSegmentIndex),
+    currentSegmentOrdinal,
+    currentSegmentText: readonly(currentSegmentText),
+    totalSegmentsKnown: readonly(totalSegmentsKnown),
+    totalFinalized: readonly(totalFinalized),
+    progressRatio,
     error: readonly(error),
+    availableEngines,
+    selectedEngine,
+    selectedEngineId: readonly(selectedEngineId),
+    availableVoices: readonly(availableVoices),
+    selectedVoiceId: readonly(selectedVoiceId),
+    voicesLoading: readonly(voicesLoading),
 
     startReading,
     play,
@@ -490,6 +933,14 @@ export function useTts() {
     stop,
     nextSegment,
     prevSegment,
+    seekToIndex,
     setPlaybackRate,
+    setVolume,
+    setPitch,
+    setEngineId,
+    setVoiceId,
+    refreshEngines,
+    loadVoices,
+    previewVoice,
   };
 }

@@ -1,4 +1,4 @@
-import type { ExtensionMeta } from '@/composables/useExtension';
+import type { ExtensionMeta } from "@/composables/useExtension";
 import type {
   RuntimeReaderThemeDefinition,
   RuntimeReaderBackgroundDefinition,
@@ -6,7 +6,8 @@ import type {
   RuntimeBookshelfActionDefinition,
   RuntimeReaderContextActionDefinition,
   RuntimeCoverGeneratorDefinition,
-} from './pluginNormalizer';
+  RuntimeTtsEngineDefinition,
+} from "./pluginNormalizer";
 import type {
   FrontendPluginRecord,
   ReaderPluginSlot,
@@ -16,7 +17,7 @@ import type {
   CleanupFn,
   ReaderSessionListener,
   PluginSettingsDefinition,
-} from './pluginTypes';
+} from "./pluginTypes";
 
 export interface MountedSlotRecord {
   host: HTMLElement;
@@ -38,4 +39,5 @@ export interface RuntimePluginRecord extends FrontendPluginRecord {
   bookshelfActions: RuntimeBookshelfActionDefinition[];
   readerContextActions: RuntimeReaderContextActionDefinition[];
   coverGenerators: RuntimeCoverGeneratorDefinition[];
+  ttsEngines: RuntimeTtsEngineDefinition[];
 }

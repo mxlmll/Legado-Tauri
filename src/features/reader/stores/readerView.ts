@@ -53,9 +53,13 @@ export interface ReaderViewBindings {
   nextScrollChapterTitle: ValueSource<string>;
   nextScrollChapterLoading: ValueSource<boolean>;
   prevComicChapterContent: ValueSource<string>;
+  prevComicChapterIndex: ValueSource<number>;
+  prevComicChapterUrl: ValueSource<string>;
   prevComicChapterTitle: ValueSource<string>;
   prevComicChapterLoading: ValueSource<boolean>;
   nextComicChapterContent: ValueSource<string>;
+  nextComicChapterIndex: ValueSource<number>;
+  nextComicChapterUrl: ValueSource<string>;
   nextComicChapterTitle: ValueSource<string>;
   nextComicChapterLoading: ValueSource<boolean>;
   contentRefs: ReaderContentRefs;
@@ -172,6 +176,12 @@ export const useReaderViewStore = defineStore("readerView", () => {
   const prevComicChapterContent = computed(() =>
     readSource(bindings.value?.prevComicChapterContent, ""),
   );
+  const prevComicChapterIndex = computed(() =>
+    readSource(bindings.value?.prevComicChapterIndex, -1),
+  );
+  const prevComicChapterUrl = computed(() =>
+    readSource(bindings.value?.prevComicChapterUrl, ""),
+  );
   const prevComicChapterTitle = computed(() =>
     readSource(bindings.value?.prevComicChapterTitle, ""),
   );
@@ -180,6 +190,12 @@ export const useReaderViewStore = defineStore("readerView", () => {
   );
   const nextComicChapterContent = computed(() =>
     readSource(bindings.value?.nextComicChapterContent, ""),
+  );
+  const nextComicChapterIndex = computed(() =>
+    readSource(bindings.value?.nextComicChapterIndex, -1),
+  );
+  const nextComicChapterUrl = computed(() =>
+    readSource(bindings.value?.nextComicChapterUrl, ""),
   );
   const nextComicChapterTitle = computed(() =>
     readSource(bindings.value?.nextComicChapterTitle, ""),
@@ -238,9 +254,13 @@ export const useReaderViewStore = defineStore("readerView", () => {
     nextScrollChapterTitle,
     nextScrollChapterLoading,
     prevComicChapterContent,
+    prevComicChapterIndex,
+    prevComicChapterUrl,
     prevComicChapterTitle,
     prevComicChapterLoading,
     nextComicChapterContent,
+    nextComicChapterIndex,
+    nextComicChapterUrl,
     nextComicChapterTitle,
     nextComicChapterLoading,
     contentRefs,

@@ -4,11 +4,13 @@
 <script setup lang="ts">
 import { Bookmark } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import { isMobile } from '@/composables/useEnv';
 import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
 import ReaderSourceSwitchBridge from '@/features/reader/components/ReaderSourceSwitchBridge.vue';
 import {
   useReaderActionsStore,
+  useReaderSettingsStore,
   useReaderSessionStore,
   useReaderUiStore,
   useReaderViewStore,
@@ -19,6 +21,7 @@ import ReaderTopBar from '../reader/ReaderTopBar.vue';
 import TtsControlBar from '../reader/TtsControlBar.vue';
 
 const readerActionsStore = useReaderActionsStore();
+const readerSettingsStore = useReaderSettingsStore();
 const readerUiStore = useReaderUiStore();
 const readerSessionStore = useReaderSessionStore();
 const readerViewStore = useReaderViewStore();
@@ -51,6 +54,12 @@ const {
   ttsProgressText,
 } = storeToRefs(readerViewStore);
 const bottomBarRef = ref<InstanceType<typeof ReaderBottomBar> | null>(null);
+const showTopBar = computed(
+  () =>
+    showMenu.value &&
+    !settingsVisible.value &&
+    !(isMobile.value && readerSettingsStore.settings.hideTopBarOnMobile),
+);
 
 function closeSettings() {
   bottomBarRef.value?.closeSettings();
@@ -88,7 +97,7 @@ defineExpose({ closeSettings });
   <!-- 顶部工具栏 -->
   <Transition name="reader-slide-top">
     <ReaderTopBar
-      v-if="showMenu && !settingsVisible"
+      v-if="showTopBar"
       :chapter-name="currentChapterName"
       :current-index="readingChapterIndex"
       :total-chapters="chapters.length"

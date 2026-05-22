@@ -161,9 +161,13 @@ interface UseReaderModalHostOptions {
   nextScrollChapterTitle: Ref<string>;
   nextScrollChapterLoading: Ref<boolean>;
   prevComicChapterContent: Ref<string>;
+  prevComicChapterIndex: Ref<number>;
+  prevComicChapterUrl: Ref<string>;
   prevComicChapterTitle: Ref<string>;
   prevComicChapterLoading: Ref<boolean>;
   nextComicChapterContent: Ref<string>;
+  nextComicChapterIndex: Ref<number>;
+  nextComicChapterUrl: Ref<string>;
   nextComicChapterTitle: Ref<string>;
   nextComicChapterLoading: Ref<boolean>;
   contentRefs: Record<string, unknown>;
@@ -308,9 +312,13 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
     nextScrollChapterTitle: options.nextScrollChapterTitle,
     nextScrollChapterLoading: options.nextScrollChapterLoading,
     prevComicChapterContent: options.prevComicChapterContent,
+    prevComicChapterIndex: options.prevComicChapterIndex,
+    prevComicChapterUrl: options.prevComicChapterUrl,
     prevComicChapterTitle: options.prevComicChapterTitle,
     prevComicChapterLoading: options.prevComicChapterLoading,
     nextComicChapterContent: options.nextComicChapterContent,
+    nextComicChapterIndex: options.nextComicChapterIndex,
+    nextComicChapterUrl: options.nextComicChapterUrl,
     nextComicChapterTitle: options.nextComicChapterTitle,
     nextComicChapterLoading: options.nextComicChapterLoading,
     contentRefs: options.contentRefs,

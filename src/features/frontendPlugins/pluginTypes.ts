@@ -1,45 +1,56 @@
-import type { ReaderBookInfo, ReaderTheme } from '@/components/reader/types';
-import type { PatchShelfBookPayload, ShelfBook } from '@/composables/useBookshelf';
-import type { PluginStorageApi } from './pluginStorage';
+import type { ReaderBookInfo, ReaderTheme } from "@/components/reader/types";
+import type {
+  PatchShelfBookPayload,
+  ShelfBook,
+} from "@/composables/useBookshelf";
+import type { PluginStorageApi } from "./pluginStorage";
 
 export type ReaderPluginSlot =
-  | 'background'
-  | 'overlay-top-left'
-  | 'overlay-top-right'
-  | 'overlay-bottom-left'
-  | 'overlay-bottom-right';
+  | "background"
+  | "overlay-top-left"
+  | "overlay-top-right"
+  | "overlay-bottom-left"
+  | "overlay-bottom-right";
 
 export type ReaderContentHookStage =
-  | 'reader.content.raw'
-  | 'reader.content.cleaned'
-  | 'reader.content.beforePaginate'
-  | 'reader.content.beforeRender';
+  | "reader.content.raw"
+  | "reader.content.cleaned"
+  | "reader.content.beforePaginate"
+  | "reader.content.beforeRender";
 
 export type ReaderLifecycleHook =
-  | 'reader.session.enter'
-  | 'reader.session.exit'
-  | 'reader.session.pause'
-  | 'reader.session.resume'
-  | 'reader.chapter.change';
+  | "reader.session.enter"
+  | "reader.session.exit"
+  | "reader.session.pause"
+  | "reader.session.resume"
+  | "reader.chapter.change";
 
-export type FrontendPluginHookName = ReaderContentHookStage | ReaderLifecycleHook;
+export type FrontendPluginHookName =
+  | ReaderContentHookStage
+  | ReaderLifecycleHook;
 
 export type PluginSettingScalar = string | number | boolean;
 export type PluginSettingValue = PluginSettingScalar | string[];
-export type ChineseConvertMode = 's2t' | 's2tw' | 's2hk' | 't2s' | 'tw2s' | 'hk2s';
+export type ChineseConvertMode =
+  | "s2t"
+  | "s2tw"
+  | "s2hk"
+  | "t2s"
+  | "tw2s"
+  | "hk2s";
 export type PluginSettingInputType =
-  | 'text'
-  | 'textarea'
-  | 'password'
-  | 'number'
-  | 'switch'
-  | 'select'
-  | 'radio'
-  | 'color'
-  | 'slider'
-  | 'string-list'
-  | 'info'
-  | 'divider';
+  | "text"
+  | "textarea"
+  | "password"
+  | "number"
+  | "switch"
+  | "select"
+  | "radio"
+  | "color"
+  | "slider"
+  | "string-list"
+  | "info"
+  | "divider";
 
 export interface ReaderAppearancePatch {
   backgroundColor?: string;
@@ -109,7 +120,9 @@ export interface PluginSettingField {
   max?: number;
   step?: number;
   rows?: number;
-  options?: PluginSettingOption[] | ((context: PluginSettingsContext) => PluginSettingOption[]);
+  options?:
+    | PluginSettingOption[]
+    | ((context: PluginSettingsContext) => PluginSettingOption[]);
 }
 
 export interface ResolvedPluginSettingField {
@@ -187,17 +200,26 @@ export interface PluginDialogState {
 type ReaderThemeResolver = (
   context: ReaderThemeContext,
   api: FrontendPluginApi,
-) => ReaderAppearancePatch | Promise<ReaderAppearancePatch | undefined> | undefined;
+) =>
+  | ReaderAppearancePatch
+  | Promise<ReaderAppearancePatch | undefined>
+  | undefined;
 
 type ReaderBackgroundResolver = (
   context: ReaderBackgroundContext,
   api: FrontendPluginApi,
-) => ReaderAppearancePatch | Promise<ReaderAppearancePatch | undefined> | undefined;
+) =>
+  | ReaderAppearancePatch
+  | Promise<ReaderAppearancePatch | undefined>
+  | undefined;
 
 type ReaderSkinResolver = (
   context: ReaderSkinContext,
   api: FrontendPluginApi,
-) => ReaderAppearancePatch | Promise<ReaderAppearancePatch | undefined> | undefined;
+) =>
+  | ReaderAppearancePatch
+  | Promise<ReaderAppearancePatch | undefined>
+  | undefined;
 
 export interface ReaderThemeDefinition {
   id: string;
@@ -332,6 +354,58 @@ export interface FrontendCoverGeneratorRecord {
   category: string;
 }
 
+export interface TtsVoiceDefinition {
+  id: string;
+  name: string;
+  language?: string;
+}
+
+export interface TtsSpeakContext {
+  text: string;
+  voiceId?: string;
+  language?: string;
+  rate: number;
+  pitch: number;
+  volume: number;
+  signal: AbortSignal;
+}
+
+type TtsEngineVoiceResolver = (
+  api: FrontendPluginApi,
+) => TtsVoiceDefinition[] | Promise<TtsVoiceDefinition[]>;
+type TtsEngineSpeaker = (
+  context: TtsSpeakContext,
+  api: FrontendPluginApi,
+) => void | Promise<void>;
+type TtsEngineController = (api: FrontendPluginApi) => void | Promise<void>;
+type TtsEnginePreviewer = (
+  voiceId: string,
+  api: FrontendPluginApi,
+) => void | Promise<void>;
+
+export interface TtsEngineDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  getVoices?: TtsEngineVoiceResolver;
+  speak: TtsEngineSpeaker;
+  stop?: TtsEngineController;
+  pause?: TtsEngineController;
+  resume?: TtsEngineController;
+  previewVoice?: TtsEnginePreviewer;
+}
+
+export interface FrontendTtsEngineRecord {
+  id: string;
+  localId: string;
+  pluginId: string;
+  fileName: string;
+  name: string;
+  description: string;
+  category: string;
+}
+
 export interface ReaderTextSelectionContext {
   text: string;
   sourceType: string;
@@ -343,7 +417,9 @@ export interface ReaderTextSelectionContext {
   bookUrl?: string;
 }
 
-type ReaderContextActionVisible = (context: ReaderTextSelectionContext) => boolean;
+type ReaderContextActionVisible = (
+  context: ReaderTextSelectionContext,
+) => boolean;
 type ReaderContextActionRunner = (
   context: ReaderTextSelectionContext,
   api: FrontendPluginApi,
@@ -369,7 +445,9 @@ export interface FrontendReaderContextActionRecord {
 }
 
 export type CleanupFn = () => void | Promise<void>;
-export type ReaderSessionListener = (session: ReaderSessionSnapshot | null) => void;
+export type ReaderSessionListener = (
+  session: ReaderSessionSnapshot | null,
+) => void;
 export type PluginHookHandler<T = unknown> = (
   payload: T,
   api: FrontendPluginApi,
@@ -378,13 +456,17 @@ export type ReaderSlotMount = (
   container: HTMLElement,
   api: FrontendPluginApi,
 ) => void | CleanupFn | Promise<void | CleanupFn>;
-export type PluginDynamicText = string | ((context: PluginSettingsContext) => string);
+export type PluginDynamicText =
+  | string
+  | ((context: PluginSettingsContext) => string);
 
 // Private map type aliases needed by FrontendPluginRegistration
 type HookDefinitionMap = Partial<
   Record<FrontendPluginHookName, PluginHookHandler | PluginHookHandler[]>
 >;
-type SlotDefinitionMap = Partial<Record<ReaderPluginSlot, ReaderSlotMount | ReaderSlotMount[]>>;
+type SlotDefinitionMap = Partial<
+  Record<ReaderPluginSlot, ReaderSlotMount | ReaderSlotMount[]>
+>;
 
 export interface PluginSettingsContext {
   values: Record<string, PluginSettingValue>;
@@ -397,7 +479,9 @@ export interface PluginSettingsDefinition {
   defaults?: Record<string, PluginSettingValue>;
   schema:
     | PluginSettingField[]
-    | ((context: PluginSettingsContext) => PluginSettingField[] | Promise<PluginSettingField[]>);
+    | ((
+        context: PluginSettingsContext,
+      ) => PluginSettingField[] | Promise<PluginSettingField[]>);
   onChange?: (
     context: PluginSettingsContext & {
       changedKey: string;
@@ -420,6 +504,7 @@ export interface FrontendPluginRegistration {
   bookshelfActions?: BookshelfActionDefinition[];
   readerContextActions?: ReaderContextActionDefinition[];
   coverGenerators?: CoverGeneratorDefinition[];
+  ttsEngines?: TtsEngineDefinition[];
   settings?: PluginSettingsDefinition;
   setup?: (api: FrontendPluginApi) =>
     | void
@@ -432,6 +517,7 @@ export interface FrontendPluginRegistration {
         bookshelfActions?: BookshelfActionDefinition[];
         readerContextActions?: ReaderContextActionDefinition[];
         coverGenerators?: CoverGeneratorDefinition[];
+        ttsEngines?: TtsEngineDefinition[];
         settings?: PluginSettingsDefinition;
         dispose?: CleanupFn;
       }
@@ -444,6 +530,7 @@ export interface FrontendPluginRegistration {
         bookshelfActions?: BookshelfActionDefinition[];
         readerContextActions?: ReaderContextActionDefinition[];
         coverGenerators?: CoverGeneratorDefinition[];
+        ttsEngines?: TtsEngineDefinition[];
         settings?: PluginSettingsDefinition;
         dispose?: CleanupFn;
       }>;
@@ -459,13 +546,14 @@ export interface FrontendPluginRecord {
   category: string;
   enabled: boolean;
   order: number;
-  status: 'active' | 'disabled' | 'error';
+  status: "active" | "disabled" | "error";
   runtimeError: string;
   runtimeHooks: readonly FrontendPluginHookName[];
   runtimeSlots: readonly ReaderPluginSlot[];
   runtimeBookshelfActions: readonly string[];
   runtimeReaderContextActions: readonly string[];
   runtimeCoverGenerators: readonly string[];
+  runtimeTtsEngines: readonly string[];
   hasSettings: boolean;
   source: string;
 }
@@ -512,7 +600,9 @@ export interface FrontendPluginApi {
     remountSlots: () => Promise<void>;
   };
   http: {
-    request: (request: FrontendPluginHttpRequest) => Promise<FrontendPluginHttpResponse>;
+    request: (
+      request: FrontendPluginHttpRequest,
+    ) => Promise<FrontendPluginHttpResponse>;
     get: (
       url: string,
       headers?: Record<string, string>,
@@ -533,9 +623,14 @@ export interface FrontendPluginApi {
     convertChinese: (text: string, mode: ChineseConvertMode) => string;
   };
   ui: {
-    toast: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => Promise<void>;
-    prompt: (options: PluginDialogOptions) => Promise<Record<string, PluginSettingValue> | null>;
+    toast: (
+      message: string,
+      type?: "info" | "success" | "warning" | "error",
+    ) => Promise<void>;
+    prompt: (
+      options: PluginDialogOptions,
+    ) => Promise<Record<string, PluginSettingValue> | null>;
     getAppTheme: () => string;
-    setAppTheme: (mode: 'auto' | 'light' | 'dark') => Promise<void>;
+    setAppTheme: (mode: "auto" | "light" | "dark") => Promise<void>;
   };
 }

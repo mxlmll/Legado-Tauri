@@ -1,4 +1,4 @@
-import { invokeWithTimeout } from './useInvoke';
+import { invokeWithTimeout } from "./useInvoke";
 
 // ── 类型定义 ──────────────────────────────────────────────────────────────
 
@@ -25,38 +25,44 @@ export interface ExtensionMeta {
 // ── API 封装 ──────────────────────────────────────────────────────────────
 
 export async function getExtensionDir(): Promise<string> {
-  return invokeWithTimeout<string>('extension_get_dir');
+  return invokeWithTimeout<string>("extension_get_dir");
 }
 
 export async function listExtensions(): Promise<ExtensionMeta[]> {
-  return invokeWithTimeout<ExtensionMeta[]>('extension_list');
+  return invokeWithTimeout<ExtensionMeta[]>("extension_list");
 }
 
 export async function readExtension(fileName: string): Promise<string> {
-  return invokeWithTimeout<string>('extension_read', { fileName });
+  return invokeWithTimeout<string>("extension_read", { fileName });
 }
 
-export async function saveExtension(fileName: string, content: string): Promise<void> {
-  return invokeWithTimeout<void>('extension_save', { fileName, content });
+export async function saveExtension(
+  fileName: string,
+  content: string,
+): Promise<void> {
+  return invokeWithTimeout<void>("extension_save", { fileName, content });
 }
 
 export async function deleteExtension(fileName: string): Promise<void> {
-  return invokeWithTimeout<void>('extension_delete', { fileName });
+  return invokeWithTimeout<void>("extension_delete", { fileName });
 }
 
-export async function toggleExtension(fileName: string, enabled: boolean): Promise<void> {
-  return invokeWithTimeout<void>('extension_toggle', { fileName, enabled });
+export async function toggleExtension(
+  fileName: string,
+  enabled: boolean,
+): Promise<void> {
+  return invokeWithTimeout<void>("extension_toggle", { fileName, enabled });
 }
 
 export async function openExtensionInVscode(fileName: string): Promise<void> {
-  return invokeWithTimeout<void>('extension_open_in_vscode', { fileName });
+  return invokeWithTimeout<void>("extension_open_in_vscode", { fileName });
 }
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────
 
 /** 将任意字符串转为合法 JS 文件名 */
 export function toExtSafeFileName(name: string): string {
-  return name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_') + '.js';
+  return name.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_") + ".js";
 }
 
 /**
@@ -67,13 +73,13 @@ export function parseUserScriptMeta(source: string): Partial<ExtensionMeta> {
   const meta: Partial<ExtensionMeta> = { matchPatterns: [], grants: [] };
   let inHeader = false;
 
-  for (const line of source.split('\n').slice(0, 100)) {
+  for (const line of source.split("\n").slice(0, 100)) {
     const t = line.trim();
-    if (t === '// ==UserScript==') {
+    if (t === "// ==UserScript==") {
       inHeader = true;
       continue;
     }
-    if (t === '// ==/UserScript==') {
+    if (t === "// ==/UserScript==") {
       break;
     }
     if (!inHeader) {
@@ -88,38 +94,38 @@ export function parseUserScriptMeta(source: string): Partial<ExtensionMeta> {
     const val = rawVal.trim();
 
     switch (key) {
-      case 'name':
+      case "name":
         meta.name = val;
         break;
-      case 'namespace':
+      case "namespace":
         meta.namespace = val;
         break;
-      case 'version':
+      case "version":
         meta.version = val;
         break;
-      case 'description':
+      case "description":
         meta.description = val;
         break;
-      case 'author':
+      case "author":
         meta.author = val;
         break;
-      case 'match':
-      case 'include':
+      case "match":
+      case "include":
         (meta.matchPatterns ??= []).push(val);
         break;
-      case 'grant':
-        if (val && val !== 'none') {
+      case "grant":
+        if (val && val !== "none") {
           (meta.grants ??= []).push(val);
         }
         break;
-      case 'run-at':
+      case "run-at":
         meta.runAt = val;
         break;
-      case 'category':
+      case "category":
         meta.category = val;
         break;
-      case 'enabled':
-        meta.enabled = val !== 'false';
+      case "enabled":
+        meta.enabled = val !== "false";
         break;
     }
   }
@@ -127,7 +133,10 @@ export function parseUserScriptMeta(source: string): Partial<ExtensionMeta> {
 }
 
 /** 生成新扩展的 UserScript 模板内容 */
-export function newExtensionTemplate(name = '新扩展', category = '其他'): string {
+export function newExtensionTemplate(
+  name = "新扩展",
+  category = "其他",
+): string {
   return `// ==UserScript==
 // @name         ${name}
 // @namespace    com.legado.extensions
@@ -145,12 +154,12 @@ export function newExtensionTemplate(name = '新扩展', category = '其他'): s
  * 前端插件主逻辑
  * 插件全部运行在前端页面内，通过 legado.registerPlugin 注册能力。
  * 可注册阅读器 hooks / slots / themes / backgrounds / skins，
- * 也可注册书架右键动作 bookshelfActions、阅读器选中文本菜单 readerContextActions、封面生成器 coverGenerators，
+ * 也可注册书架右键动作 bookshelfActions、阅读器选中文本菜单 readerContextActions、封面生成器 coverGenerators、TTS 引擎 ttsEngines，
  * 并通过 api.http / api.ui.prompt / api.bookshelf.patchBook / api.text.convertChinese 组合复杂交互。
  */
 
 legado.registerPlugin({
-  id: '${name.replace(/\s+/g, '-').toLowerCase()}',
+  id: '${name.replace(/\s+/g, "-").toLowerCase()}',
   setup(api) {
     return {
       settings: {

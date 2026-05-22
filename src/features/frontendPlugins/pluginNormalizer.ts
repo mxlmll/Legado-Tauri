@@ -1,4 +1,4 @@
-import type { ExtensionMeta } from '@/composables/useExtension';
+import type { ExtensionMeta } from "@/composables/useExtension";
 import type {
   FrontendPluginRegistration,
   ReaderThemeDefinition,
@@ -19,7 +19,10 @@ import type {
   ReaderThemeContext,
   ReaderBackgroundContext,
   ReaderSkinContext,
-} from './pluginTypes';
+  TtsEngineDefinition,
+  TtsSpeakContext,
+  TtsVoiceDefinition,
+} from "./pluginTypes";
 
 export interface NormalizerPluginContext {
   pluginId: string;
@@ -38,17 +41,26 @@ export interface LegacyPluginExports {
 type ReaderThemeResolver = (
   context: ReaderThemeContext,
   api: FrontendPluginApi,
-) => ReaderAppearancePatch | Promise<ReaderAppearancePatch | undefined> | undefined;
+) =>
+  | ReaderAppearancePatch
+  | Promise<ReaderAppearancePatch | undefined>
+  | undefined;
 
 type ReaderBackgroundResolver = (
   context: ReaderBackgroundContext,
   api: FrontendPluginApi,
-) => ReaderAppearancePatch | Promise<ReaderAppearancePatch | undefined> | undefined;
+) =>
+  | ReaderAppearancePatch
+  | Promise<ReaderAppearancePatch | undefined>
+  | undefined;
 
 type ReaderSkinResolver = (
   context: ReaderSkinContext,
   api: FrontendPluginApi,
-) => ReaderAppearancePatch | Promise<ReaderAppearancePatch | undefined> | undefined;
+) =>
+  | ReaderAppearancePatch
+  | Promise<ReaderAppearancePatch | undefined>
+  | undefined;
 
 type HookDefinitionMap = Partial<
   Record<FrontendPluginHookName, PluginHookHandler | PluginHookHandler[]>
@@ -92,7 +104,10 @@ export interface RuntimeBookshelfActionDefinition {
   description: string;
   category: string;
   visible?: boolean | ((context: BookshelfActionContext) => boolean);
-  run: (context: BookshelfActionContext, api: FrontendPluginApi) => void | Promise<void>;
+  run: (
+    context: BookshelfActionContext,
+    api: FrontendPluginApi,
+  ) => void | Promise<void>;
 }
 
 export interface RuntimeReaderContextActionDefinition {
@@ -102,7 +117,10 @@ export interface RuntimeReaderContextActionDefinition {
   description: string;
   category: string;
   visible?: boolean | ((context: ReaderTextSelectionContext) => boolean);
-  run: (context: ReaderTextSelectionContext, api: FrontendPluginApi) => void | Promise<void>;
+  run: (
+    context: ReaderTextSelectionContext,
+    api: FrontendPluginApi,
+  ) => void | Promise<void>;
 }
 
 export interface RuntimeCoverGeneratorDefinition {
@@ -123,6 +141,28 @@ export interface RuntimeCoverGeneratorDefinition {
     | Promise<string | CoverGeneratorResult | null | undefined>;
 }
 
+export interface RuntimeTtsEngineDefinition {
+  id: string;
+  localId: string;
+  name: string;
+  description: string;
+  category: string;
+  getVoices?: (
+    api: FrontendPluginApi,
+  ) => TtsVoiceDefinition[] | Promise<TtsVoiceDefinition[]>;
+  speak: (
+    context: TtsSpeakContext,
+    api: FrontendPluginApi,
+  ) => void | Promise<void>;
+  stop?: (api: FrontendPluginApi) => void | Promise<void>;
+  pause?: (api: FrontendPluginApi) => void | Promise<void>;
+  resume?: (api: FrontendPluginApi) => void | Promise<void>;
+  previewVoice?: (
+    voiceId: string,
+    api: FrontendPluginApi,
+  ) => void | Promise<void>;
+}
+
 export function normalizeHandlers<T>(value?: T | T[]): T[] {
   if (!value) {
     return [];
@@ -137,10 +177,10 @@ export function normalizeRuntimeMetadata(
   return {
     pluginId:
       (registration.id?.trim() ?? meta.namespace?.trim()) ||
-      meta.fileName.replace(/\.js$/i, '') ||
+      meta.fileName.replace(/\.js$/i, "") ||
       meta.name.trim(),
     name: (registration.name?.trim() ?? meta.name.trim()) || meta.fileName,
-    version: (registration.version?.trim() ?? meta.version.trim()) || '0.0.0',
+    version: (registration.version?.trim() ?? meta.version.trim()) || "0.0.0",
     description: registration.description?.trim() ?? meta.description.trim(),
   };
 }
@@ -160,8 +200,8 @@ export function normalizeThemeDefinitions(
         id: `${record.pluginId}:${localId}`,
         localId,
         name,
-        description: definition.description?.trim() ?? '',
-        category: (definition.category?.trim() ?? record.category) || '其他',
+        description: definition.description?.trim() ?? "",
+        category: (definition.category?.trim() ?? record.category) || "其他",
         previewResolver: definition.preview,
         resolveResolver: definition.resolve,
       } satisfies RuntimeReaderThemeDefinition;
@@ -184,8 +224,8 @@ export function normalizeBackgroundDefinitions(
         id: `${record.pluginId}:${localId}`,
         localId,
         name,
-        description: definition.description?.trim() ?? '',
-        category: (definition.category?.trim() ?? record.category) || '其他',
+        description: definition.description?.trim() ?? "",
+        category: (definition.category?.trim() ?? record.category) || "其他",
         previewResolver: definition.preview,
         resolveResolver: definition.resolve,
       } satisfies RuntimeReaderBackgroundDefinition;
@@ -208,8 +248,8 @@ export function normalizeSkinDefinitions(
         id: `${record.pluginId}:${localId}`,
         localId,
         name,
-        description: definition.description?.trim() ?? '',
-        category: (definition.category?.trim() ?? record.category) || '其他',
+        description: definition.description?.trim() ?? "",
+        category: (definition.category?.trim() ?? record.category) || "其他",
         lockedFlipMode: definition.lockedFlipMode?.trim() ?? undefined,
         previewResolver: definition.preview,
         resolveResolver: definition.resolve,
@@ -226,15 +266,15 @@ export function normalizeBookshelfActionDefinitions(
     .map((definition) => {
       const localId = definition.id?.trim();
       const name = definition.name?.trim();
-      if (!localId || !name || typeof definition.run !== 'function') {
+      if (!localId || !name || typeof definition.run !== "function") {
         return null;
       }
       return {
         id: `${record.pluginId}:${localId}`,
         localId,
         name,
-        description: definition.description?.trim() ?? '',
-        category: (definition.category?.trim() ?? record.category) || '其他',
+        description: definition.description?.trim() ?? "",
+        category: (definition.category?.trim() ?? record.category) || "其他",
         visible: definition.when,
         run: definition.run,
       } satisfies RuntimeBookshelfActionDefinition;
@@ -250,15 +290,15 @@ export function normalizeReaderContextActionDefinitions(
     .map((definition) => {
       const localId = definition.id?.trim();
       const name = definition.name?.trim();
-      if (!localId || !name || typeof definition.run !== 'function') {
+      if (!localId || !name || typeof definition.run !== "function") {
         return null;
       }
       return {
         id: `${record.pluginId}:${localId}`,
         localId,
         name,
-        description: definition.description?.trim() ?? '',
-        category: (definition.category?.trim() ?? record.category) || '其他',
+        description: definition.description?.trim() ?? "",
+        category: (definition.category?.trim() ?? record.category) || "其他",
         visible: definition.when,
         run: definition.run,
       } satisfies RuntimeReaderContextActionDefinition;
@@ -274,15 +314,15 @@ export function normalizeCoverGeneratorDefinitions(
     .map((definition) => {
       const localId = definition.id?.trim();
       const name = definition.name?.trim();
-      if (!localId || !name || typeof definition.generate !== 'function') {
+      if (!localId || !name || typeof definition.generate !== "function") {
         return null;
       }
       return {
         id: `${record.pluginId}:${localId}`,
         localId,
         name,
-        description: definition.description?.trim() ?? '',
-        category: (definition.category?.trim() ?? record.category) || '其他',
+        description: definition.description?.trim() ?? "",
+        category: (definition.category?.trim() ?? record.category) || "其他",
         visible: definition.when,
         generate: definition.generate,
       } satisfies RuntimeCoverGeneratorDefinition;
@@ -290,12 +330,40 @@ export function normalizeCoverGeneratorDefinitions(
     .filter((v) => v !== null) as RuntimeCoverGeneratorDefinition[];
 }
 
+export function normalizeTtsEngineDefinitions(
+  record: NormalizerPluginContext,
+  definitions: TtsEngineDefinition[],
+): RuntimeTtsEngineDefinition[] {
+  return definitions
+    .map((definition) => {
+      const localId = definition.id?.trim();
+      const name = definition.name?.trim();
+      if (!localId || !name || typeof definition.speak !== "function") {
+        return null;
+      }
+      return {
+        id: `${record.pluginId}:${localId}`,
+        localId,
+        name,
+        description: definition.description?.trim() ?? "",
+        category: (definition.category?.trim() ?? record.category) || "其他",
+        getVoices: definition.getVoices,
+        speak: definition.speak,
+        stop: definition.stop,
+        pause: definition.pause,
+        resume: definition.resume,
+        previewVoice: definition.previewVoice,
+      } satisfies RuntimeTtsEngineDefinition;
+    })
+    .filter((v) => v !== null) as RuntimeTtsEngineDefinition[];
+}
+
 export function extractLegacyExports(
   source: string,
   legado: Record<string, unknown>,
 ): LegacyPluginExports {
   const runner = new Function(
-    'legado',
+    "legado",
     `${source}
 return {
   filterContent: typeof filterContent === 'function' ? filterContent : undefined,
@@ -316,32 +384,34 @@ export function convertLegacyPlugin(
   const hooks: HookDefinitionMap = {};
 
   if (legacy.filterContent) {
-    hooks['reader.content.beforePaginate'] = async (payload) =>
+    hooks["reader.content.beforePaginate"] = async (payload) =>
       legacy.filterContent?.((payload as ReaderContentPayload).content);
-    hooks['reader.content.beforeRender'] = async (payload) =>
+    hooks["reader.content.beforeRender"] = async (payload) =>
       legacy.filterContent?.((payload as ReaderContentPayload).content);
   }
   if (legacy.onChapterLoaded) {
-    hooks['reader.content.beforeRender'] = [
-      ...normalizeHandlers(hooks['reader.content.beforeRender']),
-      async (payload) => legacy.onChapterLoaded?.((payload as ReaderContentPayload).content),
+    hooks["reader.content.beforeRender"] = [
+      ...normalizeHandlers(hooks["reader.content.beforeRender"]),
+      async (payload) =>
+        legacy.onChapterLoaded?.((payload as ReaderContentPayload).content),
     ];
   }
   if (legacy.onSessionStart) {
-    hooks['reader.session.enter'] = async () => legacy.onSessionStart?.();
+    hooks["reader.session.enter"] = async () => legacy.onSessionStart?.();
   }
   if (legacy.onSessionEnd) {
-    hooks['reader.session.exit'] = async () => legacy.onSessionEnd?.();
+    hooks["reader.session.exit"] = async () => legacy.onSessionEnd?.();
   }
 
   const themes =
     legacy.getTheme || legacy.toggle
       ? [
           {
-            id: 'legacy-theme',
+            id: "legacy-theme",
             name: meta.name || meta.fileName,
             description: meta.description,
-            resolve: () => legacy.getTheme?.() ?? legacy.toggle?.(true) ?? undefined,
+            resolve: () =>
+              legacy.getTheme?.() ?? legacy.toggle?.(true) ?? undefined,
           } satisfies ReaderThemeDefinition,
         ]
       : [];
@@ -351,7 +421,7 @@ export function convertLegacyPlugin(
   }
 
   return {
-    id: meta.namespace?.trim() || meta.fileName.replace(/\.js$/i, ''),
+    id: meta.namespace?.trim() || meta.fileName.replace(/\.js$/i, ""),
     name: meta.name,
     version: meta.version,
     description: meta.description,
