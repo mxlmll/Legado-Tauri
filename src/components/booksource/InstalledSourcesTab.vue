@@ -8,6 +8,7 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useBackAwareDialog as useDialog } from "@/composables/useBackAwareDialog";
 import { eventEmit } from "@/composables/useEventBus";
 import { invokeWithTimeout } from "@/composables/useInvoke";
+import { parseLegadoDeepLink } from "@/composables/useLegadoDeepLink";
 import { useOverlay } from "@/composables/useOverlay";
 import { useBookSourceStore } from "@/stores";
 import { saveExportFile } from "@/utils/exportFile";
@@ -19,8 +20,11 @@ import {
   deleteBookSource,
   toggleBookSource,
   toSafeFileName,
+  formatValidationIssues,
   newBookSourceTemplate,
   newVideoSourceTemplate,
+  validateBookSourceContent,
+  validateBookSourceFileName,
   openInVscode,
   openInExternalEditor,
   pickBookSourceDir,
@@ -279,7 +283,7 @@ const urlInputValue = ref("");
 const showInstallDialog = ref(false);
 const installDialogUrl = ref("");
 
-useOverlay(
+const { triggerClose: closeUrlInputModal } = useOverlay(
   () => showUrlInputModal.value,
   () => {
     showUrlInputModal.value = false;
@@ -304,12 +308,26 @@ function confirmUrlInput() {
     message.warning("请输入书源地址");
     return;
   }
-  if (!/^https?:\/\//i.test(url)) {
-    message.warning("请输入有效的 http(s) 地址");
+  let downloadUrl = "";
+  try {
+    const payload = parseLegadoDeepLink(url);
+    if (payload.type === "repo") {
+      message.warning("这是仓库链接，请在「在线仓库」页使用添加仓库");
+      return;
+    }
+    if (payload.type !== "booksource") {
+      message.warning("该链接不是书源链接");
+      return;
+    }
+    downloadUrl = payload.url;
+  } catch (e: unknown) {
+    message.warning(
+      `书源地址格式不正确: ${e instanceof Error ? e.message : String(e)}`,
+    );
     return;
   }
-  showUrlInputModal.value = false;
-  installDialogUrl.value = url;
+  closeUrlInputModal();
+  installDialogUrl.value = downloadUrl;
   showInstallDialog.value = true;
 }
 
@@ -423,11 +441,28 @@ async function saveEditor() {
     message.warning("书源读取失败，无法保存");
     return;
   }
-  if (!editorFile.value) {
+  let targetFileName = editorFile.value;
+  if (!targetFileName) {
     const match = editorContent.value.match(/@name\s+(.+)/);
     const name = match?.[1]?.trim() || "未命名书源";
-    editorFile.value = toSafeFileName(name);
+    targetFileName = toSafeFileName(name);
   }
+
+  const validation = validateBookSourceContent(editorContent.value, {
+    fileName: targetFileName,
+  });
+  const validationErrors = [
+    ...validateBookSourceFileName(targetFileName),
+    ...validation.errors,
+  ];
+  if (validationErrors.length) {
+    message.error(
+      formatValidationIssues("书源格式校验未通过", validationErrors),
+    );
+    return;
+  }
+  editorFile.value = targetFileName;
+
   editorSaving.value = true;
   try {
     await saveBookSource(
@@ -436,6 +471,11 @@ async function saveEditor() {
       editorSourceDir.value || undefined,
     );
     message.success("已保存");
+    if (validation.warnings.length) {
+      message.warning(
+        formatValidationIssues("已保存，但有格式提示", validation.warnings, 2),
+      );
+    }
     showEditor.value = false;
     emits("reload");
   } catch (e: unknown) {
@@ -497,16 +537,48 @@ function importFromFile() {
           if (!Array.isArray(arr)) {
             throw new Error("JSON 格式错误，应为数组");
           }
-          for (const item of arr) {
-            if (
-              typeof item.fileName === "string" &&
-              typeof item.content === "string"
-            ) {
+          for (const [index, item] of arr.entries()) {
+            try {
+              if (
+                !item ||
+                typeof item.fileName !== "string" ||
+                typeof item.content !== "string"
+              ) {
+                throw new Error("缺少 fileName/content 字符串字段");
+              }
+              const validation = validateBookSourceContent(item.content, {
+                fileName: item.fileName,
+              });
+              const validationErrors = [
+                ...validateBookSourceFileName(item.fileName),
+                ...validation.errors,
+              ];
+              if (validationErrors.length) {
+                throw new Error(
+                  formatValidationIssues("书源格式不正确", validationErrors),
+                );
+              }
               await saveBookSource(item.fileName, item.content);
               ok++;
+            } catch (e: unknown) {
+              errors.push(
+                `${file.name} 第 ${index + 1} 项: ${e instanceof Error ? e.message : String(e)}`,
+              );
             }
           }
         } else {
+          const validation = validateBookSourceContent(text, {
+            fileName: file.name,
+          });
+          const validationErrors = [
+            ...validateBookSourceFileName(file.name),
+            ...validation.errors,
+          ];
+          if (validationErrors.length) {
+            throw new Error(
+              formatValidationIssues("书源格式不正确", validationErrors),
+            );
+          }
           await saveBookSource(file.name, text);
           ok++;
         }
@@ -894,7 +966,7 @@ defineExpose({
     positive-text="安装"
     negative-text="取消"
     @positive-click="confirmUrlInput"
-    @negative-click="showUrlInputModal = false"
+    @negative-click="closeUrlInputModal"
   >
     <n-input
       v-model:value="urlInputValue"

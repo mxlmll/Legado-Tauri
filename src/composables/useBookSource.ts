@@ -1,4 +1,4 @@
-import { invokeWithTimeout } from './useInvoke';
+import { invokeWithTimeout } from "./useInvoke";
 
 // ── 类型定义（与 Rust BookSourceMeta 对应）────────────────────────────────
 
@@ -34,50 +34,324 @@ export interface BookSourceMeta {
   requireUrls: string[];
 }
 
+export interface ValidationResult {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface BookSourceFormatInfo {
+  name: string;
+  urls: string[];
+  sourceType: string;
+  entryFunctions: string[];
+}
+
+export interface BookSourceValidationResult extends ValidationResult {
+  meta: BookSourceFormatInfo;
+}
+
+const BOOK_SOURCE_META_SCAN_LINES = 80;
+const BOOK_SOURCE_ENTRY_FUNCTIONS = [
+  "search",
+  "bookInfo",
+  "toc",
+  "content",
+  "explore",
+] as const;
+const SUPPORTED_BOOK_SOURCE_TYPES = new Set([
+  "novel",
+  "comic",
+  "video",
+  "music",
+  "audio",
+  "webpage",
+  "web",
+  "小说",
+  "漫画",
+  "视频",
+  "音乐",
+  "听书",
+  "有声",
+  "网页",
+]);
+
+function normalizeMetaValue(value: string): string {
+  const trimmed = value.trim();
+  if (
+    trimmed.length >= 2 &&
+    ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'")))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function normalizeMetaLine(line: string): string {
+  return line
+    .trimStart()
+    .replace(/^\uFEFF/, "")
+    .trimStart()
+    .replace(/^\/\//, "")
+    .trimStart()
+    .replace(/^\*/, "")
+    .trim();
+}
+
+function readMetaTag(line: string, key: string): string | null {
+  const normalized = normalizeMetaLine(line);
+  if (
+    normalized.startsWith(key) &&
+    (normalized.length === key.length ||
+      /\s/.test(normalized.charAt(key.length)))
+  ) {
+    return normalizeMetaValue(normalized.slice(key.length).trim());
+  }
+
+  const marker = `${key} `;
+  const pos = normalized.indexOf(marker);
+  if (pos < 0) {
+    return null;
+  }
+  const rest = normalized.slice(pos + marker.length);
+  const end = rest.search(/[@*/]/);
+  return normalizeMetaValue(rest.slice(0, end >= 0 ? end : undefined).trim());
+}
+
+function readJsonStringField(line: string, key: string): string | null {
+  const match = line.match(
+    new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`),
+  );
+  if (!match?.[1]) {
+    return null;
+  }
+  try {
+    return normalizeMetaValue(JSON.parse(`"${match[1]}"`) as string);
+  } catch {
+    return normalizeMetaValue(match[1]);
+  }
+}
+
+function readBookSourceMetaValues(
+  content: string,
+  tagName: string,
+  jsonFieldNames: string[] = [],
+): string[] {
+  const values: string[] = [];
+  for (const line of content
+    .split(/\r?\n/)
+    .slice(0, BOOK_SOURCE_META_SCAN_LINES)) {
+    const tagValue = readMetaTag(line, tagName);
+    if (tagValue) {
+      values.push(tagValue);
+    }
+    for (const fieldName of jsonFieldNames) {
+      const jsonValue = readJsonStringField(line, fieldName);
+      if (jsonValue) {
+        values.push(jsonValue);
+      }
+    }
+  }
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(normalizeMetaValue(value));
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      !!parsed.hostname
+    );
+  } catch {
+    return false;
+  }
+}
+
+function findBookSourceEntryFunctions(content: string): string[] {
+  return BOOK_SOURCE_ENTRY_FUNCTIONS.filter((name) => {
+    const pattern = new RegExp(
+      `(?:async\\s+function\\s+${name}\\b|function\\s+${name}\\b|(?:const|let|var)\\s+${name}\\s*=)`,
+    );
+    return pattern.test(content);
+  });
+}
+
+function validateJavaScriptSyntax(content: string): string | null {
+  try {
+    const source = content
+      .replace(/^\uFEFF/, "")
+      .replace(/^#!.*(?:\r?\n|$)/, "");
+    const syntaxCheck = new Function(source);
+    void syntaxCheck;
+    return null;
+  } catch (e: unknown) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+export function formatValidationIssues(
+  title: string,
+  issues: string[],
+  maxItems = 4,
+): string {
+  if (!issues.length) {
+    return title;
+  }
+  const visible = issues.slice(0, maxItems).join("；");
+  const more =
+    issues.length > maxItems ? `；另有 ${issues.length - maxItems} 项` : "";
+  return `${title}：${visible}${more}`;
+}
+
+export function validateBookSourceFileName(fileName: string): string[] {
+  const name = fileName.trim();
+  const errors: string[] = [];
+  if (!name) {
+    errors.push("文件名不能为空");
+    return errors;
+  }
+  if (!name.toLowerCase().endsWith(".js")) {
+    errors.push("文件名必须以 .js 结尾");
+  }
+  if (
+    /[\\/:*?"<>|]/.test(name) ||
+    name === "." ||
+    name === ".." ||
+    name.includes("..")
+  ) {
+    errors.push("文件名不能包含路径或特殊字符");
+  }
+  return errors;
+}
+
+export function validateBookSourceContent(
+  content: string,
+  options: { fileName?: string } = {},
+): BookSourceValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const trimmed = content.trim();
+  const name =
+    readBookSourceMetaValues(content, "@name", ["bookSourceName"])[0] ?? "";
+  const urls = readBookSourceMetaValues(content, "@url", ["bookSourceUrl"]);
+  const sourceType =
+    readBookSourceMetaValues(content, "@type", ["bookSourceType"])[0] ??
+    "novel";
+  const entryFunctions = findBookSourceEntryFunctions(content);
+
+  if (!trimmed) {
+    errors.push("书源内容为空");
+  }
+
+  const head = trimmed.slice(0, 200).toLowerCase();
+  if (/^<(?:!doctype\s+html|html|head|body)\b/.test(head)) {
+    errors.push("当前内容看起来是网页 HTML，请填写或导入书源 JS 文件地址");
+  }
+  if (/^[{[]/.test(trimmed)) {
+    errors.push("当前内容看起来是 JSON，不是可直接运行的书源 JS 文件");
+  }
+
+  if (!name) {
+    const hint = options.fileName ? `（${options.fileName}）` : "";
+    errors.push(`缺少书源名称${hint}，请在文件头添加 // @name 名称`);
+  }
+
+  if (!urls.length) {
+    errors.push("缺少源站地址，请在文件头添加 // @url https://example.com");
+  }
+  for (const url of urls) {
+    if (!isValidHttpUrl(url)) {
+      errors.push(`源站地址格式不正确：${url}`);
+    }
+  }
+
+  const normalizedType = sourceType.trim().toLowerCase();
+  if (normalizedType && !SUPPORTED_BOOK_SOURCE_TYPES.has(normalizedType)) {
+    warnings.push(
+      `书源类型「${sourceType}」不常见，建议使用 novel/comic/video/music/webpage`,
+    );
+  }
+
+  if (!entryFunctions.length) {
+    errors.push(
+      "缺少可调用函数，请至少提供 search/bookInfo/toc/content/explore 之一",
+    );
+  }
+
+  if (trimmed) {
+    const syntaxError = validateJavaScriptSyntax(content);
+    if (syntaxError) {
+      errors.push(`JavaScript 语法错误：${syntaxError}`);
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    meta: {
+      name,
+      urls,
+      sourceType,
+      entryFunctions,
+    },
+  };
+}
+
 // ── API 封装 ─────────────────────────────────────────────────────────────
 
 /** 获取书源目录绝对路径 */
 export async function getBookSourceDir(): Promise<string> {
-  return invokeWithTimeout<string>('booksource_get_dir', {}, 10000);
+  return invokeWithTimeout<string>("booksource_get_dir", {}, 10000);
 }
 
 /** 获取所有书源目录（内置 + 外部） */
 export async function getBookSourceDirs(): Promise<string[]> {
-  return invokeWithTimeout<string[]>('booksource_get_dirs', {}, 10000);
+  return invokeWithTimeout<string[]>("booksource_get_dirs", {}, 10000);
 }
 
 /** 添加外部书源目录 */
 export async function addBookSourceDir(dirPath: string): Promise<void> {
-  return invokeWithTimeout<void>('booksource_add_dir', { dirPath }, 10000);
+  return invokeWithTimeout<void>("booksource_add_dir", { dirPath }, 10000);
 }
 
 /** 移除外部书源目录 */
 export async function removeBookSourceDir(dirPath: string): Promise<void> {
-  return invokeWithTimeout<void>('booksource_remove_dir', { dirPath }, 10000);
+  return invokeWithTimeout<void>("booksource_remove_dir", { dirPath }, 10000);
 }
 
 /** 弹出系统目录选择对话框，返回选择的路径（取消返回空字符串） */
 export async function pickBookSourceDir(): Promise<string> {
-  return invokeWithTimeout<string>('booksource_pick_dir', {}, 60000);
+  return invokeWithTimeout<string>("booksource_pick_dir", {}, 60000);
 }
 
 /** 列举所有已安装书源（一次性全量返回，不建议在书源数量 > 500 时使用） */
 export async function listBookSources(): Promise<BookSourceMeta[]> {
-  return invokeWithTimeout<BookSourceMeta[]>('booksource_list', {}, 15000);
+  return invokeWithTimeout<BookSourceMeta[]>("booksource_list", {}, 15000);
 }
 
 /**
  * 流式列举书源：立即返回，后台通过 `booksource:batch` 事件分批推送。
  * 调用方需在调用本函数前监听 `booksource:batch` 事件，并通过 `requestId` 过滤。
  */
-export async function listBookSourcesStreaming(requestId: string): Promise<void> {
-  return invokeWithTimeout<void>('booksource_list_streaming', { requestId }, 10000);
+export async function listBookSourcesStreaming(
+  requestId: string,
+): Promise<void> {
+  return invokeWithTimeout<void>(
+    "booksource_list_streaming",
+    { requestId },
+    10000,
+  );
 }
 
 /** 读取单个书源 JS 内容 */
-export async function readBookSource(fileName: string, sourceDir?: string): Promise<string> {
+export async function readBookSource(
+  fileName: string,
+  sourceDir?: string,
+): Promise<string> {
   return invokeWithTimeout<string>(
-    'booksource_read',
+    "booksource_read",
     { fileName, sourceDir: sourceDir ?? null },
     10000,
   );
@@ -89,17 +363,27 @@ export async function saveBookSource(
   content: string,
   sourceDir?: string,
 ): Promise<void> {
+  const validationErrors = [
+    ...validateBookSourceFileName(fileName),
+    ...validateBookSourceContent(content, { fileName }).errors,
+  ];
+  if (validationErrors.length) {
+    throw new Error(formatValidationIssues("书源格式不正确", validationErrors));
+  }
   return invokeWithTimeout<void>(
-    'booksource_save',
+    "booksource_save",
     { fileName, content, sourceDir: sourceDir ?? null },
     10000,
   );
 }
 
 /** 删除书源文件 */
-export async function deleteBookSource(fileName: string, sourceDir?: string): Promise<void> {
+export async function deleteBookSource(
+  fileName: string,
+  sourceDir?: string,
+): Promise<void> {
   return invokeWithTimeout<void>(
-    'booksource_delete',
+    "booksource_delete",
     { fileName, sourceDir: sourceDir ?? null },
     10000,
   );
@@ -112,16 +396,19 @@ export async function toggleBookSource(
   sourceDir?: string,
 ): Promise<void> {
   return invokeWithTimeout<void>(
-    'booksource_toggle',
+    "booksource_toggle",
     { fileName, enabled, sourceDir: sourceDir ?? null },
     10000,
   );
 }
 
 /** 用 VS Code 打开指定书源文件 */
-export async function openInVscode(fileName: string, sourceDir?: string): Promise<void> {
+export async function openInVscode(
+  fileName: string,
+  sourceDir?: string,
+): Promise<void> {
   return invokeWithTimeout<void>(
-    'booksource_open_in_vscode',
+    "booksource_open_in_vscode",
     { fileName, sourceDir: sourceDir ?? null },
     10000,
   );
@@ -131,17 +418,20 @@ export async function openInVscode(fileName: string, sourceDir?: string): Promis
  * 在 Android 系统默认编辑器中打开书源文件（通过 FileProvider + ACTION_EDIT Intent）。
  * 外部编辑器保存后，文件监听器会自动检测变更并刷新编辑器内容。
  */
-export async function openInExternalEditor(fileName: string, sourceDir?: string): Promise<void> {
+export async function openInExternalEditor(
+  fileName: string,
+  sourceDir?: string,
+): Promise<void> {
   const path = await invokeWithTimeout<string>(
-    'booksource_resolve_path',
+    "booksource_resolve_path",
     { fileName, sourceDir: sourceDir ?? null },
     10000,
   );
-  const bridge = (window as unknown as Record<string, unknown>)['LegadoAndroidInput'] as
-    | { openFileInEditor(p: string): string }
-    | undefined;
+  const bridge = (window as unknown as Record<string, unknown>)[
+    "LegadoAndroidInput"
+  ] as { openFileInEditor(p: string): string } | undefined;
   if (!bridge?.openFileInEditor) {
-    throw new Error('外部编辑器功能仅在 Android 上可用');
+    throw new Error("外部编辑器功能仅在 Android 上可用");
   }
   const error = bridge.openFileInEditor(path);
   if (error) {
@@ -154,9 +444,12 @@ export async function openInExternalEditor(fileName: string, sourceDir?: string)
  * - entryCode 为空时：返回书源内定义的所有顶层函数列表。
  * - entryCode 非空时：在书源作用域内执行该代码，返回结果字符串。
  */
-export async function evalBookSource(fileName: string, entryCode?: string): Promise<string> {
+export async function evalBookSource(
+  fileName: string,
+  entryCode?: string,
+): Promise<string> {
   return invokeWithTimeout<string>(
-    'booksource_eval',
+    "booksource_eval",
     { fileName, entryCode: entryCode ?? null },
     20000,
   );
@@ -164,7 +457,7 @@ export async function evalBookSource(fileName: string, entryCode?: string): Prom
 
 /** 直接执行任意 JS 代码（Boa 引擎），返回结果字符串（调试用途） */
 export async function jsEval(code: string): Promise<string> {
-  return invokeWithTimeout<string>('js_eval', { code }, 15000);
+  return invokeWithTimeout<string>("js_eval", { code }, 15000);
 }
 
 /**
@@ -178,7 +471,11 @@ export async function exploreBookSource(
   category: string,
   page = 1,
 ): Promise<unknown> {
-  return invokeWithTimeout('booksource_explore', { fileName, page, category }, 35000);
+  return invokeWithTimeout(
+    "booksource_explore",
+    { fileName, page, category },
+    35000,
+  );
 }
 
 // ── 脚本配置持久化（对应 Rust script_config 命令） ────────────────────────
@@ -190,7 +487,7 @@ export async function exploreBookSource(
  * @returns      字符串值，键不存在时返回空字符串
  */
 export async function configRead(scope: string, key: string): Promise<string> {
-  return invokeWithTimeout<string>('config_read', { scope, key }, 10000);
+  return invokeWithTimeout<string>("config_read", { scope, key }, 10000);
 }
 
 export type ScriptConfigJsonValue =
@@ -211,33 +508,43 @@ export async function configWrite(
   key: string,
   value: ScriptConfigJsonValue,
 ): Promise<void> {
-  if (typeof value === 'string') {
-    return invokeWithTimeout<void>('config_write', { scope, key, value }, 10000);
+  if (typeof value === "string") {
+    return invokeWithTimeout<void>(
+      "config_write",
+      { scope, key, value },
+      10000,
+    );
   }
-  return invokeWithTimeout<void>('config_write_json', { scope, key, value }, 10000);
+  return invokeWithTimeout<void>(
+    "config_write_json",
+    { scope, key, value },
+    10000,
+  );
 }
 
 /** 删除指定配置键 */
-export async function configDeleteKey(scope: string, key: string): Promise<void> {
-  return invokeWithTimeout<void>('config_delete_key', { scope, key }, 10000);
+export async function configDeleteKey(
+  scope: string,
+  key: string,
+): Promise<void> {
+  return invokeWithTimeout<void>("config_delete_key", { scope, key }, 10000);
 }
 
 /** 读取某 scope 下的所有配置（返回 JSON 字符串） */
 export async function configReadAll(scope: string): Promise<string> {
-  return invokeWithTimeout<string>('config_read_all', { scope }, 10000);
+  return invokeWithTimeout<string>("config_read_all", { scope }, 10000);
 }
 
 /** 读取脚本配置的原生 JSON 值；键不存在时返回 null */
-export async function configReadJson<T extends ScriptConfigJsonValue = ScriptConfigJsonValue>(
-  scope: string,
-  key: string,
-): Promise<T | null> {
-  return invokeWithTimeout<T | null>('config_read_json', { scope, key }, 10000);
+export async function configReadJson<
+  T extends ScriptConfigJsonValue = ScriptConfigJsonValue,
+>(scope: string, key: string): Promise<T | null> {
+  return invokeWithTimeout<T | null>("config_read_json", { scope, key }, 10000);
 }
 
 /** 清除某 scope 下的所有配置 */
 export async function configClear(scope: string): Promise<void> {
-  return invokeWithTimeout<void>('config_clear', { scope }, 10000);
+  return invokeWithTimeout<void>("config_clear", { scope }, 10000);
 }
 
 // ── 字节数组配置（对应 Rust config_read_bytes / config_write_bytes） ───────
@@ -248,8 +555,15 @@ export async function configClear(scope: string): Promise<void> {
  * @param key   配置键名
  * @returns     Uint8Array，键不存在时返回空数组
  */
-export async function configReadBytes(scope: string, key: string): Promise<Uint8Array> {
-  const arr = await invokeWithTimeout<number[]>('config_read_bytes', { scope, key }, 10000);
+export async function configReadBytes(
+  scope: string,
+  key: string,
+): Promise<Uint8Array> {
+  const arr = await invokeWithTimeout<number[]>(
+    "config_read_bytes",
+    { scope, key },
+    10000,
+  );
   return new Uint8Array(arr);
 }
 
@@ -265,7 +579,7 @@ export async function configWriteBytes(
   value: Uint8Array,
 ): Promise<void> {
   return invokeWithTimeout<void>(
-    'config_write_bytes',
+    "config_write_bytes",
     { scope, key, value: Array.from(value) },
     10000,
   );
@@ -292,7 +606,7 @@ export async function comicDownloadImages(
   cacheEnabled?: boolean,
 ): Promise<string[]> {
   return invokeWithTimeout<string[]>(
-    'comic_download_images',
+    "comic_download_images",
     {
       fileName,
       bookUrl,
@@ -318,7 +632,7 @@ export async function comicGetPageSizes(
   chapterIndex: number,
 ): Promise<Array<[number, number] | null>> {
   return invokeWithTimeout<Array<[number, number] | null>>(
-    'comic_get_page_sizes',
+    "comic_get_page_sizes",
     { fileName, bookUrl, bookName, chapterIndex },
     5000,
   );
@@ -338,7 +652,7 @@ export async function comicGetCachedPage(
   pageIndex: number,
 ): Promise<string> {
   return invokeWithTimeout<string>(
-    'comic_get_cached_page',
+    "comic_get_cached_page",
     { fileName, bookUrl, bookName, chapterIndex, pageIndex },
     10000,
   );
@@ -355,7 +669,7 @@ export async function comicCacheClearChapter(
   chapterIndex: number,
 ): Promise<number> {
   return invokeWithTimeout<number>(
-    'comic_cache_clear_chapter',
+    "comic_cache_clear_chapter",
     { fileName, bookUrl, bookName, chapterIndex },
     15000,
   );
@@ -367,14 +681,18 @@ export async function comicCacheClearChapter(
  * @returns 释放的字节数
  */
 export async function comicCacheClear(fileName?: string): Promise<number> {
-  return invokeWithTimeout<number>('comic_cache_clear', { fileName: fileName ?? null }, 30000);
+  return invokeWithTimeout<number>(
+    "comic_cache_clear",
+    { fileName: fileName ?? null },
+    30000,
+  );
 }
 
 /**
  * 获取漫画缓存总大小（字节）
  */
 export async function comicCacheSize(): Promise<number> {
-  return invokeWithTimeout<number>('comic_cache_size', {}, 10000);
+  return invokeWithTimeout<number>("comic_cache_size", {}, 10000);
 }
 
 // ── 书源更新检测 ─────────────────────────────────────────────────────────
@@ -390,24 +708,34 @@ export interface UpdateCheckResult {
 /**
  * 检测单个书源是否有更新（需要书源设置了 @updateUrl）
  */
-export async function checkBookSourceUpdate(fileName: string): Promise<UpdateCheckResult> {
-  return invokeWithTimeout<UpdateCheckResult>('booksource_check_update', { fileName }, 20000);
+export async function checkBookSourceUpdate(
+  fileName: string,
+): Promise<UpdateCheckResult> {
+  return invokeWithTimeout<UpdateCheckResult>(
+    "booksource_check_update",
+    { fileName },
+    20000,
+  );
 }
 
 /**
  * 从 @updateUrl 拉取最新内容并覆盖本地文件
  */
 export async function applyBookSourceUpdate(fileName: string): Promise<void> {
-  return invokeWithTimeout<void>('booksource_apply_update', { fileName }, 20000);
+  return invokeWithTimeout<void>(
+    "booksource_apply_update",
+    { fileName },
+    20000,
+  );
 }
 
 /** 将任意字符串转为合法 JS 文件名 */
 export function toSafeFileName(name: string): string {
-  return name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_') + '.js';
+  return name.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_") + ".js";
 }
 
 /** 生成新书源 JS 文件的模板内容 */
-export function newBookSourceTemplate(name = '新书源', url = 'https://') {
+export function newBookSourceTemplate(name = "新书源", url = "https://") {
   return `// @name        ${name}
 // @version     1.0.0
 // @author      作者名
@@ -475,7 +803,7 @@ async function content(chapterUrl) {
 `;
 }
 
-export function newVideoSourceTemplate(name = '新视频源', url = 'https://') {
+export function newVideoSourceTemplate(name = "新视频源", url = "https://") {
   return `// @name        ${name}
 // @version     1.0.0
 // @author      作者名
@@ -625,11 +953,130 @@ export interface RepoManifest {
   sources: RepoSourceInfo[];
 }
 
-export function getBookSourceIdentity(source: { uuid?: string | null; name: string }): string {
+export function validateRepositoryUrl(url: string): ValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const value = url.trim();
+
+  if (!value) {
+    errors.push("仓库 URL 不能为空");
+    return { ok: false, errors, warnings };
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      errors.push("仓库 URL 仅支持 http 或 https");
+    }
+    if (!parsed.hostname) {
+      errors.push("仓库 URL 缺少域名");
+    }
+    if (!parsed.pathname.toLowerCase().endsWith(".json")) {
+      warnings.push(
+        "仓库地址通常应指向 JSON 清单，若是接口地址请确保返回仓库 JSON",
+      );
+    }
+  } catch {
+    errors.push("仓库 URL 格式不正确，请输入完整的 http(s) 地址");
+  }
+
+  return { ok: errors.length === 0, errors, warnings };
+}
+
+function resolveRepositoryDownloadUrl(
+  downloadUrl: string,
+  repositoryUrl: string,
+): string | null {
+  try {
+    return new URL(downloadUrl, repositoryUrl).href;
+  } catch {
+    return null;
+  }
+}
+
+export function validateRepositoryManifest(
+  manifest: RepoManifest,
+  repositoryUrl: string,
+): ValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!manifest.name?.trim()) {
+    errors.push("仓库清单缺少 name");
+  }
+  if (!manifest.version?.trim()) {
+    errors.push("仓库清单缺少 version");
+  }
+  if (!manifest.updatedAt?.trim()) {
+    errors.push("仓库清单缺少 updatedAt");
+  }
+  if (!Array.isArray(manifest.sources)) {
+    errors.push("仓库清单缺少 sources 数组");
+    return { ok: false, errors, warnings };
+  }
+  if (!manifest.sources.length) {
+    warnings.push("仓库清单中没有书源条目");
+  }
+
+  const sourceErrors: string[] = [];
+  manifest.sources.forEach((source, index) => {
+    const label = `sources[${index + 1}]`;
+    if (!source.name?.trim()) {
+      sourceErrors.push(`${label} 缺少 name`);
+    }
+    if (!source.fileName?.trim()) {
+      sourceErrors.push(`${label} 缺少 fileName`);
+    } else if (!source.fileName.toLowerCase().endsWith(".js")) {
+      sourceErrors.push(`${label}.fileName 必须以 .js 结尾`);
+    }
+    if (!source.downloadUrl?.trim()) {
+      sourceErrors.push(`${label} 缺少 downloadUrl`);
+    } else {
+      const resolved = resolveRepositoryDownloadUrl(
+        source.downloadUrl,
+        repositoryUrl,
+      );
+      if (!resolved || !isValidHttpUrl(resolved)) {
+        sourceErrors.push(`${label}.downloadUrl 不是有效的 http(s) 地址`);
+      }
+    }
+    if (source.url && !isValidHttpUrl(source.url)) {
+      warnings.push(`${label}.url 不是有效的 http(s) 地址`);
+    }
+  });
+
+  errors.push(...sourceErrors.slice(0, 8));
+  if (sourceErrors.length > 8) {
+    errors.push(`还有 ${sourceErrors.length - 8} 个书源条目格式错误`);
+  }
+
+  return { ok: errors.length === 0, errors, warnings };
+}
+
+export function formatRepositoryError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (!raw || raw === "undefined") {
+    return "仓库请求失败";
+  }
+  if (/JSON|json|missing field|invalid type|expected|EOF|解析失败/.test(raw)) {
+    return "仓库格式不正确：请确认地址返回的是仓库 JSON 清单，且包含 name、version、updatedAt、sources 字段";
+  }
+  if (/HTML|doctype|网页/.test(raw)) {
+    return "仓库地址返回了网页内容，请填写仓库 JSON 地址";
+  }
+  return raw;
+}
+
+export function getBookSourceIdentity(source: {
+  uuid?: string | null;
+  name: string;
+}): string {
   return source.uuid?.trim() ?? source.name.trim();
 }
 
-export function hasExplicitBookSourceUuid(source: { uuid?: string | null }): boolean {
+export function hasExplicitBookSourceUuid(source: {
+  uuid?: string | null;
+}): boolean {
   return !!source.uuid?.trim();
 }
 
@@ -649,7 +1096,7 @@ export interface RemoteBookSourcePreview {
 
 /** 拉取远程仓库 JSON */
 export async function fetchRepository(url: string): Promise<RepoManifest> {
-  return invokeWithTimeout<RepoManifest>('repository_fetch', { url }, 35000);
+  return invokeWithTimeout<RepoManifest>("repository_fetch", { url }, 35000);
 }
 
 /** 从仓库下载书源 .js 文件并安装到本地 */
@@ -659,7 +1106,7 @@ export async function installFromRepository(
   expectedUuid?: string,
 ): Promise<void> {
   return invokeWithTimeout<void>(
-    'repository_install',
+    "repository_install",
     { downloadUrl, fileName, expectedUuid: expectedUuid ?? null },
     35000,
   );
@@ -671,7 +1118,7 @@ export async function previewRemoteBookSource(
   expectedUuid?: string,
 ): Promise<RemoteBookSourcePreview> {
   return invokeWithTimeout<RemoteBookSourcePreview>(
-    'repository_preview_source',
+    "repository_preview_source",
     { downloadUrl, expectedUuid: expectedUuid ?? null },
     35000,
   );
@@ -684,7 +1131,7 @@ export async function checkRepositorySourceSync(
   expectedUuid?: string,
 ): Promise<RepoSourceSyncResult> {
   return invokeWithTimeout<RepoSourceSyncResult>(
-    'repository_check_source_sync',
+    "repository_check_source_sync",
     { fileName, downloadUrl, expectedUuid: expectedUuid ?? null },
     35000,
   );
@@ -716,7 +1163,7 @@ export async function runBookSourceTests(
   timeoutSecs = 150,
 ): Promise<TestRunResult> {
   return invokeWithTimeout<TestRunResult>(
-    'booksource_run_tests',
+    "booksource_run_tests",
     { fileName, timeoutSecs },
     timeoutSecs * 1000 + 5000, // JS 层多留 5s 缓冲
   );

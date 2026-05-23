@@ -1,72 +1,86 @@
 <!-- FullModeUnlockDialog — 完全体模式 挑战码解锁对话框 -->
 <script setup lang="ts">
-import { useMessage } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { ref, watch } from 'vue';
-import { useOverlay } from '@/composables/useOverlay';
-import { usePreferencesStore } from '@/stores/preferences';
+import { useMessage } from "naive-ui";
+import { storeToRefs } from "pinia";
+import { ref, watch } from "vue";
+import { invokeWithTimeout } from "@/composables/useInvoke";
+import { useOverlay } from "@/composables/useOverlay";
+import { usePreferencesStore } from "@/stores/preferences";
 
 const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{
-  (e: 'update:show', value: boolean): void;
+  (e: "update:show", value: boolean): void;
 }>();
 
 const message = useMessage();
 const prefStore = usePreferencesStore();
 const { devTools } = storeToRefs(prefStore);
 
-const challenge = ref('');
-const inputResponse = ref('');
-const inputError = ref('');
+const challenge = ref("");
+const inputResponse = ref("");
+const inputError = ref("");
+const loadingChallenge = ref(false);
+const verifying = ref(false);
 
-function generateChallenge() {
-  challenge.value = String(Math.floor(100000 + Math.random() * 900000));
-  inputResponse.value = '';
-  inputError.value = '';
-}
+async function refreshChallenge(errorMessage = "") {
+  loadingChallenge.value = true;
+  challenge.value = "";
+  inputResponse.value = "";
+  inputError.value = errorMessage;
 
-/**
- * 挑战码计算算法（djb2 变体 + 固定 salt）
- *
- * 提供给开发者的计算程序：
- * ```js
- * function computeResponse(c) {
- *   const salt = "legado_full_v1";
- *   let h = 5381;
- *   for (const ch of c + salt)
- *     h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0;
- *   return String(h % 1000000).padStart(6, '0');
- * }
- * ```
- */
-function computeResponse(ch: string): string {
-  const salt = 'legado_full_v1';
-  let h = 5381;
-  for (const c of ch + salt) {
-    h = ((h << 5) + h + c.charCodeAt(0)) >>> 0;
+  try {
+    challenge.value = await invokeWithTimeout<string>(
+      "issue_full_mode_challenge",
+    );
+  } catch (error) {
+    inputError.value = "挑战码生成失败，请稍后重试";
+    message.error(
+      error instanceof Error ? error.message : "挑战码生成失败，请稍后重试",
+    );
+  } finally {
+    loadingChallenge.value = false;
   }
-  return String(h % 1000000).padStart(6, '0');
 }
 
 function close() {
-  emit('update:show', false);
+  emit("update:show", false);
 }
 
-function handleVerify() {
-  const expected = computeResponse(challenge.value);
-  if (inputResponse.value.trim() === expected) {
-    prefStore.patchDevTools({ fullModeEnabled: true });
-    message.success('完全体模式已激活');
-    close();
-  } else {
-    inputError.value = '验证码错误，请重新计算';
-    generateChallenge();
+async function handleVerify() {
+  if (!challenge.value || verifying.value) {
+    return;
+  }
+
+  verifying.value = true;
+  try {
+    const verified = await invokeWithTimeout<boolean>(
+      "verify_full_mode_challenge",
+      {
+        challenge: challenge.value,
+        response: inputResponse.value,
+      },
+    );
+
+    if (verified) {
+      prefStore.patchDevTools({ fullModeEnabled: true });
+      message.success("完全体模式已激活");
+      close();
+      return;
+    }
+
+    await refreshChallenge("验证码错误，请重新计算");
+  } catch (error) {
+    message.error(
+      error instanceof Error ? error.message : "验证失败，请稍后重试",
+    );
+  } finally {
+    verifying.value = false;
   }
 }
 
 function handleRevoke() {
   prefStore.patchDevTools({ fullModeEnabled: false });
-  message.info('完全体模式已关闭');
+  message.info("完全体模式已关闭");
   close();
 }
 
@@ -75,7 +89,13 @@ useOverlay(() => props.show, close);
 watch(
   () => props.show,
   (v) => {
-    if (v) {generateChallenge();}
+    if (v) {
+      void refreshChallenge();
+      return;
+    }
+    challenge.value = "";
+    inputResponse.value = "";
+    inputError.value = "";
   },
 );
 </script>
@@ -88,7 +108,7 @@ watch(
     :style="{ width: '400px', maxWidth: '92vw' }"
     :bordered="false"
     :segmented="{ content: true, footer: true }"
-    @update:show="(v) => emit('update:show', v)"
+    @update:show="(v: boolean) => emit('update:show', v)"
   >
     <template v-if="!devTools.fullModeEnabled">
       <div class="fmu-body">
@@ -96,7 +116,9 @@ watch(
 
         <div class="fmu-challenge-box">
           <span class="fmu-challenge-box__label">挑战码</span>
-          <strong class="fmu-challenge-box__value">{{ challenge }}</strong>
+          <strong class="fmu-challenge-box__value">{{
+            loadingChallenge ? "生成中..." : challenge
+          }}</strong>
         </div>
 
         <n-input
@@ -104,6 +126,7 @@ watch(
           placeholder="输入 6 位验证码"
           maxlength="6"
           :status="inputError ? 'error' : undefined"
+          :disabled="loadingChallenge || verifying || !challenge"
           class="fmu-input"
           @keydown.enter="handleVerify"
         />
@@ -121,10 +144,19 @@ watch(
       <div class="fmu-footer">
         <n-button @click="close">取消</n-button>
         <template v-if="!devTools.fullModeEnabled">
-          <n-button type="primary" @click="handleVerify">验证</n-button>
+          <n-button
+            type="primary"
+            :loading="verifying"
+            :disabled="loadingChallenge || !challenge || !inputResponse.trim()"
+            @click="handleVerify"
+          >
+            验证
+          </n-button>
         </template>
         <template v-else>
-          <n-button type="warning" @click="handleRevoke">撤销完全体模式</n-button>
+          <n-button type="warning" @click="handleRevoke"
+            >撤销完全体模式</n-button
+          >
         </template>
       </div>
     </template>
