@@ -14,5 +14,3 @@
 | Windows | `.msi` | Windows 安装包 |
 | macOS | `.dmg` | Mac OS 安装包 |
 | Android | `.apk` | 安卓安装包 |
-
-## 下载直链
