@@ -1091,7 +1091,7 @@ jobs:
             git push origin "${{ needs.prepare.outputs.tag_name }}"
           fi
 
-      - name: Generate release body with download sections
+      - name: Generate release body with download table
         shell: bash
         run: |
           set -e
@@ -1142,8 +1142,7 @@ jobs:
           assets = sorted(assets, key=lambda x: x.name.lower())
 
           def asset_url(path: Path) -> str:
-              name = path.name
-              encoded = urllib.parse.quote(name, safe="")
+              encoded = urllib.parse.quote(path.name, safe="")
               return f"{BASE_URL}/{encoded}"
 
           def md_link(label: str, path: Path) -> str:
@@ -1196,79 +1195,35 @@ jobs:
 
               return None
 
-          def emit_links(label_file_pairs):
-              links = []
-              for label, path in label_file_pairs:
-                  if path:
-                      links.append(md_link(label, path))
+          rows = []
 
-              if links:
-                  print(f"- {' | '.join(links)}")
-                  return True
-
-              return False
-
-          def emit_heading(title):
-              print()
-              print(title)
-              print()
-
-          def emit_subheading(title):
-              print(title)
-              print()
-
-          print()
-          print("## 下载地址")
+          def add_row(platform, file_type, arch, path, note):
+              if path:
+                  rows.append([
+                      platform,
+                      file_type,
+                      arch,
+                      md_link("下载", path),
+                      note,
+                  ])
 
           # Windows
           win_x64_exe = find_arch_asset(".exe", "x64", exclude=("webview", "webview2"))
-          win_arm64_exe = find_arch_asset(".exe", "arm64", exclude=("webview", "webview2"))
           win_x64_msi = find_arch_asset(".msi", "x64", exclude=("webview", "webview2"))
+          win_arm64_exe = find_arch_asset(".exe", "arm64", exclude=("webview", "webview2"))
           win_arm64_msi = find_arch_asset(".msi", "arm64", exclude=("webview", "webview2"))
 
-          win_webview_x64 = (
-              find_arch_asset(".exe", "x64", include=("webview",))
-              or find_arch_asset(".msi", "x64", include=("webview",))
-              or find_arch_asset(".exe", "x64", include=("webview2",))
-              or find_arch_asset(".msi", "x64", include=("webview2",))
-          )
-
-          win_webview_arm64 = (
-              find_arch_asset(".exe", "arm64", include=("webview",))
-              or find_arch_asset(".msi", "arm64", include=("webview",))
-              or find_arch_asset(".exe", "arm64", include=("webview2",))
-              or find_arch_asset(".msi", "arm64", include=("webview2",))
-          )
-
-          if any((win_x64_exe, win_arm64_exe, win_x64_msi, win_arm64_msi, win_webview_x64, win_webview_arm64)):
-              emit_heading("### Windows（不再支持 Win7）")
-
-              emit_subheading("#### 正常版本（推荐）")
-              emit_links([
-                  ("64位 EXE（常用）", win_x64_exe),
-                  ("64位 MSI", win_x64_msi),
-                  ("ARM64 EXE", win_arm64_exe),
-                  ("ARM64 MSI", win_arm64_msi),
-              ])
-
-              if win_webview_x64 or win_webview_arm64:
-                  print()
-                  emit_subheading("#### 内置 WebView2 版（体积较大，仅在企业版系统或无法安装 WebView2 时使用）")
-                  emit_links([
-                      ("64位", win_webview_x64),
-                      ("ARM64", win_webview_arm64),
-                  ])
+          add_row("Windows", ".exe", "64位", win_x64_exe, "推荐，常用安装包")
+          add_row("Windows", ".msi", "64位", win_x64_msi, "Windows 安装包")
+          add_row("Windows", ".exe", "ARM64", win_arm64_exe, "ARM64 设备使用")
+          add_row("Windows", ".msi", "ARM64", win_arm64_msi, "ARM64 设备使用")
 
           # macOS
           mac_arm64 = find_arch_asset(".dmg", "arm64")
           mac_x64 = find_arch_asset(".dmg", "x64")
 
-          if mac_arm64 or mac_x64:
-              emit_heading("### macOS")
-              emit_links([
-                  ("Apple M 芯片", mac_arm64),
-                  ("Intel 芯片", mac_x64),
-              ])
+          add_row("macOS", ".dmg", "Apple M 芯片", mac_arm64, "适用于 Apple Silicon")
+          add_row("macOS", ".dmg", "Intel 芯片", mac_x64, "适用于 Intel Mac")
 
           # Linux
           app_x64 = find_arch_asset(".appimage", "x64")
@@ -1283,34 +1238,17 @@ jobs:
           rpm_arm64 = find_arch_asset(".rpm", "arm64")
           rpm_armv7 = find_arch_asset(".rpm", "armv7")
 
-          if any((app_x64, app_arm64, app_armv7, deb_x64, deb_arm64, deb_armv7, rpm_x64, rpm_arm64, rpm_armv7)):
-              emit_heading("### Linux")
+          add_row("通用 Linux", ".AppImage", "64位", app_x64, "下载后添加执行权限即可运行")
+          add_row("通用 Linux", ".AppImage", "ARM64", app_arm64, "下载后添加执行权限即可运行")
+          add_row("通用 Linux", ".AppImage", "ARMv7", app_armv7, "下载后添加执行权限即可运行")
 
-              if app_x64 or app_arm64 or app_armv7:
-                  emit_subheading("#### AppImage（下载后添加执行权限即可运行）")
-                  emit_links([
-                      ("64位", app_x64),
-                      ("ARM64", app_arm64),
-                      ("ARMv7", app_armv7),
-                  ])
-                  print()
+          add_row("Debian / Ubuntu 系 Linux", ".deb", "64位", deb_x64, "适用于 Debian、Ubuntu 等发行版")
+          add_row("Debian / Ubuntu 系 Linux", ".deb", "ARM64", deb_arm64, "适用于 Debian、Ubuntu 等发行版")
+          add_row("Debian / Ubuntu 系 Linux", ".deb", "ARMv7", deb_armv7, "适用于 Debian、Ubuntu 等发行版")
 
-              if deb_x64 or deb_arm64 or deb_armv7:
-                  emit_subheading("#### DEB 包（Debian / Ubuntu 系）")
-                  emit_links([
-                      ("64位", deb_x64),
-                      ("ARM64", deb_arm64),
-                      ("ARMv7", deb_armv7),
-                  ])
-                  print()
-
-              if rpm_x64 or rpm_arm64 or rpm_armv7:
-                  emit_subheading("#### RPM 包（RedHat / Fedora 系）")
-                  emit_links([
-                      ("64位", rpm_x64),
-                      ("ARM64", rpm_arm64),
-                      ("ARMv7", rpm_armv7),
-                  ])
+          add_row("Red Hat / Fedora 系 Linux", ".rpm", "64位", rpm_x64, "适用于 Red Hat、Fedora、CentOS 等发行版")
+          add_row("Red Hat / Fedora 系 Linux", ".rpm", "ARM64", rpm_arm64, "适用于 Red Hat、Fedora、CentOS 等发行版")
+          add_row("Red Hat / Fedora 系 Linux", ".rpm", "ARMv7", rpm_armv7, "适用于 Red Hat、Fedora、CentOS 等发行版")
 
           # Android
           apk_universal = find_arch_asset(".apk", "universal")
@@ -1319,36 +1257,33 @@ jobs:
           apk_x64 = find_arch_asset(".apk", "x64")
           apk_x86 = find_arch_asset(".apk", "x86", exclude=("x86_64",))
 
-          if any((apk_universal, apk_arm64, apk_armv7, apk_x64, apk_x86)):
-              emit_heading("### Android")
-              emit_links([
-                  ("通用版", apk_universal),
-                  ("ARM64", apk_arm64),
-                  ("ARMv7", apk_armv7),
-                  ("x64", apk_x64),
-                  ("x86", apk_x86),
-              ])
+          add_row("Android", ".apk", "通用版", apk_universal, "安卓安装包，推荐优先下载")
+          add_row("Android", ".apk", "ARM64", apk_arm64, "适用于 ARM64 设备")
+          add_row("Android", ".apk", "ARMv7", apk_armv7, "适用于 ARMv7 设备")
+          add_row("Android", ".apk", "x64", apk_x64, "适用于 x86_64 设备")
+          add_row("Android", ".apk", "x86", apk_x86, "适用于 x86 设备")
 
           # iOS
           ipa_arm64 = find_arch_asset(".ipa", "arm64")
           ipa_any = find_asset(suffix=".ipa")
 
-          if ipa_arm64 or ipa_any:
-              emit_heading("### iOS")
-              emit_links([
-                  ("IPA（未签名）", ipa_arm64 or ipa_any),
-              ])
+          add_row("iOS", ".ipa", "ARM64", ipa_arm64 or ipa_any, "未签名 IPA，需要自行签名")
 
           # Frontend dist
-          harmony_dist = find_asset(include=("Legado-Harmony-with-dist.zip",))
-          linux_dist = find_asset(include=("Legado-Linux-with-dist.zip",))
+          harmony_dist = find_asset(include=("legado-harmony-with-dist.zip",))
+          linux_dist = find_asset(include=("legado-linux-with-dist.zip",))
 
-          if harmony_dist or linux_dist:
-              emit_heading("### 前端文件")
-              emit_links([
-                  ("Harmony 前端文件", harmony_dist),
-                  ("Linux 前端文件", linux_dist),
-              ])
+          add_row("Harmony 前端文件", "Harmony-with-dist", "-", harmony_dist, "前端文件")
+          add_row("Linux 前端文件", "Linux-with-dist", "-", linux_dist, "前端文件")
+
+          print()
+          print("## 下载地址")
+          print()
+          print("| 平台 | 文件类型 | 架构 / 版本 | 下载链接 | 说明 |")
+          print("|---|---|---|---|---|")
+
+          for row in rows:
+              print("| " + " | ".join(row) + " |")
 
           print()
           PY

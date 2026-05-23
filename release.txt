@@ -1,16 +1,3 @@
 ## 下载说明
 
 > 请根据你的系统平台选择对应的安装包或文件。
-
-| 平台 / 文件类型 | 文件后缀或名称 | 说明 |
-|---|---|---|
-| iOS | `.ipa` | iOS 安装包，需要自签名；系统版本过低将无法使用 |
-| Linux 前端文件 | `Linux-with-dist` | 前端文件 |
-| Harmony 前端文件 | `Harmony-with-dist` | 前端文件 |
-| Debian / Ubuntu 系 Linux | `.deb` | 适用于 Debian、Ubuntu 等 Linux 发行版 |
-| Red Hat / Fedora 系 Linux | `.rpm` | 适用于 Red Hat、Fedora、CentOS 等 Linux 发行版 |
-| 通用 Linux | `.AppImage` | 适用于多数 Linux 发行版 |
-| Windows | `.exe` | Windows 安装包 |
-| Windows | `.msi` | Windows 安装包 |
-| macOS | `.dmg` | Mac OS 安装包 |
-| Android | `.apk` | 安卓安装包 |
