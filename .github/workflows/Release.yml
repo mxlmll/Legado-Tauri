@@ -1091,74 +1091,267 @@ jobs:
             git push origin "${{ needs.prepare.outputs.tag_name }}"
           fi
 
-      - name: Generate release body with direct links
+      - name: Generate release body with download sections
         shell: bash
         run: |
-          REPO="${{ github.repository }}"
-          TAG="${{ needs.prepare.outputs.tag_name }}"
-          BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+          set -e
+
+          export REPO="${{ github.repository }}"
+          export TAG="${{ needs.prepare.outputs.tag_name }}"
+          export BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
 
           if [ ! -f release.txt ]; then
             echo "release.txt not found"
             exit 1
           fi
 
-          find . -type f \
-            \( -name "Legado-Linux-with-dist.zip" \
-            -o -name "Legado-Harmony-with-dist.zip" \
-            -o -name "*.apk" \
-            -o -name "*.ipa" \
-            -o -name "*.AppImage" \
-            -o -name "*.deb" \
-            -o -name "*.rpm" \
-            -o -name "*.dmg" \
-            -o -name "*.exe" \
-            -o -name "*.msi" \) \
-            | sort > release_files.txt
-            
-          printf '\n' >> release.txt
+          python3 <<'PY' >> release.txt
+          import os
+          import urllib.parse
+          from pathlib import Path
 
-          while IFS= read -r file; do
-            name="$(basename "$file")"
-            encoded_name="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$name")"
-            case "$name" in
-              *.apk)
-                label="安卓 APK"
-                ;;
-              *.ipa)
-                label="iOS IPA"
-                ;;
-              *Linux-with-dist.zip)
-                label="Linux 前端文件"
-                ;;
-              *Harmony-with-dist.zip)
-                label="Harmony 前端文件"
-                ;;
-              *.deb)
-                label="Linux DEB"
-                ;;
-              *.rpm)
-                label="Linux RPM"
-                ;;
-              *.AppImage)
-                label="Linux AppImage"
-                ;;
-              *.exe)
-                label="Windows EXE"
-                ;;
-              *.msi)
-                label="Windows MSI"
-                ;;
-              *.dmg)
-                label="Mac OS DMG"
-                ;;
-              *)
-                label="Release 文件"
-                ;;
-            esac
+          BASE_URL = os.environ["BASE_URL"]
 
-            echo "- [${label} - ${name}](${BASE_URL}/${encoded_name})" >> release.txt
-          done < release_files.txt
+          ASSET_EXTS = (
+              ".apk",
+              ".ipa",
+              ".appimage",
+              ".deb",
+              ".rpm",
+              ".dmg",
+              ".exe",
+              ".msi",
+          )
+
+          ASSET_NAMES = {
+              "Legado-Linux-with-dist.zip",
+              "Legado-Harmony-with-dist.zip",
+          }
+
+          assets = []
+          for p in Path(".").rglob("*"):
+              if not p.is_file():
+                  continue
+
+              name = p.name
+              lower = name.lower()
+
+              if name in ASSET_NAMES or lower.endswith(ASSET_EXTS):
+                  assets.append(p)
+
+          assets = sorted(assets, key=lambda x: x.name.lower())
+
+          def asset_url(path: Path) -> str:
+              name = path.name
+              encoded = urllib.parse.quote(name, safe="")
+              return f"{BASE_URL}/{encoded}"
+
+          def md_link(label: str, path: Path) -> str:
+              return f"[{label}]({asset_url(path)})"
+
+          def has_word(name: str, words) -> bool:
+              name = name.lower()
+              return any(w in name for w in words)
+
+          def find_asset(*, suffix=None, include=(), exclude=()):
+              for p in assets:
+                  name = p.name.lower()
+
+                  if suffix and not name.endswith(suffix.lower()):
+                      continue
+
+                  if include and not all(x.lower() in name for x in include):
+                      continue
+
+                  if exclude and any(x.lower() in name for x in exclude):
+                      continue
+
+                  return p
+
+              return None
+
+          def find_arch_asset(suffix, arch, *, include=(), exclude=()):
+              arch_words = {
+                  "x64": ("x64", "x86_64", "amd64"),
+                  "arm64": ("arm64", "aarch64", "arm64-v8a"),
+                  "armv7": ("armv7", "armv7l", "armhf", "armeabi-v7a"),
+                  "x86": ("x86", "i686"),
+                  "universal": ("universal",),
+              }[arch]
+
+              for p in assets:
+                  name = p.name.lower()
+
+                  if suffix and not name.endswith(suffix.lower()):
+                      continue
+
+                  if include and not all(x.lower() in name for x in include):
+                      continue
+
+                  if exclude and any(x.lower() in name for x in exclude):
+                      continue
+
+                  if has_word(name, arch_words):
+                      return p
+
+              return None
+
+          def emit_links(label_file_pairs):
+              links = []
+              for label, path in label_file_pairs:
+                  if path:
+                      links.append(md_link(label, path))
+
+              if links:
+                  print(f"- {' | '.join(links)}")
+                  return True
+
+              return False
+
+          def emit_heading(title):
+              print()
+              print(title)
+              print()
+
+          def emit_subheading(title):
+              print(title)
+              print()
+
+          print()
+          print("## 下载地址")
+
+          # Windows
+          win_x64_exe = find_arch_asset(".exe", "x64", exclude=("webview", "webview2"))
+          win_arm64_exe = find_arch_asset(".exe", "arm64", exclude=("webview", "webview2"))
+          win_x64_msi = find_arch_asset(".msi", "x64", exclude=("webview", "webview2"))
+          win_arm64_msi = find_arch_asset(".msi", "arm64", exclude=("webview", "webview2"))
+
+          win_webview_x64 = (
+              find_arch_asset(".exe", "x64", include=("webview",))
+              or find_arch_asset(".msi", "x64", include=("webview",))
+              or find_arch_asset(".exe", "x64", include=("webview2",))
+              or find_arch_asset(".msi", "x64", include=("webview2",))
+          )
+
+          win_webview_arm64 = (
+              find_arch_asset(".exe", "arm64", include=("webview",))
+              or find_arch_asset(".msi", "arm64", include=("webview",))
+              or find_arch_asset(".exe", "arm64", include=("webview2",))
+              or find_arch_asset(".msi", "arm64", include=("webview2",))
+          )
+
+          if any((win_x64_exe, win_arm64_exe, win_x64_msi, win_arm64_msi, win_webview_x64, win_webview_arm64)):
+              emit_heading("### Windows（不再支持 Win7）")
+
+              emit_subheading("#### 正常版本（推荐）")
+              emit_links([
+                  ("64位 EXE（常用）", win_x64_exe),
+                  ("64位 MSI", win_x64_msi),
+                  ("ARM64 EXE", win_arm64_exe),
+                  ("ARM64 MSI", win_arm64_msi),
+              ])
+
+              if win_webview_x64 or win_webview_arm64:
+                  print()
+                  emit_subheading("#### 内置 WebView2 版（体积较大，仅在企业版系统或无法安装 WebView2 时使用）")
+                  emit_links([
+                      ("64位", win_webview_x64),
+                      ("ARM64", win_webview_arm64),
+                  ])
+
+          # macOS
+          mac_arm64 = find_arch_asset(".dmg", "arm64")
+          mac_x64 = find_arch_asset(".dmg", "x64")
+
+          if mac_arm64 or mac_x64:
+              emit_heading("### macOS")
+              emit_links([
+                  ("Apple M 芯片", mac_arm64),
+                  ("Intel 芯片", mac_x64),
+              ])
+
+          # Linux
+          app_x64 = find_arch_asset(".appimage", "x64")
+          app_arm64 = find_arch_asset(".appimage", "arm64")
+          app_armv7 = find_arch_asset(".appimage", "armv7")
+
+          deb_x64 = find_arch_asset(".deb", "x64")
+          deb_arm64 = find_arch_asset(".deb", "arm64")
+          deb_armv7 = find_arch_asset(".deb", "armv7")
+
+          rpm_x64 = find_arch_asset(".rpm", "x64")
+          rpm_arm64 = find_arch_asset(".rpm", "arm64")
+          rpm_armv7 = find_arch_asset(".rpm", "armv7")
+
+          if any((app_x64, app_arm64, app_armv7, deb_x64, deb_arm64, deb_armv7, rpm_x64, rpm_arm64, rpm_armv7)):
+              emit_heading("### Linux")
+
+              if app_x64 or app_arm64 or app_armv7:
+                  emit_subheading("#### AppImage（下载后添加执行权限即可运行）")
+                  emit_links([
+                      ("64位", app_x64),
+                      ("ARM64", app_arm64),
+                      ("ARMv7", app_armv7),
+                  ])
+                  print()
+
+              if deb_x64 or deb_arm64 or deb_armv7:
+                  emit_subheading("#### DEB 包（Debian / Ubuntu 系）")
+                  emit_links([
+                      ("64位", deb_x64),
+                      ("ARM64", deb_arm64),
+                      ("ARMv7", deb_armv7),
+                  ])
+                  print()
+
+              if rpm_x64 or rpm_arm64 or rpm_armv7:
+                  emit_subheading("#### RPM 包（RedHat / Fedora 系）")
+                  emit_links([
+                      ("64位", rpm_x64),
+                      ("ARM64", rpm_arm64),
+                      ("ARMv7", rpm_armv7),
+                  ])
+
+          # Android
+          apk_universal = find_arch_asset(".apk", "universal")
+          apk_arm64 = find_arch_asset(".apk", "arm64")
+          apk_armv7 = find_arch_asset(".apk", "armv7")
+          apk_x64 = find_arch_asset(".apk", "x64")
+          apk_x86 = find_arch_asset(".apk", "x86", exclude=("x86_64",))
+
+          if any((apk_universal, apk_arm64, apk_armv7, apk_x64, apk_x86)):
+              emit_heading("### Android")
+              emit_links([
+                  ("通用版", apk_universal),
+                  ("ARM64", apk_arm64),
+                  ("ARMv7", apk_armv7),
+                  ("x64", apk_x64),
+                  ("x86", apk_x86),
+              ])
+
+          # iOS
+          ipa_arm64 = find_arch_asset(".ipa", "arm64")
+          ipa_any = find_asset(suffix=".ipa")
+
+          if ipa_arm64 or ipa_any:
+              emit_heading("### iOS")
+              emit_links([
+                  ("IPA（未签名）", ipa_arm64 or ipa_any),
+              ])
+
+          # Frontend dist
+          harmony_dist = find_asset(include=("Legado-Harmony-with-dist.zip",))
+          linux_dist = find_asset(include=("Legado-Linux-with-dist.zip",))
+
+          if harmony_dist or linux_dist:
+              emit_heading("### 前端文件")
+              emit_links([
+                  ("Harmony 前端文件", harmony_dist),
+                  ("Linux 前端文件", linux_dist),
+              ])
+
+          print()
+          PY
 
           echo "===== release.txt ====="
           cat release.txt
