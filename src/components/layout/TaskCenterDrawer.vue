@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ShellTaskItem } from '@/stores';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 
 const props = withDefaults(
   defineProps<{
@@ -39,7 +39,7 @@ function close() {
   emit('close');
 }
 
-useOverlayBackstack(() => props.show, close);
+useOverlay(() => props.show, close);
 
 function formatDuration(task: ShellTaskItem): string {
   const end = task.endedAt ?? Date.now();

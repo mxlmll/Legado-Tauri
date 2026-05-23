@@ -12,34 +12,33 @@
 // ==/UserScript==
 
 legado.registerPlugin({
-  id: "edge-read-aloud-tts",
-  name: "Edge Read Aloud TTS 引擎",
+  id: 'edge-read-aloud-tts',
+  name: 'Edge Read Aloud TTS 引擎',
   setup: function (api) {
-    var WSS_BASE =
-      "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1";
-    var DEFAULT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
-    var DEFAULT_CHROMIUM_VERSION = "143.0.3650.75";
+    var WSS_BASE = 'wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1';
+    var DEFAULT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+    var DEFAULT_CHROMIUM_VERSION = '143.0.3650.75';
     var currentAudio = null;
     var activeSockets = [];
-    var currentUrl = "";
+    var currentUrl = '';
 
     var voices = [
-      { id: "zh-CN-XiaoxiaoNeural", name: "晓晓", language: "zh-CN" },
-      { id: "zh-CN-YunxiNeural", name: "云希", language: "zh-CN" },
-      { id: "zh-CN-YunjianNeural", name: "云健", language: "zh-CN" },
-      { id: "zh-CN-XiaoyiNeural", name: "晓伊", language: "zh-CN" },
-      { id: "zh-CN-YunyangNeural", name: "云扬", language: "zh-CN" },
-      { id: "zh-CN-XiaochenNeural", name: "晓辰", language: "zh-CN" },
-      { id: "zh-CN-XiaohanNeural", name: "晓涵", language: "zh-CN" },
-      { id: "zh-CN-XiaomengNeural", name: "晓梦", language: "zh-CN" },
-      { id: "zh-CN-XiaomoNeural", name: "晓墨", language: "zh-CN" },
-      { id: "zh-CN-XiaoqiuNeural", name: "晓秋", language: "zh-CN" },
-      { id: "zh-CN-XiaoruiNeural", name: "晓睿", language: "zh-CN" },
-      { id: "zh-CN-XiaoshuangNeural", name: "晓双", language: "zh-CN" },
-      { id: "zh-CN-XiaoxuanNeural", name: "晓萱", language: "zh-CN" },
-      { id: "zh-CN-XiaoyanNeural", name: "晓颜", language: "zh-CN" },
-      { id: "zh-CN-XiaoyouNeural", name: "晓悠", language: "zh-CN" },
-      { id: "zh-CN-XiaozhenNeural", name: "晓甄", language: "zh-CN" },
+      { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓', language: 'zh-CN' },
+      { id: 'zh-CN-YunxiNeural', name: '云希', language: 'zh-CN' },
+      { id: 'zh-CN-YunjianNeural', name: '云健', language: 'zh-CN' },
+      { id: 'zh-CN-XiaoyiNeural', name: '晓伊', language: 'zh-CN' },
+      { id: 'zh-CN-YunyangNeural', name: '云扬', language: 'zh-CN' },
+      { id: 'zh-CN-XiaochenNeural', name: '晓辰', language: 'zh-CN' },
+      { id: 'zh-CN-XiaohanNeural', name: '晓涵', language: 'zh-CN' },
+      { id: 'zh-CN-XiaomengNeural', name: '晓梦', language: 'zh-CN' },
+      { id: 'zh-CN-XiaomoNeural', name: '晓墨', language: 'zh-CN' },
+      { id: 'zh-CN-XiaoqiuNeural', name: '晓秋', language: 'zh-CN' },
+      { id: 'zh-CN-XiaoruiNeural', name: '晓睿', language: 'zh-CN' },
+      { id: 'zh-CN-XiaoshuangNeural', name: '晓双', language: 'zh-CN' },
+      { id: 'zh-CN-XiaoxuanNeural', name: '晓萱', language: 'zh-CN' },
+      { id: 'zh-CN-XiaoyanNeural', name: '晓颜', language: 'zh-CN' },
+      { id: 'zh-CN-XiaoyouNeural', name: '晓悠', language: 'zh-CN' },
+      { id: 'zh-CN-XiaozhenNeural', name: '晓甄', language: 'zh-CN' },
     ];
 
     function stopAudio() {
@@ -51,21 +50,17 @@ legado.registerPlugin({
       }
       if (currentUrl) {
         URL.revokeObjectURL(currentUrl);
-        currentUrl = "";
+        currentUrl = '';
       }
     }
 
     function stopCurrent() {
       stopAudio();
-      for (
-        var socketIndex = 0;
-        socketIndex < activeSockets.length;
-        socketIndex++
-      ) {
+      for (var socketIndex = 0; socketIndex < activeSockets.length; socketIndex++) {
         try {
           activeSockets[socketIndex].close();
         } catch (error) {
-          api.log("关闭 Edge TTS socket 失败", error);
+          api.log('关闭 Edge TTS socket 失败', error);
         }
       }
       activeSockets = [];
@@ -78,9 +73,9 @@ legado.registerPlugin({
       bytes[8] = (bytes[8] & 0x3f) | 0x80;
       return Array.from(bytes)
         .map(function (byte) {
-          return byte.toString(16).padStart(2, "0");
+          return byte.toString(16).padStart(2, '0');
         })
-        .join("");
+        .join('');
     }
 
     function newMuid() {
@@ -89,17 +84,15 @@ legado.registerPlugin({
 
     async function sha256Upper(text) {
       if (!crypto.subtle) {
-        throw new Error(
-          "当前环境不支持 crypto.subtle，无法生成 Edge TTS 鉴权参数",
-        );
+        throw new Error('当前环境不支持 crypto.subtle，无法生成 Edge TTS 鉴权参数');
       }
       var bytes = new TextEncoder().encode(text);
-      var hash = await crypto.subtle.digest("SHA-256", bytes);
+      var hash = await crypto.subtle.digest('SHA-256', bytes);
       return Array.from(new Uint8Array(hash))
         .map(function (byte) {
-          return byte.toString(16).padStart(2, "0");
+          return byte.toString(16).padStart(2, '0');
         })
-        .join("")
+        .join('')
         .toUpperCase();
     }
 
@@ -111,76 +104,76 @@ legado.registerPlugin({
     }
 
     function pad(value) {
-      return String(value).padStart(2, "0");
+      return String(value).padStart(2, '0');
     }
 
     function dateString() {
       var date = new Date();
-      var days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       var months = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
       ];
       return (
         days[date.getUTCDay()] +
-        " " +
+        ' ' +
         months[date.getUTCMonth()] +
-        " " +
+        ' ' +
         pad(date.getUTCDate()) +
-        " " +
+        ' ' +
         date.getUTCFullYear() +
-        " " +
+        ' ' +
         pad(date.getUTCHours()) +
-        ":" +
+        ':' +
         pad(date.getUTCMinutes()) +
-        ":" +
+        ':' +
         pad(date.getUTCSeconds()) +
-        " GMT+0000 (Coordinated Universal Time)"
+        ' GMT+0000 (Coordinated Universal Time)'
       );
     }
 
     function xmlEscape(text) {
       return String(text)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&apos;")
-        .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, " ");
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;')
+        .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ');
     }
 
     function normalizeVoice(voice) {
-      if (voice.indexOf("Microsoft Server Speech Text to Speech Voice") === 0) {
+      if (voice.indexOf('Microsoft Server Speech Text to Speech Voice') === 0) {
         return voice;
       }
-      var parts = voice.split("-");
+      var parts = voice.split('-');
       if (parts.length < 3) {
         return voice;
       }
       return (
-        "Microsoft Server Speech Text to Speech Voice (" +
+        'Microsoft Server Speech Text to Speech Voice (' +
         parts[0] +
-        "-" +
+        '-' +
         parts[1] +
-        ", " +
-        parts.slice(2).join("-") +
-        ")"
+        ', ' +
+        parts.slice(2).join('-') +
+        ')'
       );
     }
 
     function edgeRate(rate) {
       var value = Math.round((Number(rate || 1) - 1) * 100);
-      return (value >= 0 ? "+" : "") + value + "%";
+      return (value >= 0 ? '+' : '') + value + '%';
     }
 
     function makeSsml(text, voice, rate) {
@@ -193,26 +186,26 @@ legado.registerPlugin({
         rate +
         "' volume='+0%'>" +
         xmlEscape(text) +
-        "</prosody></voice></speak>"
+        '</prosody></voice></speak>'
       );
     }
 
     function speechConfigMessage() {
       return (
-        "X-Timestamp:" +
+        'X-Timestamp:' +
         dateString() +
-        "\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n" +
+        '\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n' +
         '{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}'
       );
     }
 
     function ssmlMessage(ssml) {
       return (
-        "X-RequestId:" +
+        'X-RequestId:' +
         uuidSimple() +
-        "\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:" +
+        '\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:' +
         dateString() +
-        "Z\r\nPath:ssml\r\n\r\n" +
+        'Z\r\nPath:ssml\r\n\r\n' +
         ssml
       );
     }
@@ -227,38 +220,29 @@ legado.registerPlugin({
       if (headerEnd > bytes.length) {
         return null;
       }
-      var header = new TextDecoder()
-        .decode(bytes.slice(2, headerEnd))
-        .toLowerCase();
-      if (
-        header.indexOf("path:audio") >= 0 &&
-        header.indexOf("audio/mpeg") >= 0
-      ) {
+      var header = new TextDecoder().decode(bytes.slice(2, headerEnd)).toLowerCase();
+      if (header.indexOf('path:audio') >= 0 && header.indexOf('audio/mpeg') >= 0) {
         return bytes.slice(headerEnd);
       }
       return null;
     }
 
     async function synthesize(text, context) {
-      var token = api.settings.get("trustedClientToken", DEFAULT_TOKEN);
-      var version = api.settings.get(
-        "chromiumVersion",
-        DEFAULT_CHROMIUM_VERSION,
-      );
+      var token = api.settings.get('trustedClientToken', DEFAULT_TOKEN);
+      var version = api.settings.get('chromiumVersion', DEFAULT_CHROMIUM_VERSION);
       var connectionId = uuidSimple();
       var secMsGec = await generateSecMsGec(token);
       var url =
         WSS_BASE +
-        "?TrustedClientToken=" +
+        '?TrustedClientToken=' +
         encodeURIComponent(token) +
-        "&ConnectionId=" +
+        '&ConnectionId=' +
         connectionId +
-        "&Sec-MS-GEC=" +
+        '&Sec-MS-GEC=' +
         secMsGec +
-        "&Sec-MS-GEC-Version=1-" +
+        '&Sec-MS-GEC-Version=1-' +
         encodeURIComponent(version);
-      var voice =
-        context.voiceId || api.settings.get("voice", "zh-CN-XiaoxiaoNeural");
+      var voice = context.voiceId || api.settings.get('voice', 'zh-CN-XiaoxiaoNeural');
       var rate = edgeRate(context.rate);
 
       return new Promise(function (resolve, reject) {
@@ -266,7 +250,7 @@ legado.registerPlugin({
         var settled = false;
         var socket = new WebSocket(url);
         activeSockets.push(socket);
-        socket.binaryType = "arraybuffer";
+        socket.binaryType = 'arraybuffer';
 
         function settle(fn, value) {
           if (settled) {
@@ -279,13 +263,13 @@ legado.registerPlugin({
           try {
             socket.close();
           } catch (error) {
-            api.log("关闭 Edge TTS socket 失败", error);
+            api.log('关闭 Edge TTS socket 失败', error);
           }
           fn(value);
         }
 
         context.signal.addEventListener(
-          "abort",
+          'abort',
           function () {
             settle(resolve, null);
           },
@@ -297,19 +281,19 @@ legado.registerPlugin({
           socket.send(ssmlMessage(makeSsml(text, voice, rate)));
         };
         socket.onerror = function () {
-          settle(reject, new Error("Edge TTS WebSocket 连接失败"));
+          settle(reject, new Error('Edge TTS WebSocket 连接失败'));
         };
         socket.onclose = function () {
           if (!settled && chunks.length > 0) {
-            settle(resolve, new Blob(chunks, { type: "audio/mpeg" }));
+            settle(resolve, new Blob(chunks, { type: 'audio/mpeg' }));
           } else if (!settled) {
-            settle(reject, new Error("Edge TTS 未返回音频数据"));
+            settle(reject, new Error('Edge TTS 未返回音频数据'));
           }
         };
         socket.onmessage = function (event) {
-          if (typeof event.data === "string") {
-            if (event.data.indexOf("Path:turn.end") >= 0) {
-              settle(resolve, new Blob(chunks, { type: "audio/mpeg" }));
+          if (typeof event.data === 'string') {
+            if (event.data.indexOf('Path:turn.end') >= 0) {
+              settle(resolve, new Blob(chunks, { type: 'audio/mpeg' }));
             }
             return;
           }
@@ -333,7 +317,7 @@ legado.registerPlugin({
 
       await new Promise(function (resolve, reject) {
         context.signal.addEventListener(
-          "abort",
+          'abort',
           function () {
             stopAudio();
             resolve();
@@ -346,7 +330,7 @@ legado.registerPlugin({
         };
         currentAudio.onerror = function () {
           stopAudio();
-          reject(new Error("Edge TTS 音频播放失败"));
+          reject(new Error('Edge TTS 音频播放失败'));
         };
         currentAudio.play().catch(reject);
       });
@@ -355,36 +339,36 @@ legado.registerPlugin({
     return {
       settings: {
         defaults: {
-          voice: "zh-CN-XiaoxiaoNeural",
+          voice: 'zh-CN-XiaoxiaoNeural',
           trustedClientToken: DEFAULT_TOKEN,
           chromiumVersion: DEFAULT_CHROMIUM_VERSION,
         },
         schema: [
           {
-            type: "select",
-            key: "voice",
-            label: "默认语音",
+            type: 'select',
+            key: 'voice',
+            label: '默认语音',
             options: voices.map(function (voice) {
               return {
-                label: voice.name + " · " + voice.language,
+                label: voice.name + ' · ' + voice.language,
                 value: voice.id,
               };
             }),
           },
-          { type: "text", key: "chromiumVersion", label: "Chromium 版本" },
+          { type: 'text', key: 'chromiumVersion', label: 'Chromium 版本' },
           {
-            type: "text",
-            key: "trustedClientToken",
-            label: "Trusted Client Token",
+            type: 'text',
+            key: 'trustedClientToken',
+            label: 'Trusted Client Token',
           },
         ],
       },
       ttsEngines: [
         {
-          id: "edge-read-aloud",
-          name: "Edge Read Aloud",
-          description: "旧 Edge 在线朗读协议示例插件",
-          category: "TTS",
+          id: 'edge-read-aloud',
+          name: 'Edge Read Aloud',
+          description: '旧 Edge 在线朗读协议示例插件',
+          category: 'TTS',
           getVoices: function () {
             return voices;
           },
@@ -392,8 +376,7 @@ legado.registerPlugin({
             return synthesize(context.text, context);
           },
           speak: async function (context) {
-            var blob =
-              context.preloaded || (await synthesize(context.text, context));
+            var blob = context.preloaded || (await synthesize(context.text, context));
             await playBlob(blob, context);
           },
           stop: function () {
@@ -402,9 +385,9 @@ legado.registerPlugin({
           previewVoice: async function (voiceId) {
             var controller = new AbortController();
             var context = {
-              text: "这是一段 Edge 在线朗读试听。",
+              text: '这是一段 Edge 在线朗读试听。',
               voiceId: voiceId,
-              language: "zh-CN",
+              language: 'zh-CN',
               rate: 1,
               pitch: 1,
               volume: 1,

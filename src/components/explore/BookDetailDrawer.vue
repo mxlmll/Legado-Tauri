@@ -14,7 +14,7 @@ import {
   legacyLocalStorageRemove,
   setFrontendStorageItem,
 } from '../../composables/useFrontendStorage';
-import { useOverlayBackstack } from '../../composables/useOverlayBackstack';
+import { useOverlay } from '../../composables/useOverlay';
 import {
   getBookMetaBadges,
   getLatestChapterText,
@@ -195,7 +195,7 @@ function closeDrawer() {
   emit('update:show', false);
 }
 
-useOverlayBackstack(() => props.show, closeDrawer);
+useOverlay(() => props.show, closeDrawer);
 
 watch(
   () => props.show,

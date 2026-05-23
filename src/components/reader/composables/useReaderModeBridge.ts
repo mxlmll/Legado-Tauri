@@ -1,8 +1,8 @@
 /**
  * 连接具体阅读模式组件与父级控制器，转发翻页、滚动进度和媒体进度事件。
  */
-import { ref, type ComputedRef, type Ref } from "vue";
-import type { ChapterItem } from "@/stores";
+import { ref, type ComputedRef, type Ref } from 'vue';
+import type { ChapterItem } from '@/stores';
 
 export interface PagedModeApi {
   flipNext?: () => boolean;
@@ -26,9 +26,9 @@ export interface ScrollModeApi {
   getReadingScrollRatio?: () => number;
   getReadingLineAnchor?: () => number;
   getReadingParagraphIndex?: () => number;
-  getAdjacentScrollRatio?: (side: "prev" | "next") => number;
-  getAdjacentLineAnchor?: (side: "prev" | "next") => number;
-  getAdjacentParagraphIndex?: (side: "prev" | "next") => number;
+  getAdjacentScrollRatio?: (side: 'prev' | 'next') => number;
+  getAdjacentLineAnchor?: (side: 'prev' | 'next') => number;
+  getAdjacentParagraphIndex?: (side: 'prev' | 'next') => number;
   pageDown?: () => boolean;
   pageUp?: () => boolean;
   getFirstVisibleParaIndex?: () => number;
@@ -44,8 +44,8 @@ export interface ComicModeApi {
   getReadingChapterOffset?: () => number;
   getReadingScrollRatio?: () => number;
   getReadingPageIndex?: () => number;
-  getAdjacentScrollRatio?: (side: "prev" | "next") => number;
-  getAdjacentPageIndex?: (side: "prev" | "next") => number;
+  getAdjacentScrollRatio?: (side: 'prev' | 'next') => number;
+  getAdjacentPageIndex?: (side: 'prev' | 'next') => number;
   currentPage?: number;
   totalPages?: number;
   prepareSeamlessSwap?: (height: number) => void;
@@ -127,49 +127,38 @@ export function useReaderModeBridge(options: UseReaderModeBridgeOptions) {
     if (options.shouldIgnorePositionEvents()) {
       return;
     }
-    options.readingChapterOffset.value =
-      scrollModeRef.value?.getReadingChapterOffset?.() ?? 0;
+    options.readingChapterOffset.value = scrollModeRef.value?.getReadingChapterOffset?.() ?? 0;
     options.currentPageIndex.value =
       scrollModeRef.value?.getReadingLineAnchor?.() ??
       scrollModeRef.value?.getReadingParagraphIndex?.() ??
       -1;
-    options.currentScrollRatio.value =
-      scrollModeRef.value?.getReadingScrollRatio?.() ?? ratio;
+    options.currentScrollRatio.value = scrollModeRef.value?.getReadingScrollRatio?.() ?? ratio;
   }
 
   function onComicProgress(ratio: number) {
     if (options.shouldIgnorePositionEvents()) {
       return;
     }
-    options.readingChapterOffset.value =
-      comicModeRef.value?.getReadingChapterOffset?.() ?? 0;
-    const page =
-      comicModeRef.value?.getReadingPageIndex?.() ??
-      comicModeRef.value?.currentPage;
-    if (typeof page === "number") {
+    options.readingChapterOffset.value = comicModeRef.value?.getReadingChapterOffset?.() ?? 0;
+    const page = comicModeRef.value?.getReadingPageIndex?.() ?? comicModeRef.value?.currentPage;
+    if (typeof page === 'number') {
       options.currentPageIndex.value = page;
     }
-    options.currentScrollRatio.value =
-      comicModeRef.value?.getReadingScrollRatio?.() ?? ratio;
+    options.currentScrollRatio.value = comicModeRef.value?.getReadingScrollRatio?.() ?? ratio;
   }
 
   function onVideoProgress(time: number, duration: number) {
     const shelfId = options.currentShelfId.value;
-    if (shelfId !== undefined && shelfId !== "" && time > 0) {
+    if (shelfId !== undefined && shelfId !== '' && time > 0) {
       const chapter = options.getChapter(options.activeChapterIndex.value);
       if (chapter) {
         void options
-          .updateProgress(
-            shelfId,
-            options.activeChapterIndex.value,
-            chapter.url,
-            {
-              pageIndex: -1,
-              scrollRatio: -1,
-              playbackTime: time,
-              readerSettings: options.getSettingsJson(),
-            },
-          )
+          .updateProgress(shelfId, options.activeChapterIndex.value, chapter.url, {
+            pageIndex: -1,
+            scrollRatio: -1,
+            playbackTime: time,
+            readerSettings: options.getSettingsJson(),
+          })
           .catch(() => {});
         if (options.saveEpisodeProgress && duration > 0) {
           options.saveEpisodeProgress(shelfId, chapter.url, time, duration);
@@ -196,10 +185,7 @@ export function useReaderModeBridge(options: UseReaderModeBridgeOptions) {
       return;
     }
 
-    if (
-      !options.pagedLoading.value &&
-      pagedModeRef.value?.flipNext?.() !== true
-    ) {
+    if (!options.pagedLoading.value && pagedModeRef.value?.flipNext?.() !== true) {
       options.warnLastPage();
     }
   }
@@ -218,10 +204,7 @@ export function useReaderModeBridge(options: UseReaderModeBridgeOptions) {
       return;
     }
 
-    if (
-      !options.pagedLoading.value &&
-      pagedModeRef.value?.flipPrev?.() !== true
-    ) {
+    if (!options.pagedLoading.value && pagedModeRef.value?.flipPrev?.() !== true) {
       options.warnFirstPage();
     }
   }
@@ -243,10 +226,7 @@ export function useReaderModeBridge(options: UseReaderModeBridgeOptions) {
       return;
     }
 
-    if (
-      !options.pagedLoading.value &&
-      pagedModeRef.value?.flipNext?.() !== true
-    ) {
+    if (!options.pagedLoading.value && pagedModeRef.value?.flipNext?.() !== true) {
       options.warnLastPage();
     }
   }
@@ -268,10 +248,7 @@ export function useReaderModeBridge(options: UseReaderModeBridgeOptions) {
       return;
     }
 
-    if (
-      !options.pagedLoading.value &&
-      pagedModeRef.value?.flipPrev?.() !== true
-    ) {
+    if (!options.pagedLoading.value && pagedModeRef.value?.flipPrev?.() !== true) {
       options.warnFirstPage();
     }
   }

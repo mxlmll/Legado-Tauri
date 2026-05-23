@@ -3,7 +3,7 @@ import { Trash2, Edit3, Plus, Folder } from 'lucide-vue-next';
 import { NButton, NInput, NPopconfirm, NSwitch } from 'naive-ui';
 import { computed, nextTick, ref } from 'vue';
 import type { ShelfGroup } from '@/types/shelfGroup';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 
 const props = defineProps<{
   show: boolean;
@@ -27,7 +27,7 @@ const addingNew = ref(false);
 const editingGroupId = ref<string | null>(null);
 const editingName = ref('');
 
-useOverlayBackstack(
+useOverlay(
   () => props.show,
   () => {
     emit('update:show', false);

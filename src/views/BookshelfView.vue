@@ -5,7 +5,6 @@ import { computed, onMounted, ref, watch } from 'vue';
 import ChapterReaderModal from '@/components/explore/ChapterReaderModal.vue';
 import ShelfGroupMenu from '@/components/shelf/ShelfGroupMenu.vue';
 import { useDynamicConfig } from '@/composables/useDynamicConfig';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
 import { useShelfGroups } from '@/composables/useShelfGroups';
 import { useTocAutoUpdate } from '@/composables/useTocAutoUpdate';
 import { isTransportAvailable } from '@/composables/useTransport';
@@ -184,13 +183,6 @@ const readerLauncher = useBookshelfReaderLauncher(message);
 const bookshelfActions = useBookshelfActions(message);
 const tocAutoUpdate = useTocAutoUpdate();
 
-useOverlayBackstack(
-  () => showDropdown.value,
-  () => {
-    showDropdown.value = false;
-  },
-);
-
 // 计算可见书籍数量
 const visibleBookCount = computed(() => {
   if (privacyModeStore.privacyModeEnabled) {
@@ -299,7 +291,7 @@ function handleToggleAllGroup() {
 
 // 下拉刷新处理
 async function handleRefresh() {
-  const result = await tocAutoUpdate.refreshAllOnShelfView();
+  const result = await tocAutoUpdate.refreshAllOnShelfView({ force: true });
 
   if (result.updated > 0) {
     message.success(`发现 ${result.updated} 个新章节`);

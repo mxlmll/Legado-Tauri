@@ -3,7 +3,7 @@ import { ArrowDown, Copy, Minus, Pause, Play, Trash2, X } from 'lucide-vue-next'
 import { useMessage } from 'naive-ui';
 import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { isMobile } from '@/composables/useEnv';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import { copyText } from '@/utils/clipboard';
 import type { FilterType } from './log/useLogState';
 import LogEntry from './log/LogEntry.vue';
@@ -67,7 +67,7 @@ const {
  */
 const minimized = ref(false);
 
-useOverlayBackstack(
+useOverlay(
   () => props.show && !minimized.value,
   () => {
     close();

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { isMobile } from '@/composables/useEnv';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 
 withDefaults(
   defineProps<{
@@ -21,7 +21,7 @@ withDefaults(
 
 const show = ref(false);
 
-useOverlayBackstack(
+useOverlay(
   () => show.value,
   () => {
     show.value = false;

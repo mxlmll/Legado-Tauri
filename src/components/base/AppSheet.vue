@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue';
 import { useBreakpoint } from '../../composables/useBreakpoint';
 import { useFocusNavigation } from '../../composables/useFocusNavigation';
-import { useOverlayBackstack } from '../../composables/useOverlayBackstack';
+import { useOverlay } from '../../composables/useOverlay';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -23,7 +23,7 @@ function close() {
   restoreFocus();
 }
 
-useOverlayBackstack(() => props.modelValue, close);
+useOverlay(() => props.modelValue, close);
 
 function onBackdropClick() {
   close();

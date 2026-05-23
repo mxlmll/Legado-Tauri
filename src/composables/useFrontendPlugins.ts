@@ -1,5 +1,5 @@
-import { computed, reactive, readonly } from "vue";
-import type { RuntimePluginRecord } from "@/features/frontendPlugins/pluginRuntimeTypes";
+import { computed, reactive, readonly } from 'vue';
+import type { RuntimePluginRecord } from '@/features/frontendPlugins/pluginRuntimeTypes';
 import type {
   ReaderPluginSlot,
   ReaderContentHookStage,
@@ -27,63 +27,63 @@ import type {
   PluginSettingsContext,
   FrontendPluginRecord,
   FrontendPluginApi,
-} from "@/features/frontendPlugins/pluginTypes";
-import { BUILTIN_FRONTEND_PLUGINS } from "@/data/builtinPlugins";
+} from '@/features/frontendPlugins/pluginTypes';
+import { BUILTIN_FRONTEND_PLUGINS } from '@/data/builtinPlugins';
 import {
   computePublicThemeState,
   computePublicBackgroundState,
   computePublicSkinState,
   computeReaderAppearanceVars,
-} from "@/features/frontendPlugins/pluginAppearanceSync";
+} from '@/features/frontendPlugins/pluginAppearanceSync';
 import {
   buildPluginDialogState,
   isEntryVisible,
-} from "@/features/frontendPlugins/pluginDialogUtils";
-import { evaluatePlugin } from "@/features/frontendPlugins/pluginEvaluator";
+} from '@/features/frontendPlugins/pluginDialogUtils';
+import { evaluatePlugin } from '@/features/frontendPlugins/pluginEvaluator';
 import {
   notifySessionListeners,
   invokePluginHook,
   emitPluginLifecycle,
-} from "@/features/frontendPlugins/pluginHookRunner";
+} from '@/features/frontendPlugins/pluginHookRunner';
 import {
   requestPluginHttp,
   getShelfBookById,
   patchShelfBook,
-} from "@/features/frontendPlugins/pluginHttpUtils";
+} from '@/features/frontendPlugins/pluginHttpUtils';
 import {
   ensurePluginOrderLoaded,
   readPluginOrder,
   sortExtensionsByPluginOrder,
   writePluginOrder,
-} from "@/features/frontendPlugins/pluginOrder";
-import { resolvePluginSettingFields } from "@/features/frontendPlugins/pluginSettings";
-import { createSlotManager } from "@/features/frontendPlugins/pluginSlotManager";
+} from '@/features/frontendPlugins/pluginOrder';
+import { resolvePluginSettingFields } from '@/features/frontendPlugins/pluginSettings';
+import { createSlotManager } from '@/features/frontendPlugins/pluginSlotManager';
 import {
   buildPluginStorageApi,
   PLUGIN_STORAGE_KEYS,
   type PluginStorageApi,
-} from "@/features/frontendPlugins/pluginStorage";
+} from '@/features/frontendPlugins/pluginStorage';
 import {
   resolveExtensionAssetUrl,
   cloneValue,
   getChineseConverter,
-} from "@/features/frontendPlugins/pluginTextUtils";
-import { createEmptyHookMap } from "@/features/frontendPlugins/readerHooks";
-import { createEmptySlotMap } from "@/features/frontendPlugins/readerSlots";
-import { useAppConfigStore } from "@/stores/appConfig";
-import type { ShelfBook } from "./useBookshelf";
-import { eventEmit, eventListenSync } from "./useEventBus";
+} from '@/features/frontendPlugins/pluginTextUtils';
+import { createEmptyHookMap } from '@/features/frontendPlugins/readerHooks';
+import { createEmptySlotMap } from '@/features/frontendPlugins/readerSlots';
+import { useAppConfigStore } from '@/stores/appConfig';
+import type { ShelfBook } from './useBookshelf';
+import { eventEmit, eventListenSync } from './useEventBus';
 import {
   getExtensionDir,
   listExtensions,
   readExtension,
   toggleExtension,
   type ExtensionMeta,
-} from "./useExtension";
+} from './useExtension';
 
 const SETTINGS_STORAGE_KEY = PLUGIN_STORAGE_KEYS.settings;
 
-export const FRONTEND_PLUGIN_TOAST_EVENT = "frontend-plugin:toast";
+export const FRONTEND_PLUGIN_TOAST_EVENT = 'frontend-plugin:toast';
 
 export interface TtsEnginePreloadResult {
   supported: boolean;
@@ -145,7 +145,7 @@ export type {
   ReaderSkinContext,
   FrontendPluginApi,
   PluginSettingsApi,
-} from "@/features/frontendPlugins/pluginTypes";
+} from '@/features/frontendPlugins/pluginTypes';
 
 const state = reactive({
   initialized: false,
@@ -168,10 +168,9 @@ let runtimePlugins: RuntimePluginRecord[] = [];
 let loadPromise: Promise<void> | null = null;
 let currentReaderSession: ReaderSessionSnapshot | null = null;
 let externalListenersReady = false;
-let extensionRootDir = "";
-let activePluginDialogResolve:
-  | ((value: Record<string, PluginSettingValue> | null) => void)
-  | null = null;
+let extensionRootDir = '';
+let activePluginDialogResolve: ((value: Record<string, PluginSettingValue> | null) => void) | null =
+  null;
 
 const slotManager = createSlotManager({
   getRuntimePlugins: () => runtimePlugins,
@@ -184,20 +183,13 @@ function getSettingsStorage(record: RuntimePluginRecord): PluginStorageApi {
   return buildPluginStorageApi(record.pluginId);
 }
 
-function getDefaultSettings(
-  record: RuntimePluginRecord,
-): Record<string, PluginSettingValue> {
+function getDefaultSettings(record: RuntimePluginRecord): Record<string, PluginSettingValue> {
   return cloneValue(record.settingsDefinition?.defaults ?? {});
 }
 
-function readPluginSettings(
-  record: RuntimePluginRecord,
-): Record<string, PluginSettingValue> {
+function readPluginSettings(record: RuntimePluginRecord): Record<string, PluginSettingValue> {
   const storage = getSettingsStorage(record);
-  const saved = storage.readJson<Record<string, PluginSettingValue>>(
-    SETTINGS_STORAGE_KEY,
-    {},
-  );
+  const saved = storage.readJson<Record<string, PluginSettingValue>>(SETTINGS_STORAGE_KEY, {});
   return { ...getDefaultSettings(record), ...saved };
 }
 
@@ -224,9 +216,7 @@ function syncPublicPluginState(): void {
     runtimeHooks: [...record.runtimeHooks],
     runtimeSlots: [...record.runtimeSlots],
     runtimeBookshelfActions: record.bookshelfActions.map((item) => item.id),
-    runtimeReaderContextActions: record.readerContextActions.map(
-      (item) => item.id,
-    ),
+    runtimeReaderContextActions: record.readerContextActions.map((item) => item.id),
     runtimeCoverGenerators: record.coverGenerators.map((item) => item.id),
     runtimeTtsEngines: record.ttsEngines.map((item) => item.id),
     hasSettings: !!record.settingsDefinition,
@@ -236,9 +226,7 @@ function syncPublicPluginState(): void {
 
 function syncPublicBookshelfActionState(): void {
   const nextActions: FrontendBookshelfActionRecord[] = [];
-  for (const record of runtimePlugins.filter(
-    (item) => item.enabled && item.status !== "error",
-  )) {
+  for (const record of runtimePlugins.filter((item) => item.enabled && item.status !== 'error')) {
     for (const action of record.bookshelfActions) {
       nextActions.push({
         id: action.id,
@@ -256,9 +244,7 @@ function syncPublicBookshelfActionState(): void {
 
 function syncPublicCoverGeneratorState(): void {
   const nextGenerators: FrontendCoverGeneratorRecord[] = [];
-  for (const record of runtimePlugins.filter(
-    (item) => item.enabled && item.status !== "error",
-  )) {
+  for (const record of runtimePlugins.filter((item) => item.enabled && item.status !== 'error')) {
     for (const generator of record.coverGenerators) {
       nextGenerators.push({
         id: generator.id,
@@ -276,9 +262,7 @@ function syncPublicCoverGeneratorState(): void {
 
 function syncPublicTtsEngineState(): void {
   const nextEngines: FrontendTtsEngineRecord[] = [];
-  for (const record of runtimePlugins.filter(
-    (item) => item.enabled && item.status !== "error",
-  )) {
+  for (const record of runtimePlugins.filter((item) => item.enabled && item.status !== 'error')) {
     for (const engine of record.ttsEngines) {
       nextEngines.push({
         id: engine.id,
@@ -296,9 +280,7 @@ function syncPublicTtsEngineState(): void {
 
 function syncPublicReaderContextActionState(): void {
   const nextActions: FrontendReaderContextActionRecord[] = [];
-  for (const record of runtimePlugins.filter(
-    (item) => item.enabled && item.status !== "error",
-  )) {
+  for (const record of runtimePlugins.filter((item) => item.enabled && item.status !== 'error')) {
     for (const action of record.readerContextActions) {
       nextActions.push({
         id: action.id,
@@ -349,14 +331,12 @@ async function recomputeReaderAppearance(): Promise<void> {
 async function emitPluginToast(
   pluginId: string,
   message: string,
-  type: "info" | "success" | "warning" | "error" = "info",
+  type: 'info' | 'success' | 'warning' | 'error' = 'info',
 ): Promise<void> {
   await eventEmit(FRONTEND_PLUGIN_TOAST_EVENT, { pluginId, message, type });
 }
 
-function resolvePluginDialog(
-  result: Record<string, PluginSettingValue> | null,
-): void {
+function resolvePluginDialog(result: Record<string, PluginSettingValue> | null): void {
   if (!activePluginDialogResolve) {
     return;
   }
@@ -370,11 +350,11 @@ async function openPluginDialog(
   options: PluginDialogOptions,
 ): Promise<Record<string, PluginSettingValue> | null> {
   if (activePluginDialogResolve) {
-    throw new Error("当前已有一个插件交互对话框正在显示");
+    throw new Error('当前已有一个插件交互对话框正在显示');
   }
   const title = options.title?.trim();
   if (!title) {
-    throw new Error("插件对话框缺少标题");
+    throw new Error('插件对话框缺少标题');
   }
   state.pluginDialog = buildPluginDialogState(options);
   return new Promise((resolve) => {
@@ -405,11 +385,7 @@ function createPluginApi(record: RuntimePluginRecord): FrontendPluginApi {
     },
     assets: {
       resolve: (relativePath) =>
-        resolveExtensionAssetUrl(
-          extensionRootDir,
-          record.fileName,
-          relativePath,
-        ),
+        resolveExtensionAssetUrl(extensionRootDir, record.fileName, relativePath),
     },
     log: (...args: unknown[]) => {
       console.log(`[FrontendPlugin][${record.pluginId}]`, ...args);
@@ -438,7 +414,7 @@ function createPluginApi(record: RuntimePluginRecord): FrontendPluginApi {
         (
           await requestPluginHttp({
             url,
-            method: "GET",
+            method: 'GET',
             headers,
             timeoutSecs: options?.timeoutSecs,
           })
@@ -447,8 +423,8 @@ function createPluginApi(record: RuntimePluginRecord): FrontendPluginApi {
         (
           await requestPluginHttp({
             url,
-            method: "POST",
-            body: body ?? "",
+            method: 'POST',
+            body: body ?? '',
             headers,
             timeoutSecs: options?.timeoutSecs,
           })
@@ -462,26 +438,22 @@ function createPluginApi(record: RuntimePluginRecord): FrontendPluginApi {
       convertChinese: (text, mode) => getChineseConverter(mode)(text),
     },
     ui: {
-      toast: async (message, type) =>
-        emitPluginToast(record.pluginId, message, type),
+      toast: async (message, type) => emitPluginToast(record.pluginId, message, type),
       prompt: openPluginDialog,
-      getAppTheme: () => appConfigStore.config.ui_theme ?? "auto",
+      getAppTheme: () => appConfigStore.config.ui_theme ?? 'auto',
       setAppTheme: async (mode) => {
-        const current = appConfigStore.config.ui_theme ?? "auto";
+        const current = appConfigStore.config.ui_theme ?? 'auto';
         if (current === mode) {
           return;
         }
-        await appConfigStore.setConfig("ui_theme", mode);
+        await appConfigStore.setConfig('ui_theme', mode);
       },
     },
   };
 }
 
-function markPluginRuntimeError(
-  record: RuntimePluginRecord,
-  error: unknown,
-): void {
-  record.status = "error";
+function markPluginRuntimeError(record: RuntimePluginRecord, error: unknown): void {
+  record.status = 'error';
   record.runtimeError = error instanceof Error ? error.message : String(error);
   syncPublicPluginState();
   void syncPublicThemeState();
@@ -503,9 +475,7 @@ async function emitLifecycle(hookName: ReaderLifecycleHook): Promise<void> {
   );
 }
 
-async function teardownRuntimePlugins(
-  records: RuntimePluginRecord[],
-): Promise<void> {
+async function teardownRuntimePlugins(records: RuntimePluginRecord[]): Promise<void> {
   for (const record of records) {
     await slotManager.cleanupMountedSlots(record);
     for (const cleanup of [...record.cleanupTasks]) {
@@ -528,22 +498,18 @@ function syncOrderToRecords(records: RuntimePluginRecord[]): void {
   }
 }
 
-function makeErrorRecord(
-  meta: ExtensionMeta,
-  source: string,
-  error: unknown,
-): RuntimePluginRecord {
+function makeErrorRecord(meta: ExtensionMeta, source: string, error: unknown): RuntimePluginRecord {
   return {
     fileName: meta.fileName,
-    pluginId: meta.namespace || meta.fileName.replace(/\.js$/i, ""),
+    pluginId: meta.namespace || meta.fileName.replace(/\.js$/i, ''),
     name: meta.name || meta.fileName,
-    version: meta.version || "0.0.0",
-    description: meta.description || "",
-    author: meta.author || "",
-    category: meta.category || "其他",
+    version: meta.version || '0.0.0',
+    description: meta.description || '',
+    author: meta.author || '',
+    category: meta.category || '其他',
     enabled: true,
     order: 0,
-    status: "error",
+    status: 'error',
     runtimeError: error instanceof Error ? error.message : String(error),
     runtimeHooks: [],
     runtimeSlots: [],
@@ -578,7 +544,7 @@ async function ensureInitialized(): Promise<void> {
 
   if (!externalListenersReady) {
     externalListenersReady = true;
-    eventListenSync<{ fileName?: string }>("extension:changed", () => {
+    eventListenSync<{ fileName?: string }>('extension:changed', () => {
       void loadPlugins({ force: true });
     });
   }
@@ -613,7 +579,7 @@ async function loadPlugins(options: { force?: boolean } = {}): Promise<void> {
           const record = await evaluatePlugin(meta, source, createPluginApi);
           if (!meta.enabled) {
             record.enabled = false;
-            record.status = "disabled";
+            record.status = 'disabled';
           }
           nextRuntime.push(record);
         } catch (error) {
@@ -623,20 +589,14 @@ async function loadPlugins(options: { force?: boolean } = {}): Promise<void> {
 
       for (const builtin of BUILTIN_FRONTEND_PLUGINS) {
         try {
-          const record = await evaluatePlugin(
-            builtin.meta,
-            builtin.source,
-            createPluginApi,
-          );
+          const record = await evaluatePlugin(builtin.meta, builtin.source, createPluginApi);
           if (!builtin.meta.enabled) {
             record.enabled = false;
-            record.status = "disabled";
+            record.status = 'disabled';
           }
           nextRuntime.push(record);
         } catch (error) {
-          nextRuntime.push(
-            makeErrorRecord(builtin.meta, builtin.source, error),
-          );
+          nextRuntime.push(makeErrorRecord(builtin.meta, builtin.source, error));
         }
       }
 
@@ -659,7 +619,7 @@ async function loadPlugins(options: { force?: boolean } = {}): Promise<void> {
       await recomputeReaderAppearance();
       await slotManager.remountAllReaderSlots();
       if (currentReaderSession) {
-        await emitLifecycle("reader.session.enter");
+        await emitLifecycle('reader.session.enter');
       }
     } finally {
       state.loading = false;
@@ -688,16 +648,11 @@ async function resolvePluginSettings(record: RuntimePluginRecord): Promise<{
   };
   return {
     values,
-    fields: await resolvePluginSettingFields(
-      record.settingsDefinition.schema,
-      context,
-    ),
+    fields: await resolvePluginSettingFields(record.settingsDefinition.schema, context),
   };
 }
 
-async function triggerSettingsRefresh(
-  record: RuntimePluginRecord,
-): Promise<void> {
+async function triggerSettingsRefresh(record: RuntimePluginRecord): Promise<void> {
   state.contentVersion += 1;
   await recomputeReaderAppearance();
   await slotManager.remountAllReaderSlots();
@@ -709,7 +664,7 @@ async function triggerSettingsRefresh(
   }
   syncPublicPluginState();
   if (record.enabled && currentReaderSession) {
-    await emitLifecycle("reader.chapter.change");
+    await emitLifecycle('reader.chapter.change');
   }
 }
 
@@ -745,9 +700,7 @@ async function applyPluginSettingChange(
   await triggerSettingsRefresh(record);
 }
 
-async function resetPluginSettingsInternal(
-  record: RuntimePluginRecord,
-): Promise<void> {
+async function resetPluginSettingsInternal(record: RuntimePluginRecord): Promise<void> {
   getSettingsStorage(record).remove(SETTINGS_STORAGE_KEY);
   await triggerSettingsRefresh(record);
 }
@@ -783,10 +736,7 @@ async function reloadPlugin(fileName?: string): Promise<void> {
   await loadPlugins({ force: true });
 }
 
-async function setPluginEnabled(
-  fileName: string,
-  enabled: boolean,
-): Promise<void> {
+async function setPluginEnabled(fileName: string, enabled: boolean): Promise<void> {
   await toggleExtension(fileName, enabled);
   await loadPlugins({ force: true });
 }
@@ -818,9 +768,7 @@ async function getPluginSettings(fileName: string): Promise<{
       runtimeHooks: [...record.runtimeHooks],
       runtimeSlots: [...record.runtimeSlots],
       runtimeBookshelfActions: record.bookshelfActions.map((item) => item.id),
-      runtimeReaderContextActions: record.readerContextActions.map(
-        (item) => item.id,
-      ),
+      runtimeReaderContextActions: record.readerContextActions.map((item) => item.id),
       runtimeCoverGenerators: record.coverGenerators.map((item) => item.id),
       runtimeTtsEngines: record.ttsEngines.map((item) => item.id),
       hasSettings: !!record.settingsDefinition,
@@ -853,35 +801,24 @@ async function resetPluginSettings(fileName: string): Promise<void> {
   await resetPluginSettingsInternal(record);
 }
 
-function getBookshelfActionsForBook(
-  book: ShelfBook,
-): FrontendBookshelfActionRecord[] {
+function getBookshelfActionsForBook(book: ShelfBook): FrontendBookshelfActionRecord[] {
   const context: BookshelfActionContext = { book };
   return state.bookshelfActions.filter((action) => {
     const record = runtimePlugins.find(
-      (item) =>
-        item.pluginId === action.pluginId && item.fileName === action.fileName,
+      (item) => item.pluginId === action.pluginId && item.fileName === action.fileName,
     );
-    const runtimeAction = record?.bookshelfActions.find(
-      (item) => item.id === action.id,
-    );
+    const runtimeAction = record?.bookshelfActions.find((item) => item.id === action.id);
     return !!runtimeAction && isEntryVisible(runtimeAction, context);
   });
 }
 
-function getCoverGeneratorsForBook(
-  book: ShelfBook,
-): FrontendCoverGeneratorRecord[] {
+function getCoverGeneratorsForBook(book: ShelfBook): FrontendCoverGeneratorRecord[] {
   const context: CoverGeneratorContext = { book };
   return state.coverGenerators.filter((generator) => {
     const record = runtimePlugins.find(
-      (item) =>
-        item.pluginId === generator.pluginId &&
-        item.fileName === generator.fileName,
+      (item) => item.pluginId === generator.pluginId && item.fileName === generator.fileName,
     );
-    const runtimeGenerator = record?.coverGenerators.find(
-      (item) => item.id === generator.id,
-    );
+    const runtimeGenerator = record?.coverGenerators.find((item) => item.id === generator.id);
     return !!runtimeGenerator && isEntryVisible(runtimeGenerator, context);
   });
 }
@@ -889,25 +826,19 @@ function getCoverGeneratorsForBook(
 function getReaderContextActions(
   context: ReaderTextSelectionContext,
 ): FrontendReaderContextActionRecord[] {
-  if (context.sourceType !== "novel" || !context.text.trim()) {
+  if (context.sourceType !== 'novel' || !context.text.trim()) {
     return [];
   }
   return state.readerContextActions.filter((action) => {
     const record = runtimePlugins.find(
-      (item) =>
-        item.pluginId === action.pluginId && item.fileName === action.fileName,
+      (item) => item.pluginId === action.pluginId && item.fileName === action.fileName,
     );
-    const runtimeAction = record?.readerContextActions.find(
-      (item) => item.id === action.id,
-    );
+    const runtimeAction = record?.readerContextActions.find((item) => item.id === action.id);
     return !!runtimeAction && isEntryVisible(runtimeAction, context);
   });
 }
 
-async function runBookshelfAction(
-  actionId: string,
-  book: ShelfBook,
-): Promise<void> {
+async function runBookshelfAction(actionId: string, book: ShelfBook): Promise<void> {
   await ensureInitialized();
   const record = runtimePlugins.find((item) =>
     item.bookshelfActions.some((action) => action.id === actionId),
@@ -917,7 +848,7 @@ async function runBookshelfAction(
     throw new Error(`未找到书架动作 ${actionId}`);
   }
   if (!isEntryVisible(action, { book })) {
-    throw new Error("当前书籍不可用这个插件动作");
+    throw new Error('当前书籍不可用这个插件动作');
   }
   try {
     await action.run({ book }, createPluginApi(record));
@@ -932,20 +863,18 @@ async function runReaderContextAction(
   context: ReaderTextSelectionContext,
 ): Promise<void> {
   await ensureInitialized();
-  if (context.sourceType !== "novel") {
-    throw new Error("阅读器文本菜单动作仅支持小说");
+  if (context.sourceType !== 'novel') {
+    throw new Error('阅读器文本菜单动作仅支持小说');
   }
   const record = runtimePlugins.find((item) =>
     item.readerContextActions.some((action) => action.id === actionId),
   );
-  const action = record?.readerContextActions.find(
-    (item) => item.id === actionId,
-  );
+  const action = record?.readerContextActions.find((item) => item.id === actionId);
   if (!record || !action) {
     throw new Error(`未找到阅读器文本菜单动作 ${actionId}`);
   }
   if (!isEntryVisible(action, context)) {
-    throw new Error("当前选中文本不可用这个插件动作");
+    throw new Error('当前选中文本不可用这个插件动作');
   }
   try {
     await action.run(context, createPluginApi(record));
@@ -963,18 +892,16 @@ async function runCoverGenerator(
   const record = runtimePlugins.find((item) =>
     item.coverGenerators.some((generator) => generator.id === actionId),
   );
-  const generator = record?.coverGenerators.find(
-    (item) => item.id === actionId,
-  );
+  const generator = record?.coverGenerators.find((item) => item.id === actionId);
   if (!record || !generator) {
     throw new Error(`未找到封面生成器 ${actionId}`);
   }
   if (!isEntryVisible(generator, { book })) {
-    throw new Error("当前书籍不可用这个封面生成器");
+    throw new Error('当前书籍不可用这个封面生成器');
   }
   try {
     const result = await generator.generate({ book }, createPluginApi(record));
-    if (typeof result === "string") {
+    if (typeof result === 'string') {
       return { coverUrl: result };
     }
     return result ?? null;
@@ -986,13 +913,13 @@ async function runCoverGenerator(
 
 function resolveRuntimeTtsEngine(engineId: string): {
   record: RuntimePluginRecord;
-  engine: RuntimePluginRecord["ttsEngines"][number];
+  engine: RuntimePluginRecord['ttsEngines'][number];
 } {
   const record = runtimePlugins.find((item) =>
     item.ttsEngines.some((engine) => engine.id === engineId),
   );
   const engine = record?.ttsEngines.find((item) => item.id === engineId);
-  if (!record || !engine || !record.enabled || record.status === "error") {
+  if (!record || !engine || !record.enabled || record.status === 'error') {
     throw new Error(`未找到 TTS 引擎 ${engineId}`);
   }
   return { record, engine };
@@ -1004,46 +931,36 @@ function normalizePluginTtsVoices(value: unknown): TtsVoiceDefinition[] {
   }
   return value
     .map((item) => {
-      if (!item || typeof item !== "object") {
+      if (!item || typeof item !== 'object') {
         return null;
       }
       const record = item as Record<string, unknown>;
-      const id = typeof record.id === "string" ? record.id.trim() : "";
-      const name = typeof record.name === "string" ? record.name.trim() : "";
+      const id = typeof record.id === 'string' ? record.id.trim() : '';
+      const name = typeof record.name === 'string' ? record.name.trim() : '';
       if (!id || !name) {
         return null;
       }
-      const language =
-        typeof record.language === "string"
-          ? record.language.trim()
-          : undefined;
+      const language = typeof record.language === 'string' ? record.language.trim() : undefined;
       return { id, name, language } satisfies TtsVoiceDefinition;
     })
     .filter((item) => item !== null) as TtsVoiceDefinition[];
 }
 
-async function getTtsEngineVoices(
-  engineId: string,
-): Promise<TtsVoiceDefinition[]> {
+async function getTtsEngineVoices(engineId: string): Promise<TtsVoiceDefinition[]> {
   await ensureInitialized();
   const { record, engine } = resolveRuntimeTtsEngine(engineId);
   if (!engine.getVoices) {
     return [];
   }
   try {
-    return normalizePluginTtsVoices(
-      await engine.getVoices(createPluginApi(record)),
-    );
+    return normalizePluginTtsVoices(await engine.getVoices(createPluginApi(record)));
   } catch (error) {
     markPluginRuntimeError(record, error);
     throw error;
   }
 }
 
-async function speakWithTtsEngine(
-  engineId: string,
-  context: TtsSpeakContext,
-): Promise<void> {
+async function speakWithTtsEngine(engineId: string, context: TtsSpeakContext): Promise<void> {
   await ensureInitialized();
   const { record, engine } = resolveRuntimeTtsEngine(engineId);
   try {
@@ -1092,10 +1009,7 @@ async function stopTtsEngine(engineId: string): Promise<void> {
   }
 }
 
-async function previewTtsEngineVoice(
-  engineId: string,
-  voiceId: string,
-): Promise<void> {
+async function previewTtsEngineVoice(engineId: string, voiceId: string): Promise<void> {
   await ensureInitialized();
   const { record, engine } = resolveRuntimeTtsEngine(engineId);
   if (!engine.previewVoice) {
@@ -1123,15 +1037,15 @@ async function runReaderContentPipeline(
       createPluginApi,
       markPluginRuntimeError,
     );
-    if (typeof result === "string") {
+    if (typeof result === 'string') {
       nextContent = result;
       continue;
     }
     if (
       result &&
-      typeof result === "object" &&
-      "content" in (result as Record<string, unknown>) &&
-      typeof (result as Record<string, unknown>).content === "string"
+      typeof result === 'object' &&
+      'content' in (result as Record<string, unknown>) &&
+      typeof (result as Record<string, unknown>).content === 'string'
     ) {
       nextContent = (result as { content: string }).content;
     }
@@ -1139,22 +1053,18 @@ async function runReaderContentPipeline(
   return nextContent;
 }
 
-async function openReaderSession(
-  session: ReaderSessionSnapshot,
-): Promise<void> {
+async function openReaderSession(session: ReaderSessionSnapshot): Promise<void> {
   await ensureInitialized();
   currentReaderSession = { ...session };
   await syncPublicThemeState();
   await syncPublicBackgroundState();
   await syncPublicSkinState();
   await recomputeReaderAppearance();
-  await emitLifecycle("reader.session.enter");
+  await emitLifecycle('reader.session.enter');
   await slotManager.remountAllReaderSlots();
 }
 
-async function updateReaderSession(
-  patch: Partial<ReaderSessionSnapshot>,
-): Promise<void> {
+async function updateReaderSession(patch: Partial<ReaderSessionSnapshot>): Promise<void> {
   if (!currentReaderSession) {
     return;
   }
@@ -1164,19 +1074,15 @@ async function updateReaderSession(
 
   const chapterChanged =
     patch.chapterIndex !== undefined &&
-    (patch.chapterIndex !== previous.chapterIndex ||
-      patch.chapterUrl !== previous.chapterUrl);
-  const visibilityChanged =
-    patch.visible !== undefined && patch.visible !== previous.visible;
+    (patch.chapterIndex !== previous.chapterIndex || patch.chapterUrl !== previous.chapterUrl);
+  const visibilityChanged = patch.visible !== undefined && patch.visible !== previous.visible;
 
   if (chapterChanged) {
-    await emitLifecycle("reader.chapter.change");
+    await emitLifecycle('reader.chapter.change');
   }
   if (visibilityChanged) {
     await emitLifecycle(
-      currentReaderSession.visible
-        ? "reader.session.resume"
-        : "reader.session.pause",
+      currentReaderSession.visible ? 'reader.session.resume' : 'reader.session.pause',
     );
   }
 
@@ -1193,7 +1099,7 @@ async function closeReaderSession(): Promise<void> {
   if (!currentReaderSession) {
     return;
   }
-  await emitLifecycle("reader.session.exit");
+  await emitLifecycle('reader.session.exit');
   currentReaderSession = null;
   for (const record of runtimePlugins) {
     notifySessionListeners(record, currentReaderSession);
@@ -1205,10 +1111,7 @@ async function closeReaderSession(): Promise<void> {
   await slotManager.remountAllReaderSlots();
 }
 
-function registerReaderHost(
-  slot: ReaderPluginSlot,
-  element: HTMLElement,
-): CleanupFn {
+function registerReaderHost(slot: ReaderPluginSlot, element: HTMLElement): CleanupFn {
   return slotManager.registerReaderHost(slot, element);
 }
 

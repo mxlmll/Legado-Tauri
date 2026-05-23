@@ -4,7 +4,7 @@ import { useMessage } from 'naive-ui';
 import { computed, nextTick, ref, watch } from 'vue';
 import BookSourceCodeEditor from '@/components/booksource/BookSourceCodeEditor.vue';
 import { isMobile } from '@/composables/useEnv';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import { saveExportFile } from '@/utils/exportFile';
 
 const props = defineProps<{
@@ -34,7 +34,7 @@ const visible = computed({
   set: (v) => emit('update:show', v),
 });
 
-useOverlayBackstack(
+useOverlay(
   () => visible.value,
   () => {
     visible.value = false;

@@ -2,7 +2,7 @@
 import { Edit3, Eye, Save, X } from 'lucide-vue-next';
 import { useMessage, type SelectOption } from 'naive-ui';
 import { computed, reactive, ref, watch } from 'vue';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import { useBookshelfStore, type ShelfBook, type UpdateShelfBookPayload } from '@/stores';
 import BookCoverImg from '../BookCoverImg.vue';
 
@@ -232,7 +232,7 @@ function closeDialog() {
   emit('update:show', false);
 }
 
-useOverlayBackstack(() => props.show, closeDialog);
+useOverlay(() => props.show, closeDialog);
 
 watch(
   () => [props.show, props.book, props.initialMode] as const,

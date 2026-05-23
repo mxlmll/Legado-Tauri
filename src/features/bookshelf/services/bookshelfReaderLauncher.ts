@@ -2,20 +2,20 @@
  * bookshelfReaderLauncher — 书架打开阅读器、加载目录和手动刷新目录的业务入口。
  */
 
-import type { MessageApi } from "naive-ui";
-import { useTocAutoUpdate } from "@/composables/useTocAutoUpdate";
-import { usePreferencesStore } from "@/stores/preferences";
+import type { MessageApi } from 'naive-ui';
+import { useTocAutoUpdate } from '@/composables/useTocAutoUpdate';
 import {
   useBookshelfStore,
   // useMusicPlayerStore, // TODO: 音乐功能暂时屏蔽，待启用时取消注释
   useScriptBridgeStore,
   type ChapterItem,
   type ShelfBook,
-} from "@/stores";
-import { LOCAL_TXT_FILE_NAME } from "@/stores/bookshelf";
-import { useBookshelfReaderStore } from "../stores/bookshelfReader";
-import { useBookshelfUiStore } from "../stores/bookshelfUi";
-import { chapterItemsToCachedChapters } from "../utils/readerBookInfo";
+} from '@/stores';
+import { LOCAL_TXT_FILE_NAME } from '@/stores/bookshelf';
+import { usePreferencesStore } from '@/stores/preferences';
+import { useBookshelfReaderStore } from '../stores/bookshelfReader';
+import { useBookshelfUiStore } from '../stores/bookshelfUi';
+import { chapterItemsToCachedChapters } from '../utils/readerBookInfo';
 
 export function useBookshelfReaderLauncher(message: MessageApi) {
   const readerStore = useBookshelfReaderStore();
@@ -41,11 +41,11 @@ export function useBookshelfReaderLauncher(message: MessageApi) {
     if (!readerStore.readerChapters.length) {
       // 本地 TXT 书籍没有书源，章节列表丢失时直接提示重新导入
       if (book.fileName === LOCAL_TXT_FILE_NAME) {
-        message.error("本地书籍章节记录已丢失，请重新导入 TXT 文件");
+        message.error('本地书籍章节记录已丢失，请重新导入 TXT 文件');
         return;
       }
       if (!book.bookUrl || !book.fileName) {
-        message.warning("无法获取书籍地址，请从发现页重新打开");
+        message.warning('无法获取书籍地址，请从发现页重新打开');
         return;
       }
       if (uiStore.openingBookId) {
@@ -53,23 +53,17 @@ export function useBookshelfReaderLauncher(message: MessageApi) {
       }
       uiStore.openingBookId = book.id;
       try {
-        const info = await scriptBridgeStore.runBookInfo(
-          book.fileName,
-          book.bookUrl,
-        );
+        const info = await scriptBridgeStore.runBookInfo(book.fileName, book.bookUrl);
         const tocUrl = (info as { tocUrl?: string }).tocUrl ?? book.bookUrl;
-        const raw = await scriptBridgeStore.runChapterList(
-          book.fileName,
-          tocUrl,
+        const raw = await scriptBridgeStore.runChapterList(book.fileName, tocUrl);
+        const fetched = (raw as Array<{ name: string; url: string; group?: string }>).map(
+          (chapter, index) => ({
+            index,
+            name: chapter.name,
+            url: chapter.url,
+            group: chapter.group,
+          }),
         );
-        const fetched = (
-          raw as Array<{ name: string; url: string; group?: string }>
-        ).map((chapter, index) => ({
-          index,
-          name: chapter.name,
-          url: chapter.url,
-          group: chapter.group,
-        }));
         readerStore.setChapters(
           fetched.map((chapter) => ({
             name: chapter.name,
@@ -87,7 +81,7 @@ export function useBookshelfReaderLauncher(message: MessageApi) {
         uiStore.openingBookId = null;
       }
       if (!readerStore.readerChapters.length) {
-        message.warning("书源未返回章节列表");
+        message.warning('书源未返回章节列表');
         return;
       }
     }
@@ -96,9 +90,9 @@ export function useBookshelfReaderLauncher(message: MessageApi) {
     // TODO: 视频/音乐功能暂时屏蔽，待启用时删除此块并取消下方注释
     if (
       !prefStore.devTools.fullModeEnabled &&
-      (book.sourceType === "music" || book.sourceType === "video")
+      (book.sourceType === 'music' || book.sourceType === 'video')
     ) {
-      message.warning("该功能暂时无法使用");
+      message.warning('该功能暂时无法使用');
       return;
     }
     // if (book.sourceType === 'music') {
@@ -140,7 +134,7 @@ export function useBookshelfReaderLauncher(message: MessageApi) {
     const bookUrl = readerStore.readerBookInfo?.bookUrl;
     const fileName = readerStore.readerFileName;
     if (!bookUrl || !fileName || !readerStore.readerShelfId) {
-      message.warning("无法获取书籍地址，请先确保书籍已加入书架");
+      message.warning('无法获取书籍地址，请先确保书籍已加入书架');
       return;
     }
     readerStore.refreshingToc = true;
@@ -149,20 +143,16 @@ export function useBookshelfReaderLauncher(message: MessageApi) {
       const info = await scriptBridgeStore.runBookInfo(fileName, bookUrl);
       const tocUrl = (info as { tocUrl?: string }).tocUrl ?? bookUrl;
       const raw = await scriptBridgeStore.runChapterList(fileName, tocUrl);
-      const fetched = (
-        raw as Array<{ name: string; url: string; group?: string }>
-      ).map((chapter, index) => ({
-        index,
-        name: chapter.name,
-        url: chapter.url,
-        group: chapter.group,
-      }));
-      const oldUrls = new Set(
-        readerStore.readerChapters.map((chapter) => chapter.url),
+      const fetched = (raw as Array<{ name: string; url: string; group?: string }>).map(
+        (chapter, index) => ({
+          index,
+          name: chapter.name,
+          url: chapter.url,
+          group: chapter.group,
+        }),
       );
-      const newCount = fetched.filter(
-        (chapter) => !oldUrls.has(chapter.url),
-      ).length;
+      const oldUrls = new Set(readerStore.readerChapters.map((chapter) => chapter.url));
+      const newCount = fetched.filter((chapter) => !oldUrls.has(chapter.url)).length;
       readerStore.setChapters(
         fetched.map((chapter) => ({
           name: chapter.name,
@@ -174,12 +164,10 @@ export function useBookshelfReaderLauncher(message: MessageApi) {
       if (newCount > 0) {
         message.success(`目录已更新，新增 ${newCount} 章`);
       } else {
-        message.info("目录已是最新，无新章节");
+        message.info('目录已是最新，无新章节');
       }
     } catch (error: unknown) {
-      message.error(
-        `更新目录失败：${error instanceof Error ? error.message : String(error)}`,
-      );
+      message.error(`更新目录失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       bookshelfStore.endTocRefresh(readerStore.readerShelfId);
       readerStore.refreshingToc = false;
@@ -187,14 +175,10 @@ export function useBookshelfReaderLauncher(message: MessageApi) {
   }
 
   function syncOpenReaderBookInfo(bookId: string) {
-    readerStore.syncOpenReaderBookInfo(
-      bookshelfStore.books.find((book) => book.id === bookId),
-    );
+    readerStore.syncOpenReaderBookInfo(bookshelfStore.books.find((book) => book.id === bookId));
   }
 
-  function currentChaptersForSwitch(
-    targetBook: ShelfBook | null,
-  ): ChapterItem[] {
+  function currentChaptersForSwitch(targetBook: ShelfBook | null): ChapterItem[] {
     return readerStore.readerShelfId === targetBook?.id
       ? readerStore.readerChapters
       : uiStore.switchTargetChapters;

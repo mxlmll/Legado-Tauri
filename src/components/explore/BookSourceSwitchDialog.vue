@@ -1,9 +1,9 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ChevronLeft, X, ChevronRight } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
 import { computed, ref, watch } from 'vue';
 import type { BookDetail, BookItem, BookSourceMeta, ChapterItem } from '@/types';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import {
   type CachedChapter,
   type ShelfBook,
@@ -171,7 +171,7 @@ const showMobileDetail = computed(
 );
 const desktopDetailVisible = computed(() => !isMobile.value && !!selectedCandidate.value);
 
-useOverlayBackstack(() => props.show, closeDialog);
+useOverlay(() => props.show, closeDialog);
 
 function closeDialog() {
   emit('update:show', false);

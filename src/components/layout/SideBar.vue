@@ -13,7 +13,7 @@ import {
   CheckCircle2,
 } from 'lucide-vue-next';
 import { ref, computed, type Component } from 'vue';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import { useAppConfigStore } from '@/stores';
 import type { NavItem } from './types';
 export type { NavItem };
@@ -44,7 +44,7 @@ const themeMode = computed({
 
 const showPromoModal = ref(false);
 
-useOverlayBackstack(
+useOverlay(
   () => showPromoModal.value,
   () => {
     showPromoModal.value = false;

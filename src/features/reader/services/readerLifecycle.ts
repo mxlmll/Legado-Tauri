@@ -1,9 +1,10 @@
-import type { ComputedRef, Ref } from "vue";
-import type { OpenChapterOptions } from "@/components/reader/composables/useReaderChapterOpen";
+import type { ComputedRef, Ref } from 'vue';
+import type { OpenChapterOptions } from '@/components/reader/composables/useReaderChapterOpen';
 
 export interface ShelfReaderSettingsSnapshot {
   readerSettings?: string;
   readChapterIndex?: number;
+  readChapterUrl?: string | null;
   readPageIndex?: number;
   readScrollRatio?: number;
   readPlaybackTime?: number;
@@ -13,6 +14,7 @@ interface ReaderLifecycleControllerOptions {
   getShelfBookId: () => string | undefined;
   getCurrentIndex: () => number;
   getTrackingPayload: () => Record<string, unknown>;
+  getChapter: (index: number) => { url?: string } | undefined;
   readerBodyRef: Ref<HTMLElement | null>;
   activeChapterIndex: Ref<number>;
   pendingRestorePageIndex: Ref<number>;
@@ -47,22 +49,36 @@ interface ReaderLifecycleControllerOptions {
   trackSessionOpen: (payload: Record<string, unknown>) => void;
 }
 
-export function createReaderLifecycleController(
-  options: ReaderLifecycleControllerOptions,
-) {
+export function createReaderLifecycleController(options: ReaderLifecycleControllerOptions) {
   async function prepareShelfData(shelfBookId: string): Promise<void> {
     try {
       const book = await options.getShelfBook(shelfBookId);
       options.activateBookSettings(shelfBookId, book.readerSettings);
-      const savedIndex =
-        typeof book.readChapterIndex === "number" && book.readChapterIndex >= 0
+      const savedChapterIndex =
+        typeof book.readChapterIndex === 'number' && book.readChapterIndex >= 0
           ? book.readChapterIndex
+          : -1;
+      const savedChapterUrl = typeof book.readChapterUrl === 'string' ? book.readChapterUrl : '';
+      const savedChapter =
+        savedChapterIndex >= 0 ? options.getChapter(savedChapterIndex) : undefined;
+      const hasValidSavedChapter =
+        savedChapterIndex >= 0 && (!savedChapterUrl || savedChapter?.url === savedChapterUrl);
+      const savedIndex = hasValidSavedChapter
+        ? savedChapterIndex
+        : savedChapterIndex >= 0 && savedChapterUrl
+          ? 0
           : options.getCurrentIndex();
       if (savedIndex >= 0) {
         options.activeChapterIndex.value = savedIndex;
-        options.pendingRestorePageIndex.value = book.readPageIndex ?? -1;
-        options.pendingRestoreScrollRatio.value = book.readScrollRatio ?? -1;
-        options.pendingResumePlaybackTime.value = book.readPlaybackTime ?? -1;
+        options.pendingRestorePageIndex.value = hasValidSavedChapter
+          ? (book.readPageIndex ?? -1)
+          : -1;
+        options.pendingRestoreScrollRatio.value = hasValidSavedChapter
+          ? (book.readScrollRatio ?? -1)
+          : -1;
+        options.pendingResumePlaybackTime.value = hasValidSavedChapter
+          ? (book.readPlaybackTime ?? -1)
+          : -1;
       }
     } catch {
       // 读取书架失败时沿用全局设置。
@@ -72,7 +88,7 @@ export function createReaderLifecycleController(
   async function openReader() {
     await options.ensureFrontendPlugins();
     const userFontsReady = options.ensureUserFontsLoaded?.().catch((error) => {
-      console.warn("[Reader] 加载用户上传字体失败，继续打开阅读器:", error);
+      console.warn('[Reader] 加载用户上传字体失败，继续打开阅读器:', error);
     });
     options.observeReaderBody();
     options.resetReaderSessionForOpen(options.getCurrentIndex());
@@ -105,7 +121,7 @@ export function createReaderLifecycleController(
       options.pendingRestoreScrollRatio.value = -1;
       const hasRestorePos = restoreScrollRatio >= 0 || restorePageIndex >= 0;
       await options.openChapter(options.activeChapterIndex.value, {
-        position: hasRestorePos ? "resume" : "first",
+        position: hasRestorePos ? 'resume' : 'first',
         pageIndex: restorePageIndex >= 0 ? restorePageIndex : undefined,
         pageRatio: restoreScrollRatio >= 0 ? restoreScrollRatio : undefined,
       });

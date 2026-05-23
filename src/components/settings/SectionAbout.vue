@@ -1,9 +1,8 @@
-/** * SectionAbout — 设置页“关于”面板，展示应用版本、运行环境、桥接能力与
-WebView 诊断信息。 */
+/** * SectionAbout — 设置页“关于”面板，展示应用版本、运行环境、桥接能力与 WebView 诊断信息。 */
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { storeToRefs } from "pinia";
+import { storeToRefs } from 'pinia';
+import { computed, onMounted, ref } from 'vue';
 import {
   hasNativeTransport,
   isHarmonyNative,
@@ -11,76 +10,72 @@ import {
   isMobile,
   envLabel,
   platform,
-} from "@/composables/useEnv";
-import {
-  getCustomWsUrl,
-  getTransportType,
-  isTransportAvailable,
-} from "@/composables/useTransport";
-import { usePreferencesStore } from "@/stores/preferences";
-import packageJson from "../../../package.json";
-import tauriConfig from "../../../src-tauri/tauri.conf.json";
-import SettingSection from "./SettingSection.vue";
+} from '@/composables/useEnv';
+import { getCustomWsUrl, getTransportType, isTransportAvailable } from '@/composables/useTransport';
+import { usePreferencesStore } from '@/stores/preferences';
+import packageJson from '../../../package.json';
+import tauriConfig from '../../../src-tauri/tauri.conf.json';
+import SettingSection from './SettingSection.vue';
 
 const prefStore = usePreferencesStore();
 const { devTools } = storeToRefs(prefStore);
 
-type TransportMode = "tauri" | "harmony" | "websocket" | "none";
+type TransportMode = 'tauri' | 'harmony' | 'websocket' | 'none';
 
 const transportMode = ref<TransportMode>(getTransportType());
 const transportReady = ref(hasNativeTransport);
 
-const rawUserAgent = ref("读取中");
+const rawUserAgent = ref('读取中');
 
 const contributors = [
-  "Mg",
-  "丽拓朝夕",
-  "喵公子",
-  "聚.散",
-  "杯呗is me",
+  'Mg',
+  '丽拓朝夕',
+  '喵公子',
+  '聚.散',
+  '杯呗is me',
   "I'm yours",
-  "凉子",
-  "目目",
+  '凉子',
+  '目目',
 ];
 
 const runtimeModeLabel = computed(() => {
   switch (transportMode.value) {
-    case "tauri":
-      return "Tauri IPC";
-    case "harmony":
-      return "Harmony 桥接";
-    case "websocket":
-      return "WebSocket";
+    case 'tauri':
+      return 'Tauri IPC';
+    case 'harmony':
+      return 'Harmony 桥接';
+    case 'websocket':
+      return 'WebSocket';
     default:
-      return "未连接";
+      return '未连接';
   }
 });
 
 const runtimeModeDesc = computed(() => {
   switch (transportMode.value) {
-    case "tauri":
-      return "当前工作在桌面原生壳内，前端通过 Tauri IPC 直连 Rust 命令。";
-    case "harmony":
-      return "当前工作在 Harmony 原生壳内，前端通过原生桥接访问宿主能力。";
-    case "websocket":
-      return "当前工作在 Web / WS 模式，前端通过 WebSocket 与后端服务通信。";
+    case 'tauri':
+      return '当前工作在桌面原生壳内，前端通过 Tauri IPC 直连 Rust 命令。';
+    case 'harmony':
+      return '当前工作在 Harmony 原生壳内，前端通过原生桥接访问宿主能力。';
+    case 'websocket':
+      return '当前工作在 Web / WS 模式，前端通过 WebSocket 与后端服务通信。';
     default:
-      return "当前未检测到可用宿主传输，仅能进行静态界面预览。";
+      return '当前未检测到可用宿主传输，仅能进行静态界面预览。';
   }
 });
 
 const runtimeTagType = computed(() => {
   if (!transportReady.value) {
-    return "warning";
+    return 'warning';
   }
-  return transportMode.value === "websocket" ? "info" : "success";
+  return transportMode.value === 'websocket' ? 'info' : 'success';
 });
 
 const wsEndpoint = computed(() => {
-  if (transportMode.value !== "websocket") {
-    return "未使用";
+  if (transportMode.value !== 'websocket') {
+    return '未使用';
   }
-  return getCustomWsUrl() || "同源 WebSocket 自动探测";
+  return getCustomWsUrl() || '同源 WebSocket 自动探测';
 });
 
 const detectWebViewVersion = (ua: string) => {
@@ -94,9 +89,7 @@ const detectWebViewVersion = (ua: string) => {
     return `Edge WebView2 ${edge[1]}`;
   }
 
-  const webview = ua.match(
-    /Version\/([^\s]+).*Chrome\/([^\s]+).*Mobile Safari/i,
-  );
+  const webview = ua.match(/Version\/([^\s]+).*Chrome\/([^\s]+).*Mobile Safari/i);
   if (webview) {
     return `Android WebView / Chromium ${webview[2]}`;
   }
@@ -111,49 +104,49 @@ const detectWebViewVersion = (ua: string) => {
     return `WebKit / Safari ${safari[1]}`;
   }
 
-  return "未能从 UA 识别";
+  return '未能从 UA 识别';
 };
 
 const webViewVersion = computed(() => detectWebViewVersion(rawUserAgent.value));
 
 const environmentCards = computed(() => [
   {
-    label: "运行环境",
+    label: '运行环境',
     value: envLabel,
     desc: runtimeModeDesc.value,
   },
   {
-    label: "通信模式",
+    label: '通信模式',
     value: runtimeModeLabel.value,
-    desc: transportReady.value ? "当前传输层已可用。" : "当前传输层不可用。",
+    desc: transportReady.value ? '当前传输层已可用。' : '当前传输层不可用。',
   },
   {
-    label: "操作系统",
-    value: platform.value || "未知",
-    desc: isMobile.value ? "当前为移动端布局。" : "当前为桌面端布局。",
+    label: '操作系统',
+    value: platform.value || '未知',
+    desc: isMobile.value ? '当前为移动端布局。' : '当前为桌面端布局。',
   },
   {
-    label: "WebView / 内核",
+    label: 'WebView / 内核',
     value: webViewVersion.value,
-    desc: "由当前页面原始 UA 解析，完整字段见下方诊断信息。",
+    desc: '由当前页面原始 UA 解析，完整字段见下方诊断信息。',
   },
 ]);
 
 const uaRows = computed(() => [
   {
-    label: "系统原始 UA",
+    label: '系统原始 UA',
     value: rawUserAgent.value,
-    desc: "本软件当前运行环境上报的原始 User-Agent，可用于查看系统 WebView 或浏览器内核版本。",
+    desc: '本软件当前运行环境上报的原始 User-Agent，可用于查看系统 WebView 或浏览器内核版本。',
   },
 ]);
 
 function collectUserAgentInfo() {
-  if (typeof navigator === "undefined") {
-    rawUserAgent.value = "当前环境没有 navigator";
+  if (typeof navigator === 'undefined') {
+    rawUserAgent.value = '当前环境没有 navigator';
     return;
   }
 
-  rawUserAgent.value = navigator.userAgent || "空";
+  rawUserAgent.value = navigator.userAgent || '空';
 }
 
 onMounted(async () => {
@@ -175,12 +168,8 @@ onMounted(async () => {
         </p>
       </div>
       <div class="about-hero__chips">
-        <n-tag size="small" :bordered="false"
-          >前端 {{ packageJson.version }}</n-tag
-        >
-        <n-tag size="small" :bordered="false" type="info"
-          >桌面壳 {{ tauriConfig.version }}</n-tag
-        >
+        <n-tag size="small" :bordered="false">前端 {{ packageJson.version }}</n-tag>
+        <n-tag size="small" :bordered="false" type="info">桌面壳 {{ tauriConfig.version }}</n-tag>
         <n-tag size="small" :bordered="false" :type="runtimeTagType as any">
           {{ runtimeModeLabel }}
         </n-tag>
@@ -188,11 +177,7 @@ onMounted(async () => {
     </div>
 
     <div class="about-runtime-grid">
-      <div
-        v-for="item in environmentCards"
-        :key="item.label"
-        class="about-card"
-      >
+      <div v-for="item in environmentCards" :key="item.label" class="about-card">
         <span class="about-label">{{ item.label }}</span>
         <strong class="about-card__value">{{ item.value }}</strong>
         <p class="about-card__desc">{{ item.desc }}</p>
@@ -224,22 +209,14 @@ onMounted(async () => {
         <div class="about-badges">
           <div class="about-badge-row">
             <span class="about-badge-row__label">Tauri 原生壳</span>
-            <n-tag
-              size="small"
-              :type="isTauri ? 'success' : 'default'"
-              :bordered="false"
-            >
-              {{ isTauri ? "可用" : "未启用" }}
+            <n-tag size="small" :type="isTauri ? 'success' : 'default'" :bordered="false">
+              {{ isTauri ? '可用' : '未启用' }}
             </n-tag>
           </div>
           <div class="about-badge-row">
             <span class="about-badge-row__label">Harmony 原生桥接</span>
-            <n-tag
-              size="small"
-              :type="isHarmonyNative ? 'success' : 'default'"
-              :bordered="false"
-            >
-              {{ isHarmonyNative ? "可用" : "未启用" }}
+            <n-tag size="small" :type="isHarmonyNative ? 'success' : 'default'" :bordered="false">
+              {{ isHarmonyNative ? '可用' : '未启用' }}
             </n-tag>
           </div>
           <div class="about-badge-row">
@@ -249,7 +226,7 @@ onMounted(async () => {
               :type="hasNativeTransport ? 'success' : 'default'"
               :bordered="false"
             >
-              {{ hasNativeTransport ? "直连宿主" : "浏览器环境" }}
+              {{ hasNativeTransport ? '直连宿主' : '浏览器环境' }}
             </n-tag>
           </div>
           <div class="about-badge-row">
@@ -269,7 +246,7 @@ onMounted(async () => {
               :type="devTools.fullModeEnabled ? 'success' : 'default'"
               :bordered="false"
             >
-              {{ devTools.fullModeEnabled ? "已激活" : "未激活" }}
+              {{ devTools.fullModeEnabled ? '已激活' : '未激活' }}
             </n-tag>
           </div>
         </div>
@@ -281,11 +258,7 @@ onMounted(async () => {
           <span class="about-panel__hint">排名不分先后</span>
         </div>
         <div class="about-contributors">
-          <span
-            v-for="name in contributors"
-            :key="name"
-            class="about-contributor"
-          >
+          <span v-for="name in contributors" :key="name" class="about-contributor">
             {{ name }}
           </span>
         </div>
@@ -413,8 +386,7 @@ onMounted(async () => {
   justify-content: space-between;
   gap: var(--space-3);
   padding-bottom: 10px;
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--color-border) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
 .about-badge-row:last-child {
@@ -439,8 +411,7 @@ onMounted(async () => {
   grid-template-columns: minmax(140px, 0.28fr) minmax(0, 1fr);
   gap: var(--space-3);
   padding-bottom: 12px;
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--color-border) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
 .about-ua-row:last-child {
@@ -463,8 +434,8 @@ onMounted(async () => {
   background: color-mix(in srgb, var(--color-border) 22%, transparent);
   color: var(--color-text);
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
   font-size: var(--fs-12);
   line-height: 1.55;
   overflow-wrap: anywhere;

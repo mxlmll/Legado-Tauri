@@ -2,6 +2,7 @@
 import type { DropdownOption } from 'naive-ui';
 import { computed } from 'vue';
 import type { ShelfGroup } from '@/types/shelfGroup';
+import { useOverlay } from '@/composables/useOverlay';
 
 const props = defineProps<{
   show: boolean;
@@ -18,6 +19,12 @@ const emit = defineEmits<{
   (e: 'update:show', value: boolean): void;
   (e: 'select', key: string): void;
 }>();
+
+// 长按 / 右键弹出的上下文菜单，接入返回栈：硬件返回 / Esc / 系统手势可关闭
+useOverlay(
+  () => props.show,
+  () => emit('update:show', false),
+);
 
 const menuOptions = computed<DropdownOption[]>(() => {
   const newOptions = [...props.options];

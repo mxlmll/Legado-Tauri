@@ -5,7 +5,7 @@
  * 刷新完成后自动隐藏指示器。
  */
 
-import { ref, computed, onBeforeUnmount } from 'vue';
+import { ref, computed, onBeforeUnmount } from "vue";
 
 export interface UseShelfPullRefreshOptions {
   /** 刷新回调，返回 Promise（刷新完成时 resolve） */
@@ -27,6 +27,44 @@ export function useShelfPullRefresh(options: UseShelfPullRefreshOptions) {
   const pullDistance = ref(0);
   const isRefreshing = ref(false);
   const isReady = ref(false);
+  /** 主动拖动中（用于模板禁用 CSS transition，避免拖动时抖动） */
+  const isActivePulling = ref(false);
+
+  // ── rAF 节流 ─────────────────────────────────────────────────────
+  // touchmove / mousemove 高频触发，直接写 Vue ref 会每帧触发完整响应式更新
+  // 改为攒到下一帧统一提交，降低 Vue 更新频率
+  let rafId: number | null = null;
+  let pendingDistance = 0;
+  let pendingReady = false;
+
+  function scheduleUpdate(distance: number, ready: boolean) {
+    pendingDistance = distance;
+    pendingReady = ready;
+    if (rafId === null) {
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        pullDistance.value = pendingDistance;
+        isReady.value = pendingReady;
+      });
+    }
+  }
+
+  function cancelPendingRaf() {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  }
+
+  /** 同步刷新待提交的状态，onTouchEnd 前必须先调用，避免 rAF 竞态导致 isReady 读取时进 false */
+  function flushPendingUpdate() {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+      pullDistance.value = pendingDistance;
+      isReady.value = pendingReady;
+    }
+  }
 
   // ── 触摸事件 ──────────────────────────────────────────────────────
   let touchStartY = 0;
@@ -37,6 +75,8 @@ export function useShelfPullRefresh(options: UseShelfPullRefreshOptions) {
     touchStartY = e.touches[0].clientY;
     touchContainer = e.currentTarget as HTMLElement;
     isPulling = false;
+    isActivePulling.value = false;
+    cancelPendingRaf();
     pullDistance.value = 0;
     isReady.value = false;
   }
@@ -56,10 +96,13 @@ export function useShelfPullRefresh(options: UseShelfPullRefreshOptions) {
       }
       // 开始下拉
       isPulling = true;
+      isActivePulling.value = true;
     } else {
       // 正在下拉中，如果向上滑动则停止下拉状态
       if (dy <= 0) {
         isPulling = false;
+        isActivePulling.value = false;
+        cancelPendingRaf();
         pullDistance.value = 0;
         isReady.value = false;
         return;
@@ -69,19 +112,18 @@ export function useShelfPullRefresh(options: UseShelfPullRefreshOptions) {
     // 阻止浏览器默认滚动行为
     e.preventDefault();
 
-    // 应用阻尼
-    const damped = dy * PULL_DAMPING;
-    pullDistance.value = Math.min(damped, MAX_PULL);
-
-    // 判断是否达到触发阈值
-    isReady.value = pullDistance.value >= PULL_THRESHOLD;
+    // 应用阻尼，通过 rAF 节流写入 ref，避免每帧触发 Vue 响应式更新
+    const d = Math.min(dy * PULL_DAMPING, MAX_PULL);
+    scheduleUpdate(d, d >= PULL_THRESHOLD);
   }
 
   function onTouchEnd() {
+    flushPendingUpdate();
     const shouldRefresh = isReady.value && !isRefreshing.value;
     pullDistance.value = 0;
     isReady.value = false;
     isPulling = false;
+    isActivePulling.value = false;
     touchContainer = null;
 
     if (shouldRefresh) {
@@ -103,12 +145,14 @@ export function useShelfPullRefresh(options: UseShelfPullRefreshOptions) {
       return;
     }
     isDragging = true;
+    isActivePulling.value = true;
     mouseStartY = e.clientY;
+    cancelPendingRaf();
     pullDistance.value = 0;
     isReady.value = false;
 
-    document.addEventListener('mousemove', onGlobalMouseMove);
-    document.addEventListener('mouseup', onGlobalMouseUp, { once: true });
+    document.addEventListener("mousemove", onGlobalMouseMove);
+    document.addEventListener("mouseup", onGlobalMouseUp, { once: true });
   }
 
   function onGlobalMouseMove(e: MouseEvent) {
@@ -118,19 +162,19 @@ export function useShelfPullRefresh(options: UseShelfPullRefreshOptions) {
 
     const dy = e.clientY - mouseStartY;
     if (dy <= 0) {
-      pullDistance.value = 0;
-      isReady.value = false;
+      scheduleUpdate(0, false);
       return;
     }
 
-    const damped = dy * PULL_DAMPING;
-    pullDistance.value = Math.min(damped, MAX_PULL);
-    isReady.value = pullDistance.value >= PULL_THRESHOLD;
+    const d = Math.min(dy * PULL_DAMPING, MAX_PULL);
+    scheduleUpdate(d, d >= PULL_THRESHOLD);
   }
 
   function onGlobalMouseUp() {
     isDragging = false;
-    document.removeEventListener('mousemove', onGlobalMouseMove);
+    isActivePulling.value = false;
+    flushPendingUpdate();
+    document.removeEventListener("mousemove", onGlobalMouseMove);
 
     if (isReady.value && !isRefreshing.value) {
       pullDistance.value = 0;
@@ -146,11 +190,14 @@ export function useShelfPullRefresh(options: UseShelfPullRefreshOptions) {
   }
 
   // ── 计算属性 ─────────────────────────────────────────────────────
-  const pullProgress = computed(() => Math.min(pullDistance.value / PULL_THRESHOLD, 1));
+  const pullProgress = computed(() =>
+    Math.min(pullDistance.value / PULL_THRESHOLD, 1),
+  );
 
   // ── 清理 ──────────────────────────────────────────────────────────
   onBeforeUnmount(() => {
-    document.removeEventListener('mousemove', onGlobalMouseMove);
+    cancelPendingRaf();
+    document.removeEventListener("mousemove", onGlobalMouseMove);
   });
 
   return {
@@ -158,6 +205,9 @@ export function useShelfPullRefresh(options: UseShelfPullRefreshOptions) {
     pullProgress,
     isRefreshing,
     isReady,
+    isActivePulling,
+    PULL_THRESHOLD,
+    MAX_PULL,
     onTouchStart,
     onTouchMove,
     onTouchEnd,

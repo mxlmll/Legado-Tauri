@@ -10,6 +10,7 @@ type DragDir = "left" | "right" | null;
 
 const props = defineProps<{
   mode: PagedModeVariant;
+  chapterKey?: string | number;
   pages: string[];
   currentPage: number;
   prevBoundaryPage?: string;
@@ -38,6 +39,7 @@ const emit = defineEmits<{
 const containerRef = ref<HTMLElement | null>(null);
 const isAnimating = ref(false);
 const boundaryMsg = ref("");
+const pendingStaticPageHtml = ref<string | null>(null);
 
 let boundaryTimer = 0;
 let animationTimer: number | null = null;
@@ -89,34 +91,12 @@ const isLayeredMode = computed(
 const transitionDurationMs = computed(() =>
   props.mode === "simulation" ? 360 : 260,
 );
-const centerRatio = computed(() =>
-  Math.max(0, rightRatio.value - leftRatio.value),
-);
-const expandedTapZone = computed(() => props.mode === "simulation");
-const menuZoneWidth = computed(() => {
-  if (!expandedTapZone.value) {
-    return centerRatio.value;
-  }
-  return Math.min(centerRatio.value, Math.max(0.12, centerRatio.value * 0.35));
-});
-const tapMenuStart = computed(() => {
-  if (!expandedTapZone.value) {
-    return leftRatio.value;
-  }
-  return (
-    leftRatio.value + Math.max(0, centerRatio.value - menuZoneWidth.value) / 2
-  );
-});
-const tapMenuEnd = computed(() => {
-  if (!expandedTapZone.value) {
-    return rightRatio.value;
-  }
-  return (
-    rightRatio.value - Math.max(0, centerRatio.value - menuZoneWidth.value) / 2
-  );
-});
+const tapMenuStart = computed(() => leftRatio.value);
+const tapMenuEnd = computed(() => rightRatio.value);
 
-const currentPageHtml = computed(() => props.pages[props.currentPage] ?? "");
+const currentPageHtml = computed(
+  () => pendingStaticPageHtml.value ?? props.pages[props.currentPage] ?? "",
+);
 const prevPageHtml = computed(() => {
   const prev = props.pages[props.currentPage - 1];
   if (prev) {
@@ -218,6 +198,19 @@ function canRunAction(action: FlipAction): boolean {
   return hasPrevPage.value || !!props.hasPrevChapter;
 }
 
+function actionLeavesCurrentChapter(action: FlipAction): boolean {
+  return action === "next"
+    ? !hasNextPage.value && !!props.hasNextChapter
+    : !hasPrevPage.value && !!props.hasPrevChapter;
+}
+
+function clearChapterChangeVisualState() {
+  chapterChanging = false;
+  pendingStaticPageHtml.value = null;
+  isAnimating.value = false;
+  resetVisualState();
+}
+
 function emitAction(action: FlipAction) {
   if (action === "next") {
     if (hasNextPage.value) {
@@ -226,6 +219,9 @@ function emitAction(action: FlipAction) {
     }
     if (props.hasNextChapter) {
       chapterChanging = true;
+      if (props.mode === "none") {
+        pendingStaticPageHtml.value = nextPageHtml.value;
+      }
       emit("request-next-chapter");
       return;
     }
@@ -239,6 +235,9 @@ function emitAction(action: FlipAction) {
   }
   if (props.hasPrevChapter) {
     chapterChanging = true;
+    if (props.mode === "none") {
+      pendingStaticPageHtml.value = prevPageHtml.value;
+    }
     emit("request-prev-chapter");
     return;
   }
@@ -260,6 +259,8 @@ function finishAnimation(commit = true) {
   const action = activeAnimation.action;
   const shouldCommit =
     commit && activeAnimation.commitOnFinish && action !== null;
+  const shouldHoldBoundaryFrame =
+    shouldCommit && action !== null && actionLeavesCurrentChapter(action);
 
   animationRunId += 1;
   clearAnimationTimer();
@@ -267,6 +268,12 @@ function finishAnimation(commit = true) {
     action: null,
     commitOnFinish: false,
   };
+
+  if (shouldHoldBoundaryFrame && action) {
+    emitAction(action);
+    return;
+  }
+
   isAnimating.value = false;
   resetVisualState();
 
@@ -276,10 +283,7 @@ function finishAnimation(commit = true) {
 }
 
 function queueAction(action: FlipAction): boolean {
-  if (!canRunAction(action)) {
-    if (!props.busy && totalPages.value > 0) {
-      showBoundary(action === "next" ? "已经到最后一页了" : "已经到最前了");
-    }
+  if (props.busy || chapterChanging || totalPages.value <= 0) {
     return false;
   }
 
@@ -304,6 +308,13 @@ function queueAction(action: FlipAction): boolean {
     }
 
     return true;
+  }
+
+  if (!canRunAction(action)) {
+    if (!props.busy && totalPages.value > 0) {
+      showBoundary(action === "next" ? "已经到最后一页了" : "已经到最前了");
+    }
+    return false;
   }
 
   deferredActionToken += 1;
@@ -438,19 +449,35 @@ watch(
   { immediate: true },
 );
 
-// 新章节内容到来（pages 数组引用变化）→ 解除翻章锁，允许下一批手势输入
+// 新章节真正切换后再解除翻章锁；只看 pages 会被旧章节异步重排误触发。
+watch(
+  () => props.chapterKey,
+  (chapterKey, previousChapterKey) => {
+    if (chapterKey !== previousChapterKey) {
+      clearChapterChangeVisualState();
+    }
+  },
+);
+
+// 兼容未传 chapterKey 的外部用法。
 watch(
   () => props.pages,
   () => {
-    chapterChanging = false;
+    if (props.chapterKey === undefined) {
+      clearChapterChangeVisualState();
+    }
   },
 );
 
 watch(
   () => props.busy,
-  (busy) => {
-    if (!busy) {
-      chapterChanging = false;
+  async (busy) => {
+    if (busy) {
+      return;
+    }
+    await nextTick();
+    if (chapterChanging) {
+      clearChapterChangeVisualState();
     }
   },
 );
@@ -758,11 +785,13 @@ let startTime = 0;
 let hasMoved = false;
 let directionLocked = false;
 let isHorizontal = false;
+let animationTapCandidate = false;
 
 const VELOCITY_THRESHOLD = 0.3;
 const DISTANCE_RATIO = 0.3;
 
 function resetVisualState() {
+  animationTapCandidate = false;
   slideDragOffset.value = 0;
   slideSnapOffset.value = 0;
   layerDragOffset.value = 0;
@@ -800,11 +829,6 @@ function onPointerDown(e: MouseEvent | TouchEvent) {
   if (!("touches" in e) && "button" in e && e.button !== 0) {
     return;
   }
-  // 动画进行中拒绝新手势：避免 resetVisualState() 打断正在播放的 snap 动画导致视觉跳变
-  if (isAnimating.value) {
-    return;
-  }
-
   // 过滤移动端触摸后浏览器自动生成的合成 mousedown（ghost click 问题）
   // 真实触摸事件：TouchEvent（含 touches 属性）或 PointerEvent 且 pointerType='touch'
   // 合成鼠标事件：MouseEvent（不含 touches）且 pointerType 不为 'touch'
@@ -815,6 +839,17 @@ function onPointerDown(e: MouseEvent | TouchEvent) {
     lastTouchTime = Date.now();
   } else if (Date.now() - lastTouchTime < 600) {
     return; // 合成鼠标事件，忽略
+  }
+
+  if (isAnimating.value) {
+    animationTapCandidate = true;
+    hasMoved = false;
+    directionLocked = false;
+    isHorizontal = false;
+    startX = getClientX(e);
+    startY = getClientY(e);
+    startTime = Date.now();
+    return;
   }
 
   dragging = true;
@@ -840,6 +875,14 @@ function onPointerMove(e: MouseEvent | TouchEvent) {
     if (dragging) {
       dragging = false;
       resetVisualState();
+    }
+    return;
+  }
+  if (animationTapCandidate) {
+    const dx = getClientX(e) - startX;
+    const dy = getClientY(e) - startY;
+    if (Math.hypot(dx, dy) > 10) {
+      animationTapCandidate = false;
     }
     return;
   }
@@ -929,8 +972,18 @@ function handleTap(e: MouseEvent | TouchEvent) {
 
 function onPointerUp(e: MouseEvent | TouchEvent) {
   if (props.selectionMode) {
+    animationTapCandidate = false;
     dragging = false;
     resetVisualState();
+    return;
+  }
+  if (animationTapCandidate) {
+    const dx = getClientX(e) - startX;
+    const dy = getClientY(e) - startY;
+    animationTapCandidate = false;
+    if (Math.hypot(dx, dy) <= 10) {
+      handleTap(e);
+    }
     return;
   }
   if (!dragging) {

@@ -11,7 +11,7 @@ import { useMessage } from 'naive-ui';
  */
 import { ref, onMounted } from 'vue';
 import { hasNativeTransport } from '@/composables/useEnv';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import {
   isTransportAvailable,
   getCustomWsUrl,
@@ -26,7 +26,7 @@ const wsUrlInput = ref('');
 const connecting = ref(false);
 let connectRequestId = 0;
 
-useOverlayBackstack(() => show.value, handleSkip);
+useOverlay(() => show.value, handleSkip);
 
 onMounted(async () => {
   if (hasNativeTransport) {

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { X } from 'lucide-vue-next';
-import { useDialog, useMessage } from 'naive-ui';
+import { useMessage } from 'naive-ui';
 import { computed, ref, watch } from 'vue';
+import { useBackAwareDialog as useDialog } from '@/composables/useBackAwareDialog';
 import {
   checkRepositorySourceSync,
   installFromRepository,
@@ -12,7 +13,7 @@ import {
   type RepoSourceSyncResult,
   type RemoteBookSourcePreview,
 } from '@/composables/useBookSource';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 
 const props = defineProps<{
   show: boolean;
@@ -363,7 +364,7 @@ function closeDialog() {
   emit('update:show', false);
 }
 
-useOverlayBackstack(() => props.show, closeDialog);
+useOverlay(() => props.show, closeDialog);
 
 watch(
   () => props.show,
@@ -445,7 +446,11 @@ async function performInstall(current: RemoteBookSourcePreview) {
         }
         await installFromRepository(current.downloadUrl, fallback, current.meta.uuid);
         message.success(`已安装「${current.meta.name}」`);
-        emit('installed', { name: current.meta.name, fileName: fallback, uuid: current.meta.uuid });
+        emit('installed', {
+          name: current.meta.name,
+          fileName: fallback,
+          uuid: current.meta.uuid,
+        });
         closeDialog();
         return;
       }

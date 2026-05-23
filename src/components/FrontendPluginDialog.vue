@@ -2,7 +2,7 @@
 import { useMessage } from 'naive-ui';
 import { computed, reactive, watch } from 'vue';
 import { useFrontendPlugins, type PluginSettingValue } from '@/composables/useFrontendPlugins';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 
 const message = useMessage();
 const { pluginDialog, resolvePluginDialog } = useFrontendPlugins();
@@ -10,7 +10,7 @@ const { pluginDialog, resolvePluginDialog } = useFrontendPlugins();
 const visible = computed(() => !!pluginDialog.value);
 const draftValues = reactive<Record<string, PluginSettingValue>>({});
 
-useOverlayBackstack(() => visible.value, closeDialog);
+useOverlay(() => visible.value, closeDialog);
 
 function cloneValue<T>(value: T): T {
   if (typeof structuredClone === 'function') {

@@ -1,23 +1,23 @@
 <script setup lang="ts">
-import { toRef } from "vue";
-import { isMobile } from "@/composables/useEnv";
-import ReaderSettingsCustomFontPage from "@/features/reader/settings/components/ReaderSettingsCustomFontPage.vue";
-import ReaderSettingsFontPage from "@/features/reader/settings/components/ReaderSettingsFontPage.vue";
-import ReaderSettingsMorePage from "@/features/reader/settings/components/ReaderSettingsMorePage.vue";
-import ReaderSettingsPagePaddingPage from "@/features/reader/settings/components/ReaderSettingsPagePaddingPage.vue";
-import ReaderSettingsShortcutsPage from "@/features/reader/settings/components/ReaderSettingsShortcutsPage.vue";
-import ReaderSettingsSpacingPage from "@/features/reader/settings/components/ReaderSettingsSpacingPage.vue";
-import ReaderSettingsSubHeader from "@/features/reader/settings/components/ReaderSettingsSubHeader.vue";
-import ReaderSettingsTypographyPage from "@/features/reader/settings/components/ReaderSettingsTypographyPage.vue";
-import ReaderSettingsUploadedFontsPage from "@/features/reader/settings/components/ReaderSettingsUploadedFontsPage.vue";
-import { useReaderSettingsPanelModel } from "@/features/reader/settings/useReaderSettingsPanelModel";
+import { toRef } from 'vue';
+import { isMobile } from '@/composables/useEnv';
+import ReaderSettingsCustomFontPage from '@/features/reader/settings/components/ReaderSettingsCustomFontPage.vue';
+import ReaderSettingsFontPage from '@/features/reader/settings/components/ReaderSettingsFontPage.vue';
+import ReaderSettingsMorePage from '@/features/reader/settings/components/ReaderSettingsMorePage.vue';
+import ReaderSettingsPagePaddingPage from '@/features/reader/settings/components/ReaderSettingsPagePaddingPage.vue';
+import ReaderSettingsShortcutsPage from '@/features/reader/settings/components/ReaderSettingsShortcutsPage.vue';
+import ReaderSettingsSpacingPage from '@/features/reader/settings/components/ReaderSettingsSpacingPage.vue';
+import ReaderSettingsSubHeader from '@/features/reader/settings/components/ReaderSettingsSubHeader.vue';
+import ReaderSettingsTypographyPage from '@/features/reader/settings/components/ReaderSettingsTypographyPage.vue';
+import ReaderSettingsUploadedFontsPage from '@/features/reader/settings/components/ReaderSettingsUploadedFontsPage.vue';
+import { useReaderSettingsPanelModel } from '@/features/reader/settings/useReaderSettingsPanelModel';
 
 const props = defineProps<{
   sourceType?: string;
 }>();
 
 const emit = defineEmits<{
-  (e: "dump-pagination-layout"): void;
+  (e: 'dump-pagination-layout'): void;
 }>();
 
 const {
@@ -79,8 +79,8 @@ const {
   deleteUserFont,
   renameUserFont,
 } = useReaderSettingsPanelModel({
-  sourceType: toRef(props, "sourceType"),
-  onDumpPaginationLayout: () => emit("dump-pagination-layout"),
+  sourceType: toRef(props, 'sourceType'),
+  onDumpPaginationLayout: () => emit('dump-pagination-layout'),
 });
 
 defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
@@ -93,9 +93,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
       <!-- 视频模式下提示使用播放器自带控件 -->
       <template v-if="isVideo">
         <div class="reader-settings__row">
-          <span class="reader-settings__hint"
-            >视频模式：请使用播放器控件调节播放设置</span
-          >
+          <span class="reader-settings__hint">视频模式：请使用播放器控件调节播放设置</span>
         </div>
       </template>
 
@@ -115,9 +113,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
             :step="5"
             style="flex: 1"
           />
-          <span class="reader-settings__val" style="width: 36px"
-            >{{ settings.brightness }}%</span
-          >
+          <span class="reader-settings__val" style="width: 36px">{{ settings.brightness }}%</span>
         </div>
 
         <!-- 字号 + 字体 + 更多 -->
@@ -146,9 +142,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
           >
             {{ currentFontLabel }} ›
           </button>
-          <button class="reader-settings__pill" @click="navigateTo('more')">
-            更多 ›
-          </button>
+          <button class="reader-settings__pill" @click="navigateTo('more')">更多 ›</button>
         </div>
 
         <!-- 颜色 -->
@@ -164,18 +158,12 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
               }"
               :style="{
                 background: t.preview.backgroundColor,
-                borderColor:
-                  selectedThemeId === t.id
-                    ? t.preview.textColor
-                    : 'transparent',
+                borderColor: selectedThemeId === t.id ? t.preview.textColor : 'transparent',
               }"
               :title="t.description || t.name"
               @click="selectThemeOption(t)"
             >
-              <span
-                class="reader-settings__swatch-inner"
-                :style="{ color: t.preview.textColor }"
-              >
+              <span class="reader-settings__swatch-inner" :style="{ color: t.preview.textColor }">
                 {{ THEME_ELEGANT_NAMES[t.name] ?? t.name }}
               </span>
             </button>
@@ -186,16 +174,11 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
         <div class="reader-settings__row reader-settings__row--top">
           <span class="reader-settings__label">背景</span>
           <div class="reader-settings__bg-list">
-            <div
-              v-for="bg in backgroundOptions"
-              :key="bg.id"
-              class="reader-settings__bg-wrap"
-            >
+            <div v-for="bg in backgroundOptions" :key="bg.id" class="reader-settings__bg-wrap">
               <button
                 class="reader-settings__bg-thumb"
                 :class="{
-                  'reader-settings__bg-thumb--active':
-                    selectedBackgroundId === bg.id,
+                  'reader-settings__bg-thumb--active': selectedBackgroundId === bg.id,
                 }"
                 :style="{
                   backgroundColor: bg.preview.backgroundColor || '#fff',
@@ -203,8 +186,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
                   backgroundSize: bg.preview.backgroundSize || 'cover',
                   backgroundPosition: bg.preview.backgroundPosition || 'center',
                   backgroundRepeat: bg.preview.backgroundRepeat || 'no-repeat',
-                  backgroundBlendMode:
-                    bg.preview.backgroundBlendMode || 'normal',
+                  backgroundBlendMode: bg.preview.backgroundBlendMode || 'normal',
                 }"
                 :title="bg.description || bg.name"
                 @click="selectBackground(bg)"
@@ -230,8 +212,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
               :key="skin.id"
               class="reader-settings__skin-card"
               :class="{
-                'reader-settings__skin-card--active':
-                  selectedSkinId === skin.id,
+                'reader-settings__skin-card--active': selectedSkinId === skin.id,
               }"
               :title="skin.description || skin.name"
               @click="selectSkin(skin)"
@@ -249,8 +230,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
                   class="reader-settings__skin-preview-bar"
                   :style="{
                     background:
-                      skin.preview.styleVars?.['--reader-top-bar-bg'] ||
-                      'rgba(0, 0, 0, 0.18)',
+                      skin.preview.styleVars?.['--reader-top-bar-bg'] || 'rgba(0, 0, 0, 0.18)',
                   }"
                 />
                 <span
@@ -267,9 +247,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
 
         <!-- 翻页 -->
         <div class="reader-settings__row">
-          <span class="reader-settings__label">{{
-            isComic ? "漫画翻页" : "翻页"
-          }}</span>
+          <span class="reader-settings__label">{{ isComic ? '漫画翻页' : '翻页' }}</span>
           <div class="reader-settings__flip-mode-block">
             <div class="reader-settings__pill-group">
               <button
@@ -277,18 +255,14 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
                 :key="opt.value"
                 class="reader-settings__pill"
                 :class="{
-                  'reader-settings__pill--active':
-                    settings.flipMode === opt.value,
+                  'reader-settings__pill--active': settings.flipMode === opt.value,
                 }"
                 @click="setFlipMode(opt.value)"
               >
                 {{ opt.label }}
               </button>
             </div>
-            <div
-              v-if="showExperimentalFlipModeHint"
-              class="reader-settings__flip-mode-hint"
-            >
+            <div v-if="showExperimentalFlipModeHint" class="reader-settings__flip-mode-hint">
               {{ EXPERIMENTAL_FLIP_MODE_HINT }}
             </div>
           </div>
@@ -324,8 +298,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
             :key="`left-${opt.value}`"
             class="reader-settings__pill"
             :class="{
-              'reader-settings__pill--active':
-                settings.tapLeftAction === opt.value,
+              'reader-settings__pill--active': settings.tapLeftAction === opt.value,
             }"
             @click="setTapAction('left', opt.value)"
           >
@@ -342,8 +315,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
             :key="`right-${opt.value}`"
             class="reader-settings__pill"
             :class="{
-              'reader-settings__pill--active':
-                settings.tapRightAction === opt.value,
+              'reader-settings__pill--active': settings.tapRightAction === opt.value,
             }"
             @click="setTapAction('right', opt.value)"
           >
@@ -393,13 +365,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
           >
             <span class="reader-settings__tap-action-icon">☰</span>
             <span>菜单</span>
-            <span
-              >{{
-                Math.round(
-                  (settings.tapZoneRight - settings.tapZoneLeft) * 100,
-                )
-              }}%</span
-            >
+            <span>{{ Math.round((settings.tapZoneRight - settings.tapZoneLeft) * 100) }}%</span>
           </div>
           <div
             class="reader-settings__tap-divider"
@@ -841,7 +807,7 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
   flex-shrink: 0;
 }
 
-.reader-settings__color-swatch input[type="color"] {
+.reader-settings__color-swatch input[type='color'] {
   position: absolute;
   inset: 0;
   opacity: 0;

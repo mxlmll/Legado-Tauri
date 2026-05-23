@@ -12,7 +12,7 @@ import {
   NProgress,
 } from 'naive-ui';
 import { ref, computed, watch } from 'vue';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import {
   getAllRules,
   previewAllRules,
@@ -221,7 +221,16 @@ watch(
   },
 );
 
-useOverlayBackstack(() => props.show && phase.value !== 'importing', close);
+useOverlay(
+  () => props.show,
+  () => {
+    // 导入中不响应硬件返回 / Esc / 系统手势，避免误关；mask 与 X 按钮也已禁用
+    if (phase.value === 'importing') {
+      return;
+    }
+    close();
+  },
+);
 
 // ── 规则展开预览 ──────────────────────────────────────────────────────────
 
@@ -311,7 +320,9 @@ const canClose = computed(() => phase.value !== 'importing');
             v-for="preview in rulePreviews"
             :key="preview.rule.id"
             class="txt-rule-item"
-            :class="{ 'txt-rule-item--selected': selectedRuleId === preview.rule.id }"
+            :class="{
+              'txt-rule-item--selected': selectedRuleId === preview.rule.id,
+            }"
           >
             <div class="txt-rule-item__header">
               <NRadio :value="preview.rule.id" class="txt-rule-item__radio" />

@@ -1,8 +1,9 @@
 <!-- AiSourceTab — AI 写书源工作台，管理 AI 配置、会话草稿、生成日志与调试面板。 -->
 <script setup lang="ts">
-import { useMessage, useDialog } from 'naive-ui';
+import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
 import { ref, watch, nextTick, computed, onMounted } from 'vue';
+import { useBackAwareDialog as useDialog } from '@/composables/useBackAwareDialog';
 import { useAiSessionsStore } from '@/stores';
 import {
   ACTIVITY_LABEL,

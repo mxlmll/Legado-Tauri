@@ -1,28 +1,28 @@
 <!-- FullModeUnlockDialog — 完全体模式 挑战码解锁对话框 -->
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { useMessage } from "naive-ui";
-import { storeToRefs } from "pinia";
-import { useOverlayBackstack } from "@/composables/useOverlayBackstack";
-import { usePreferencesStore } from "@/stores/preferences";
+import { useMessage } from 'naive-ui';
+import { storeToRefs } from 'pinia';
+import { ref, watch } from 'vue';
+import { useOverlay } from '@/composables/useOverlay';
+import { usePreferencesStore } from '@/stores/preferences';
 
 const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{
-  (e: "update:show", value: boolean): void;
+  (e: 'update:show', value: boolean): void;
 }>();
 
 const message = useMessage();
 const prefStore = usePreferencesStore();
 const { devTools } = storeToRefs(prefStore);
 
-const challenge = ref("");
-const inputResponse = ref("");
-const inputError = ref("");
+const challenge = ref('');
+const inputResponse = ref('');
+const inputError = ref('');
 
 function generateChallenge() {
   challenge.value = String(Math.floor(100000 + Math.random() * 900000));
-  inputResponse.value = "";
-  inputError.value = "";
+  inputResponse.value = '';
+  inputError.value = '';
 }
 
 /**
@@ -40,42 +40,42 @@ function generateChallenge() {
  * ```
  */
 function computeResponse(ch: string): string {
-  const salt = "legado_full_v1";
+  const salt = 'legado_full_v1';
   let h = 5381;
   for (const c of ch + salt) {
     h = ((h << 5) + h + c.charCodeAt(0)) >>> 0;
   }
-  return String(h % 1000000).padStart(6, "0");
+  return String(h % 1000000).padStart(6, '0');
 }
 
 function close() {
-  emit("update:show", false);
+  emit('update:show', false);
 }
 
 function handleVerify() {
   const expected = computeResponse(challenge.value);
   if (inputResponse.value.trim() === expected) {
     prefStore.patchDevTools({ fullModeEnabled: true });
-    message.success("完全体模式已激活");
+    message.success('完全体模式已激活');
     close();
   } else {
-    inputError.value = "验证码错误，请重新计算";
+    inputError.value = '验证码错误，请重新计算';
     generateChallenge();
   }
 }
 
 function handleRevoke() {
   prefStore.patchDevTools({ fullModeEnabled: false });
-  message.info("完全体模式已关闭");
+  message.info('完全体模式已关闭');
   close();
 }
 
-useOverlayBackstack(() => props.show, close);
+useOverlay(() => props.show, close);
 
 watch(
   () => props.show,
   (v) => {
-    if (v) generateChallenge();
+    if (v) {generateChallenge();}
   },
 );
 </script>
@@ -124,9 +124,7 @@ watch(
           <n-button type="primary" @click="handleVerify">验证</n-button>
         </template>
         <template v-else>
-          <n-button type="warning" @click="handleRevoke"
-            >撤销完全体模式</n-button
-          >
+          <n-button type="warning" @click="handleRevoke">撤销完全体模式</n-button>
         </template>
       </div>
     </template>

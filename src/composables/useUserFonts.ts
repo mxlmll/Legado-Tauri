@@ -6,10 +6,10 @@
  * - 浏览器端：通过 HTTP /api/user-fonts/data?id= 访问；使用 fetch POST 上传
  */
 
-import { ref, type Ref } from "vue";
-import { isTauri } from "./useEnv";
-import { toFileSrcSync } from "./useFileSrc";
-import { invokeWithTimeout } from "./useInvoke";
+import { ref, type Ref } from 'vue';
+import { isTauri } from './useEnv';
+import { toFileSrcSync } from './useFileSrc';
+import { invokeWithTimeout } from './useInvoke';
 
 export interface UserFontMeta {
   id: string;
@@ -22,7 +22,7 @@ export interface UserFontMeta {
 const userFonts = ref<UserFontMeta[]>([]);
 const userFontsLoaded = ref(false);
 const uploading = ref(false);
-const uploadError = ref("");
+const uploadError = ref('');
 let loadUserFontsPromise: Promise<void> | null = null;
 
 function buildFontUrl(meta: UserFontMeta): string {
@@ -34,10 +34,10 @@ function buildFontUrl(meta: UserFontMeta): string {
 
 /** 注入/更新文档中的 @font-face CSS（针对用户上传字体） */
 function injectUserFontFaces(fonts: UserFontMeta[]) {
-  const styleId = "legado-user-font-faces";
+  const styleId = 'legado-user-font-faces';
   let el = document.getElementById(styleId) as HTMLStyleElement | null;
   if (!el) {
-    el = document.createElement("style");
+    el = document.createElement('style');
     el.id = styleId;
     document.head.appendChild(el);
   }
@@ -46,7 +46,7 @@ function injectUserFontFaces(fonts: UserFontMeta[]) {
       (f) =>
         `@font-face { font-family: "${f.displayName.replace(/"/g, '\\"')}"; src: url("${buildFontUrl(f)}"); font-display: block; }`,
     )
-    .join("\n");
+    .join('\n');
 }
 
 export function useUserFonts() {
@@ -60,11 +60,7 @@ export function useUserFonts() {
       return loadUserFontsPromise;
     }
 
-    loadUserFontsPromise = invokeWithTimeout<UserFontMeta[]>(
-      "list_user_fonts",
-      {},
-      10000,
-    )
+    loadUserFontsPromise = invokeWithTimeout<UserFontMeta[]>('list_user_fonts', {}, 10000)
       .then((result) => {
         userFonts.value = result;
         userFontsLoaded.value = true;
@@ -84,35 +80,29 @@ export function useUserFonts() {
    */
   async function uploadFont(file: File): Promise<UserFontMeta> {
     uploading.value = true;
-    uploadError.value = "";
+    uploadError.value = '';
     try {
       let meta: UserFontMeta;
       if (isTauri) {
         const buffer = await file.arrayBuffer();
         const data = Array.from(new Uint8Array(buffer));
         meta = await invokeWithTimeout<UserFontMeta>(
-          "upload_user_font",
+          'upload_user_font',
           { fileName: file.name, data },
           30000,
         );
       } else {
-        const resp = await fetch(
-          `/api/user-fonts/upload?name=${encodeURIComponent(file.name)}`,
-          {
-            method: "POST",
-            body: file,
-          },
-        );
+        const resp = await fetch(`/api/user-fonts/upload?name=${encodeURIComponent(file.name)}`, {
+          method: 'POST',
+          body: file,
+        });
         if (!resp.ok) {
           throw new Error(await resp.text());
         }
         meta = (await resp.json()) as UserFontMeta;
       }
       // 更新本地列表（去重后追加）
-      userFonts.value = [
-        ...userFonts.value.filter((f) => f.id !== meta.id),
-        meta,
-      ];
+      userFonts.value = [...userFonts.value.filter((f) => f.id !== meta.id), meta];
       injectUserFontFaces(userFonts.value);
       return meta;
     } catch (e) {
@@ -125,21 +115,14 @@ export function useUserFonts() {
 
   /** 删除用户字体 */
   async function deleteUserFont(id: string): Promise<void> {
-    await invokeWithTimeout<void>("delete_user_font", { id }, 10000);
+    await invokeWithTimeout<void>('delete_user_font', { id }, 10000);
     userFonts.value = userFonts.value.filter((f) => f.id !== id);
     injectUserFontFaces(userFonts.value);
   }
 
   /** 修改字体显示名称 */
-  async function renameUserFont(
-    id: string,
-    displayName: string,
-  ): Promise<void> {
-    await invokeWithTimeout<void>(
-      "rename_user_font",
-      { id, displayName },
-      10000,
-    );
+  async function renameUserFont(id: string, displayName: string): Promise<void> {
+    await invokeWithTimeout<void>('rename_user_font', { id, displayName }, 10000);
     const idx = userFonts.value.findIndex((f) => f.id === id);
     if (idx !== -1) {
       userFonts.value[idx] = { ...userFonts.value[idx], displayName };

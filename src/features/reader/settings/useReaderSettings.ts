@@ -7,8 +7,9 @@
  * 工作流：
  *   1. 默认使用最近一次实际生效的全局偏好
  *   2. 打开某本书时调用 activateBookSettings(bookId, saved?) 加载该书设置
- *   3. 阅读期间所有修改实时更新全局偏好快照 + 当前书籍设置
- *   4. 关闭阅读器时调用 deactivateBookSettings()
+ *   3. 开启“所有书共用同一套设置”后，忽略单书设置并只使用全局偏好
+ *   4. 阅读期间所有修改实时更新全局偏好快照 + 当前书籍设置
+ *   5. 关闭阅读器时调用 deactivateBookSettings()
  */
 import { reactive, ref, watch, toRefs, type WatchStopHandle } from 'vue';
 import {
@@ -26,6 +27,7 @@ import {
   getFrontendStorageItem,
   legacyLocalStorageGet,
   legacyLocalStorageRemove,
+  removeFrontendStorageItem,
   setFrontendStorageItem,
 } from '@/composables/useFrontendStorage';
 
@@ -41,6 +43,7 @@ const BOOK_LEVEL_GLOBAL_FIELDS: (keyof ReaderSettings)[] = [
   'paginationEngine',
   'hideTopBarOnMobile',
   'volumeKeyPageTurnEnabled',
+  'useGlobalSettingsForAllBooks',
 ];
 
 type StoredReaderSettings = Partial<ReaderSettings> & {
@@ -248,6 +251,12 @@ function saveBookSettings(bookId: string, s: ReaderSettings) {
   }
 }
 
+async function clearBookSettings(bookId: string) {
+  legacyLocalStorageRemove(BOOK_STORAGE_PREFIX + bookId);
+  await ensureFrontendNamespaceLoaded(BOOK_STORAGE_NAMESPACE).catch(() => ({}));
+  removeFrontendStorageItem(BOOK_STORAGE_NAMESPACE, bookId);
+}
+
 // 单例状态，多个组件共享同一份设置
 let _settings: ReturnType<typeof reactive<ReaderSettings>> | null = null;
 const tapZoneDebugPreviewVisible = ref(false);
@@ -282,9 +291,14 @@ export function useReaderSettings() {
 
   async function persistSettingsSnapshot(nextSettings: ReaderSettings) {
     await readerDefaultsStore.replace(createReaderDefaultsSnapshot(nextSettings));
-    if (_activeBookId) {
-      saveBookSettings(_activeBookId, nextSettings);
+    if (!_activeBookId) {
+      return;
     }
+    if (nextSettings.useGlobalSettingsForAllBooks) {
+      await clearBookSettings(_activeBookId);
+      return;
+    }
+    saveBookSettings(_activeBookId, nextSettings);
   }
 
   if (!_settings) {
@@ -383,11 +397,23 @@ export function useReaderSettings() {
    */
   function activateBookSettings(bookId: string, savedJson?: string) {
     _activeBookId = bookId;
+    const globalSettings = loadGlobalSettings();
+    const applyNextSettings = (nextSettings: ReaderSettings) => {
+      runWithoutPersistence(() => {
+        applySettings(settings, nextSettings);
+      });
+    };
+    if (globalSettings.useGlobalSettingsForAllBooks) {
+      applyNextSettings(globalSettings);
+      void clearBookSettings(bookId);
+      return;
+    }
+
     let bookSettings: ReaderSettings | null = null;
     if (savedJson) {
       try {
         bookSettings = mergeSettings(
-          loadGlobalSettings(),
+          globalSettings,
           sanitizeBookStoredSettings(JSON.parse(savedJson) as StoredReaderSettings),
         );
       } catch {
@@ -395,12 +421,7 @@ export function useReaderSettings() {
       }
     }
     bookSettings ??= loadBookSettings(bookId);
-    const applyNextSettings = (nextSettings: ReaderSettings) => {
-      runWithoutPersistence(() => {
-        applySettings(settings, nextSettings);
-      });
-    };
-    applyNextSettings(bookSettings ?? loadGlobalSettings());
+    applyNextSettings(bookSettings ?? globalSettings);
 
     void ensureFrontendNamespaceLoaded(BOOK_STORAGE_NAMESPACE, () => {
       const legacy = legacyLocalStorageGet(BOOK_STORAGE_PREFIX + bookId);
@@ -413,7 +434,13 @@ export function useReaderSettings() {
       if (_activeBookId !== bookId || savedJson) {
         return;
       }
-      applyNextSettings(loadBookSettings(bookId) ?? loadGlobalSettings());
+      const latestGlobalSettings = loadGlobalSettings();
+      if (latestGlobalSettings.useGlobalSettingsForAllBooks) {
+        applyNextSettings(latestGlobalSettings);
+        void clearBookSettings(bookId);
+        return;
+      }
+      applyNextSettings(loadBookSettings(bookId) ?? latestGlobalSettings);
     });
   }
 
@@ -435,6 +462,9 @@ export function useReaderSettings() {
    * 全局策略类字段（如 paginationEngine）不落到单书，避免覆盖前端动态默认值。
    */
   function getSettingsJson(): string {
+    if (settings.useGlobalSettingsForAllBooks) {
+      return '';
+    }
     const stored = cloneSettings(settings) as StoredReaderSettings;
     return JSON.stringify(sanitizeBookStoredSettings(stored));
   }

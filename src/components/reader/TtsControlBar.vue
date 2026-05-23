@@ -1,15 +1,7 @@
 <script setup lang="ts">
-import {
-  Loader2,
-  Pause,
-  Play,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  X,
-} from "lucide-vue-next";
-import { computed, onMounted, watch } from "vue";
-import { useTts } from "@/composables/useTts";
+import { Loader2, Pause, Play, SkipBack, SkipForward, Volume2, X } from 'lucide-vue-next';
+import { computed, onMounted, watch } from 'vue';
+import { useTts } from '@/composables/useTts';
 
 const props = defineProps<{
   visible: boolean;
@@ -17,17 +9,17 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "close"): void;
+  (e: 'close'): void;
 }>();
 
 const tts = useTts();
 
 const RATE_OPTIONS = [
-  { label: "0.75x", value: 0.75 },
-  { label: "1x", value: 1 },
-  { label: "1.25x", value: 1.25 },
-  { label: "1.5x", value: 1.5 },
-  { label: "2x", value: 2 },
+  { label: '0.75x', value: 0.75 },
+  { label: '1x', value: 1 },
+  { label: '1.25x', value: 1.25 },
+  { label: '1.5x', value: 1.5 },
+  { label: '2x', value: 2 },
 ];
 
 const progressValue = computed({
@@ -35,17 +27,13 @@ const progressValue = computed({
   set: (value: number) => tts.seekToIndex(value),
 });
 
-const progressMax = computed(() =>
-  Math.max(tts.totalSegmentsKnown.value - 1, 0),
-);
-const progressPercent = computed(() =>
-  Math.round(tts.progressRatio.value * 100),
-);
+const progressMax = computed(() => Math.max(tts.totalSegmentsKnown.value - 1, 0));
+const progressPercent = computed(() => Math.round(tts.progressRatio.value * 100));
 const progressCountText = computed(() => {
   if (tts.totalSegmentsKnown.value <= 0) {
-    return "0/0";
+    return '0/0';
   }
-  const suffix = tts.totalFinalized.value ? "" : "+";
+  const suffix = tts.totalFinalized.value ? '' : '+';
   return `${tts.currentSegmentOrdinal.value}/${tts.totalSegmentsKnown.value}${suffix}`;
 });
 const engineTitle = computed(
@@ -54,7 +42,7 @@ const engineTitle = computed(
 
 function handleClose() {
   tts.stop();
-  emit("close");
+  emit('close');
 }
 
 function togglePlayPause() {
@@ -99,9 +87,7 @@ watch(
           class="tts-control-bar__icon-btn"
           type="button"
           title="上一段"
-          :disabled="
-            !tts.hasSession.value || tts.currentSegmentIndex.value <= 0
-          "
+          :disabled="!tts.hasSession.value || tts.currentSegmentIndex.value <= 0"
           @click="tts.prevSegment()"
         >
           <SkipBack :size="18" aria-hidden="true" />
@@ -114,16 +100,8 @@ watch(
           :disabled="!tts.hasSession.value"
           @click="togglePlayPause"
         >
-          <Loader2
-            v-if="tts.isLoading.value"
-            class="tts-control-bar__spin"
-            :size="20"
-          />
-          <Pause
-            v-else-if="tts.isPlaying.value"
-            :size="20"
-            aria-hidden="true"
-          />
+          <Loader2 v-if="tts.isLoading.value" class="tts-control-bar__spin" :size="20" />
+          <Pause v-else-if="tts.isPlaying.value" :size="20" aria-hidden="true" />
           <Play v-else :size="20" aria-hidden="true" />
         </button>
 
@@ -133,8 +111,7 @@ watch(
           title="下一段"
           :disabled="
             !tts.hasSession.value ||
-            (tts.totalFinalized.value &&
-              tts.currentSegmentIndex.value >= progressMax)
+            (tts.totalFinalized.value && tts.currentSegmentIndex.value >= progressMax)
           "
           @click="tts.nextSegment()"
         >
@@ -143,9 +120,7 @@ watch(
 
         <div class="tts-control-bar__progress-block">
           <div class="tts-control-bar__progress-meta">
-            <span class="tts-control-bar__location">{{
-              progressText || "—"
-            }}</span>
+            <span class="tts-control-bar__location">{{ progressText || '—' }}</span>
             <span class="tts-control-bar__count"
               >{{ progressCountText }} · {{ progressPercent }}%</span
             >
@@ -157,9 +132,7 @@ watch(
             min="0"
             :max="progressMax"
             step="1"
-            :disabled="
-              !tts.hasSession.value || tts.totalSegmentsKnown.value <= 1
-            "
+            :disabled="!tts.hasSession.value || tts.totalSegmentsKnown.value <= 1"
             aria-label="朗读进度"
           />
         </div>
@@ -196,19 +169,13 @@ watch(
         <select
           class="tts-control-bar__select tts-control-bar__voice"
           :value="tts.selectedVoiceId.value"
-          :disabled="
-            tts.voicesLoading.value || tts.availableVoices.value.length === 0
-          "
+          :disabled="tts.voicesLoading.value || tts.availableVoices.value.length === 0"
           aria-label="朗读语音"
           @change="handleVoiceChange"
         >
           <option value="">默认语音</option>
-          <option
-            v-for="voice in tts.availableVoices.value"
-            :key="voice.id"
-            :value="voice.id"
-          >
-            {{ voice.name }}{{ voice.language ? ` · ${voice.language}` : "" }}
+          <option v-for="voice in tts.availableVoices.value" :key="voice.id" :value="voice.id">
+            {{ voice.name }}{{ voice.language ? ` · ${voice.language}` : '' }}
           </option>
         </select>
 
@@ -219,8 +186,7 @@ watch(
             class="tts-control-bar__rate-btn"
             type="button"
             :class="{
-              'tts-control-bar__rate-btn--active':
-                tts.playbackRate.value === option.value,
+              'tts-control-bar__rate-btn--active': tts.playbackRate.value === option.value,
             }"
             @click="tts.setPlaybackRate(option.value)"
           >
@@ -240,10 +206,7 @@ watch(
 .tts-control-bar {
   position: fixed;
   left: 50%;
-  bottom: calc(
-    72px +
-      max(12px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))
-  );
+  bottom: calc(72px + max(12px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
   z-index: 80;
   width: min(680px, calc(100vw - 24px));
   display: grid;
@@ -462,13 +425,7 @@ watch(
 
 @media (max-width: 620px) {
   .tts-control-bar {
-    bottom: calc(
-      76px +
-        max(
-          8px,
-          var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
-        )
-    );
+    bottom: calc(76px + max(8px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
     width: calc(100vw - 16px);
     padding: 8px;
   }

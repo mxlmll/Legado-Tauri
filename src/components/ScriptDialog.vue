@@ -9,7 +9,7 @@
  */
 import { ref, computed, watch } from 'vue';
 import type { DialogRequest } from '@/stores';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import { useScriptBridgeStore } from '@/stores';
 
 const bridge = useScriptBridgeStore();
@@ -20,7 +20,7 @@ const current = computed<DialogRequest | null>(() =>
 );
 const visible = computed(() => current.value !== null);
 
-useOverlayBackstack(() => visible.value, handleClose);
+useOverlay(() => visible.value, handleClose);
 
 // ── input 模式 ──────────────────────────────────────────────────────────
 const inputValue = ref('');

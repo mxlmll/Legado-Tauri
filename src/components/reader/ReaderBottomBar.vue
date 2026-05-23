@@ -214,9 +214,12 @@ function toggleDayNight() {
 }
 
 .reader-bottom-bar__action {
+  flex: var(--reader-bottom-action-flex, 1 1 0);
+  min-height: var(--reader-bottom-action-min-height, 44px);
   display: flex;
   flex-direction: var(--reader-bottom-action-direction, column);
   align-items: center;
+  justify-content: center;
   gap: 4px;
   background: none;
   border: none;

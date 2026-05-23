@@ -74,9 +74,14 @@ export const useBookshelfStore = defineStore('bookshelf', () => {
     fileName: string,
     sourceName: string,
   ): Promise<ShelfBook> {
+    const bookUrl = book.bookUrl.trim();
+    const sourceFileName = fileName.trim();
+    if (!bookUrl || !sourceFileName) {
+      throw new Error('缺少书籍链接或书源文件名，无法加入书架');
+    }
     const result = await invokeWithTimeout<ShelfBook>(
       'bookshelf_add',
-      { book, fileName, sourceName },
+      { book: { ...book, bookUrl }, fileName: sourceFileName, sourceName },
       TIMEOUT,
     );
     await loadBooks();
@@ -151,7 +156,10 @@ export const useBookshelfStore = defineStore('bookshelf', () => {
       'bookshelf_save_txt_chapters',
       {
         id: shelfBook.id,
-        chapters: chapterContents.map((ch, idx) => ({ index: idx, content: ch.content })),
+        chapters: chapterContents.map((ch, idx) => ({
+          index: idx,
+          content: ch.content,
+        })),
       },
       60_000, // 大文件宽限 60s
     );

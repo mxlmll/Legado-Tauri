@@ -1,41 +1,44 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight } from 'lucide-vue-next';
-import { storeToRefs } from 'pinia';
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import AppPageHeader from '@/components/layout/AppPageHeader.vue';
-import SectionAbout from '@/components/settings/SectionAbout.vue';
-import SectionAdvanced from '@/components/settings/SectionAdvanced.vue';
-import SectionDeveloper from '@/components/settings/SectionDeveloper.vue';
-import SectionGeneral from '@/components/settings/SectionGeneral.vue';
-import SectionNetwork from '@/components/settings/SectionNetwork.vue';
-import SectionReader from '@/components/settings/SectionReader.vue';
-import SectionStorage from '@/components/settings/SectionStorage.vue';
-import SectionSync from '@/components/settings/SectionSync.vue';
-import SectionVideo from '@/components/settings/SectionVideo.vue';
-import { isMobile, isHarmonyNative } from '@/composables/useEnv';
-import { useNavigationStore, useBackStackStore } from '@/stores';
+import { ChevronLeft, ChevronRight } from "lucide-vue-next";
+import { storeToRefs } from "pinia";
+import { computed, ref, watch } from "vue";
+import AppPageHeader from "@/components/layout/AppPageHeader.vue";
+import SectionAbout from "@/components/settings/SectionAbout.vue";
+import SectionAdvanced from "@/components/settings/SectionAdvanced.vue";
+import SectionBackup from "@/components/settings/SectionBackup.vue";
+import SectionDeveloper from "@/components/settings/SectionDeveloper.vue";
+import SectionGeneral from "@/components/settings/SectionGeneral.vue";
+import SectionNetwork from "@/components/settings/SectionNetwork.vue";
+import SectionReader from "@/components/settings/SectionReader.vue";
+import SectionStorage from "@/components/settings/SectionStorage.vue";
+import SectionSync from "@/components/settings/SectionSync.vue";
+import SectionVideo from "@/components/settings/SectionVideo.vue";
+import { isMobile, isHarmonyNative } from "@/composables/useEnv";
+import { useOverlay } from "@/composables/useOverlay";
+import { useNavigationStore } from "@/stores";
 
 interface TabItem {
   id: string;
   label: string;
 }
 
-type MobileStage = 'menu' | 'detail';
+type MobileStage = "menu" | "detail";
 
 const TABS = computed<TabItem[]>(() => {
   const base: TabItem[] = [
-    { id: 'general', label: '通用' },
-    { id: 'reader', label: '阅读偏好' },
-    { id: 'video', label: '视频播放' },
-    { id: 'network', label: '网络' },
-    { id: 'sync', label: '同步' },
-    { id: 'storage', label: '存储' },
-    { id: 'advanced', label: '服务模式' },
-    { id: 'developer', label: '开发设置' },
-    { id: 'about', label: '关于' },
+    { id: "general", label: "通用" },
+    { id: "reader", label: "阅读偏好" },
+    { id: "video", label: "视频播放" },
+    { id: "network", label: "网络" },
+    { id: "sync", label: "同步" },
+    { id: "storage", label: "存储" },
+    { id: "backup", label: "备份与还原" },
+    { id: "advanced", label: "服务模式" },
+    { id: "developer", label: "开发设置" },
+    { id: "about", label: "关于" },
   ];
   // 鸿蒙端暂不支持 WebDAV 同步，隐藏同步标签页
-  return isHarmonyNative ? base.filter((t) => t.id !== 'sync') : base;
+  return isHarmonyNative ? base.filter((t) => t.id !== "sync") : base;
 });
 
 const TAB_COMPONENTS = {
@@ -45,6 +48,7 @@ const TAB_COMPONENTS = {
   network: SectionNetwork,
   sync: SectionSync,
   storage: SectionStorage,
+  backup: SectionBackup,
   advanced: SectionAdvanced,
   developer: SectionDeveloper,
   about: SectionAbout,
@@ -53,23 +57,27 @@ const TAB_COMPONENTS = {
 const navigationStore = useNavigationStore();
 const { activeView } = storeToRefs(navigationStore);
 
-const activeTab = ref<keyof typeof TAB_COMPONENTS>('general');
-const mobileStage = ref<MobileStage>('menu');
-
-const _backStack = useBackStackStore();
-let _backHandler: (() => void) | null = null;
+const activeTab = ref<keyof typeof TAB_COMPONENTS>("general");
+const mobileStage = ref<MobileStage>("menu");
 
 const activeSectionComponent = computed(() => TAB_COMPONENTS[activeTab.value]);
-const activeTabIndex = computed(() => TABS.value.findIndex((tab) => tab.id === activeTab.value));
-const activeTabLabel = computed(() => TABS.value[activeTabIndex.value]?.label ?? activeTab.value);
+const activeTabIndex = computed(() =>
+  TABS.value.findIndex((tab) => tab.id === activeTab.value),
+);
+const activeTabLabel = computed(
+  () => TABS.value[activeTabIndex.value]?.label ?? activeTab.value,
+);
 const isSettingsDetailActive = computed(
-  () => isMobile.value && activeView.value === 'settings' && mobileStage.value === 'detail',
+  () =>
+    isMobile.value &&
+    activeView.value === "settings" &&
+    mobileStage.value === "detail",
 );
 
 function selectTab(id: keyof typeof TAB_COMPONENTS) {
   activeTab.value = id;
   if (isMobile.value) {
-    mobileStage.value = 'detail';
+    mobileStage.value = "detail";
   }
 }
 
@@ -80,89 +88,33 @@ function openMobileTab(id: string) {
 }
 
 function showMobileMenu() {
-  mobileStage.value = 'menu';
+  mobileStage.value = "menu";
 }
 
-function activateHistoryGuard() {
-  if (_backHandler) {
-    return;
-  }
-  _backHandler = () => {
-    _backHandler = null; // 自注销
-    if (!isSettingsDetailActive.value) {
-      return;
+// 移动端"设置详情页"接入统一返回栈：
+//   - 真实返回 / Esc / BrowserBack 触发 onClose -> showMobileMenu
+//   - UI 顶部"返回"按钮调用 triggerClose -> 同样走返回栈，保证 history 一致
+const { triggerClose: goBackFromDetail } = useOverlay(
+  () => isSettingsDetailActive.value,
+  () => {
+    if (isSettingsDetailActive.value) {
+      showMobileMenu();
     }
-    showMobileMenu();
-  };
-  _backStack.push(_backHandler);
-}
-
-function deactivateHistoryGuard(options?: { consume?: boolean }) {
-  if (!_backHandler) {
-    return;
-  }
-  const h = _backHandler;
-  _backHandler = null;
-  if (options?.consume === false) {
-    _backStack.detach(h); // 不触发历史导航
-  } else {
-    _backStack.remove(h); // 消耗 history 记录
-  }
-}
-
-function goBackFromDetail() {
-  if (!isSettingsDetailActive.value) {
-    return;
-  }
-  deactivateHistoryGuard({ consume: true });
-  showMobileMenu();
-}
-
-function onMobileKeyDown(event: KeyboardEvent) {
-  // BrowserBack / Escape 已由全局堆栈处理（App.vue 安装的 useFocusNavigation + popstate 监听器）
-  // 此处仅处理尚未被全局捕获的情况（如使用 event.stopPropagation 的子组件）
-  if (event.defaultPrevented) {
-    return;
-  }
-  if (!isSettingsDetailActive.value) {
-    return;
-  }
-  if (event.key === 'Escape' || event.key === 'BrowserBack') {
-    event.preventDefault();
-    goBackFromDetail();
-  }
-}
-
-watch(isSettingsDetailActive, (enabled) => {
-  if (enabled) {
-    activateHistoryGuard();
-    window.addEventListener('keydown', onMobileKeyDown);
-    return;
-  }
-  window.removeEventListener('keydown', onMobileKeyDown);
-  deactivateHistoryGuard({ consume: activeView.value !== 'settings' });
-});
+  },
+);
 
 watch(
   () => isMobile.value,
   (mobile) => {
     if (!mobile) {
-      mobileStage.value = 'menu';
+      mobileStage.value = "menu";
     }
   },
 );
 
 watch(activeView, (view) => {
-  if (view !== 'settings' && isMobile.value) {
-    mobileStage.value = 'menu';
-  }
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onMobileKeyDown);
-  if (_backHandler) {
-    _backStack.detach(_backHandler);
-    _backHandler = null;
+  if (view !== "settings" && isMobile.value) {
+    mobileStage.value = "menu";
   }
 });
 </script>
@@ -171,7 +123,9 @@ onBeforeUnmount(() => {
   <div class="settings-view" :class="{ 'settings-view--mobile': isMobile }">
     <template v-if="!isMobile">
       <AppPageHeader title="设置" :divider="true">
-        <template #subtitle>统一管理应用行为、阅读偏好、网络、同步与调试相关配置</template>
+        <template #subtitle
+          >统一管理应用行为、阅读偏好、网络、同步与调试相关配置</template
+        >
       </AppPageHeader>
 
       <nav class="sv-tab-bar" role="tablist" aria-label="设置分类">
@@ -185,11 +139,19 @@ onBeforeUnmount(() => {
           :tabindex="activeTab === tab.id ? 0 : -1"
           @click="openMobileTab(tab.id)"
           @keydown.left.prevent="
-            openMobileTab(TABS[Math.max(0, TABS.findIndex((t) => t.id === activeTab) - 1)].id)
+            openMobileTab(
+              TABS[Math.max(0, TABS.findIndex((t) => t.id === activeTab) - 1)]
+                .id,
+            )
           "
           @keydown.right.prevent="
             openMobileTab(
-              TABS[Math.min(TABS.length - 1, TABS.findIndex((t) => t.id === activeTab) + 1)].id,
+              TABS[
+                Math.min(
+                  TABS.length - 1,
+                  TABS.findIndex((t) => t.id === activeTab) + 1,
+                )
+              ].id,
             )
           "
         >
@@ -205,7 +167,9 @@ onBeforeUnmount(() => {
     <template v-else>
       <div v-if="mobileStage === 'menu'" class="sv-mobile-menu-page">
         <AppPageHeader title="设置" :divider="true" class="">
-          <template #subtitle>统一管理应用行为、阅读偏好、网络、同步与调试相关配置</template>
+          <template #subtitle
+            >统一管理应用行为、阅读偏好、网络、同步与调试相关配置</template
+          >
         </AppPageHeader>
 
         <nav class="sv-mobile-list" aria-label="设置分类列表">
@@ -223,12 +187,18 @@ onBeforeUnmount(() => {
 
       <div v-else class="sv-mobile-detail-page">
         <header class="sv-mobile-detail-header">
-          <button class="sv-mobile-detail-header__back focusable" @click="goBackFromDetail">
+          <button
+            class="sv-mobile-detail-header__back focusable"
+            @click="goBackFromDetail"
+          >
             <ChevronLeft :size="18" />
             <span>返回</span>
           </button>
           <div class="sv-mobile-detail-header__title">{{ activeTabLabel }}</div>
-          <div class="sv-mobile-detail-header__placeholder" aria-hidden="true" />
+          <div
+            class="sv-mobile-detail-header__placeholder"
+            aria-hidden="true"
+          />
         </header>
 
         <div class="sv-panel app-scrollbar sv-panel--mobile">
@@ -366,8 +336,16 @@ onBeforeUnmount(() => {
 
 .sv-mobile-list__item:active {
   transform: scale(0.985);
-  background: color-mix(in srgb, var(--color-accent-soft) 72%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--color-accent) 28%, var(--color-border));
+  background: color-mix(
+    in srgb,
+    var(--color-accent-soft) 72%,
+    var(--color-surface)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--color-accent) 28%,
+    var(--color-border)
+  );
 }
 
 .sv-mobile-list__label {

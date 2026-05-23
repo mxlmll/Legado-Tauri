@@ -1,6 +1,16 @@
 <script setup lang="ts">
-import { NTag, NSwitch, NButton, NPopover, NInputNumber } from 'naive-ui';
-import type { BookSourceMeta, UpdateCheckResult } from '@/composables/useBookSource';
+import {
+  NTag,
+  NSwitch,
+  NButton,
+  NPopover,
+  NInputNumber,
+  NCheckbox,
+} from "naive-ui";
+import type {
+  BookSourceMeta,
+  UpdateCheckResult,
+} from "@/composables/useBookSource";
 
 defineProps<{
   src: BookSourceMeta;
@@ -12,6 +22,8 @@ defineProps<{
   delayOverride: number;
   updateInfo?: UpdateCheckResult;
   updateBusy: boolean;
+  batchMode?: boolean;
+  selected?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -19,20 +31,36 @@ const emit = defineEmits<{
   edit: [];
   reload: [];
   delete: [];
-  'navigate-debug': [];
-  'open-url': [url: string];
-  'toggle-search': [];
-  'toggle-explore': [];
-  'load-delay': [];
-  'save-delay': [value: number | null];
-  'apply-update': [];
+  export: [];
+  select: [];
+  "navigate-debug": [];
+  "open-url": [url: string];
+  "toggle-search": [];
+  "toggle-explore": [];
+  "load-delay": [];
+  "save-delay": [value: number | null];
+  "apply-update": [];
 }>();
 </script>
 
 <template>
-  <div class="src-card" :class="{ 'src-card--off': !src.enabled }">
+  <div
+    class="src-card"
+    :class="{
+      'src-card--off': !src.enabled,
+      'src-card--selected': batchMode && selected,
+    }"
+    @click="batchMode && emit('select')"
+  >
     <!-- 顶部：Logo + 标题区 + 开关 -->
     <div class="src-card__header">
+      <n-checkbox
+        v-if="batchMode"
+        :checked="selected"
+        class="src-card__checkbox"
+        @update:checked="emit('select')"
+        @click.stop
+      />
       <img
         v-if="src.logo && src.logo.toLowerCase() !== 'default'"
         :src="src.logo"
@@ -40,7 +68,12 @@ const emit = defineEmits<{
         :alt="src.name"
         @error="($event.target as HTMLImageElement).src = defaultLogoUrl"
       />
-      <img v-else :src="defaultLogoUrl" class="src-card__logo" :alt="src.name" />
+      <img
+        v-else
+        :src="defaultLogoUrl"
+        class="src-card__logo"
+        :alt="src.name"
+      />
 
       <div class="src-card__title">
         <div class="src-card__name-line">
@@ -77,12 +110,17 @@ const emit = defineEmits<{
             :title="`本地 v${updateInfo.localVersion || '未标注'} → 远端 v${updateInfo.remoteVersion || '未标注'}`"
             >可升级</n-tag
           >
-          <span v-if="src.author" class="src-card__author">{{ src.author }}</span>
+          <span v-if="src.author" class="src-card__author">{{
+            src.author
+          }}</span>
         </div>
         <div class="src-card__url-line">
-          <a class="src-card__url" href="#" @click.prevent.stop="emit('open-url', src.url)">{{
-            src.url
-          }}</a>
+          <a
+            class="src-card__url"
+            href="#"
+            @click.prevent.stop="emit('open-url', src.url)"
+            >{{ src.url }}</a
+          >
           <n-tag
             v-if="src.urls && src.urls.length > 1"
             size="tiny"
@@ -99,6 +137,8 @@ const emit = defineEmits<{
         :value="src.enabled"
         size="small"
         class="src-card__switch"
+        :disabled="batchMode"
+        @click.stop
         @update:value="emit('toggle')"
       />
     </div>
@@ -113,7 +153,7 @@ const emit = defineEmits<{
           :type="searchEnabled ? 'success' : 'default'"
           class="src-card__cap"
           @click.stop="emit('toggle-search')"
-          >搜索{{ searchEnabled ? '✓' : '✗' }}</n-tag
+          >搜索{{ searchEnabled ? "✓" : "✗" }}</n-tag
         >
         <n-tag
           v-if="capabilities?.has('explore')"
@@ -122,7 +162,7 @@ const emit = defineEmits<{
           :type="exploreEnabled ? 'info' : 'default'"
           class="src-card__cap"
           @click.stop="emit('toggle-explore')"
-          >发现{{ exploreEnabled ? '✓' : '✗' }}</n-tag
+          >发现{{ exploreEnabled ? "✓" : "✗" }}</n-tag
         >
         <n-tag
           v-if="capabilities?.has('bookInfo')"
@@ -178,10 +218,20 @@ const emit = defineEmits<{
         @click="emit('apply-update')"
         >升级</n-button
       >
-      <n-button size="tiny" quaternary class="src-action src-action--edit" @click="emit('edit')"
+      <n-button
+        size="tiny"
+        quaternary
+        class="src-action src-action--edit"
+        @click="emit('edit')"
         >编辑</n-button
       >
-      <n-button size="tiny" quaternary class="src-action" @click="emit('reload')">重载</n-button>
+      <n-button
+        size="tiny"
+        quaternary
+        class="src-action"
+        @click="emit('reload')"
+        >重载</n-button
+      >
       <n-button
         size="tiny"
         quaternary
@@ -204,8 +254,17 @@ const emit = defineEmits<{
             >延迟</n-button
           >
         </template>
-        <div style="display: flex; flex-direction: column; gap: 6px; min-width: 200px">
-          <span style="font-size: 0.8rem; color: var(--n-text-color-3)">最小请求延迟（ms）</span>
+        <div
+          style="
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 200px;
+          "
+        >
+          <span style="font-size: 0.8rem; color: var(--n-text-color-3)"
+            >最小请求延迟（ms）</span
+          >
           <n-input-number
             :value="delayOverride"
             size="small"
@@ -220,7 +279,18 @@ const emit = defineEmits<{
           </span>
         </div>
       </n-popover>
-      <n-button size="tiny" quaternary class="src-action src-action--delete" @click="emit('delete')"
+      <n-button
+        size="tiny"
+        quaternary
+        class="src-action"
+        @click.stop="emit('export')"
+        >导出</n-button
+      >
+      <n-button
+        size="tiny"
+        quaternary
+        class="src-action src-action--delete"
+        @click.stop="emit('delete')"
         >删除</n-button
       >
     </div>
@@ -257,6 +327,19 @@ const emit = defineEmits<{
 
 .src-card--off:hover {
   border-left-color: var(--color-danger);
+}
+
+.src-card--selected {
+  border-color: var(--color-accent);
+  border-left-color: var(--color-accent);
+  background: var(
+    --color-accent-subtle,
+    rgba(var(--color-accent-rgb, 99 102 241) / 0.06)
+  );
+}
+
+.src-card__checkbox {
+  flex-shrink: 0;
 }
 
 .src-card__header {
@@ -387,7 +470,11 @@ const emit = defineEmits<{
 
 .src-card__cap--dim {
   cursor: default;
-  --n-color: color-mix(in srgb, var(--color-border) 60%, transparent) !important;
+  --n-color: color-mix(
+    in srgb,
+    var(--color-border) 60%,
+    transparent
+  ) !important;
   --n-text-color: var(--color-text-muted) !important;
   opacity: 0.7;
 }
@@ -411,7 +498,11 @@ const emit = defineEmits<{
   height: 15px !important;
   line-height: 13px !important;
   padding: 0 5px !important;
-  --n-color: color-mix(in srgb, var(--color-border) 80%, transparent) !important;
+  --n-color: color-mix(
+    in srgb,
+    var(--color-border) 80%,
+    transparent
+  ) !important;
   --n-text-color: var(--color-text-muted) !important;
   opacity: 0.65;
 }
@@ -462,7 +553,11 @@ const emit = defineEmits<{
 .src-action--update {
   --n-text-color: var(--color-success) !important;
   --n-text-color-hover: var(--color-success) !important;
-  --n-color-hover: color-mix(in srgb, var(--color-success) 12%, transparent) !important;
+  --n-color-hover: color-mix(
+    in srgb,
+    var(--color-success) 12%,
+    transparent
+  ) !important;
 }
 
 .src-action--delete {

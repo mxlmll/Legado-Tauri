@@ -1,4 +1,4 @@
-import type { ExtensionMeta } from "@/composables/useExtension";
+import type { ExtensionMeta } from '@/composables/useExtension';
 import type {
   RuntimeReaderThemeDefinition,
   RuntimeReaderBackgroundDefinition,
@@ -7,7 +7,7 @@ import type {
   RuntimeReaderContextActionDefinition,
   RuntimeCoverGeneratorDefinition,
   RuntimeTtsEngineDefinition,
-} from "./pluginNormalizer";
+} from './pluginNormalizer';
 import type {
   FrontendPluginRecord,
   ReaderPluginSlot,
@@ -17,7 +17,7 @@ import type {
   CleanupFn,
   ReaderSessionListener,
   PluginSettingsDefinition,
-} from "./pluginTypes";
+} from './pluginTypes';
 
 export interface MountedSlotRecord {
   host: HTMLElement;

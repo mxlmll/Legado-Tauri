@@ -6,7 +6,7 @@ import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import type { ShelfBook, CachedChapter } from '@/types';
 import { isHarmonyNative, isTauri, platform } from '@/composables/useEnv';
 import { invokeWithTimeout } from '@/composables/useInvoke';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import { usePrefetchStore, useAppConfigStore } from '@/stores';
 import { base64ToBytes, pickExportPath, writeExportFile } from '@/utils/exportFile';
 
@@ -58,7 +58,7 @@ const isTauriMobile = computed(() => {
   return isTauri && (value === 'android' || value === 'ios');
 });
 
-useOverlayBackstack(
+useOverlay(
   () => props.show && canClose.value,
   () => {
     void handleClose();

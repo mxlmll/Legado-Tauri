@@ -1,7 +1,7 @@
-import type { ComputedRef, Ref } from "vue";
-import { nextTick, ref, watch } from "vue";
-import { useTts, splitIntoSegments } from "@/composables/useTts";
-import type { PagedModeApi, ScrollModeApi } from "./useReaderModeBridge";
+import type { ComputedRef, Ref } from 'vue';
+import { nextTick, ref, watch } from 'vue';
+import { useTts, splitIntoSegments } from '@/composables/useTts';
+import type { PagedModeApi, ScrollModeApi } from './useReaderModeBridge';
 
 interface UseReaderTtsManagerOptions {
   activeChapterIndex: Ref<number>;
@@ -32,18 +32,16 @@ interface PagedTtsSegmentMeta {
 /** 从页面 HTML 字符串中提取段落块文本，避免按视觉行朗读 */
 function extractPageParagraphs(html: string): string[] {
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  return Array.from(
-    doc.querySelectorAll(".reader-block--paragraph, .reader-block--title"),
-  )
+  const doc = parser.parseFromString(html, 'text/html');
+  return Array.from(doc.querySelectorAll('.reader-block--paragraph, .reader-block--title'))
     .map((block) => {
-      const lines = Array.from(block.querySelectorAll(".reader-line"));
+      const lines = Array.from(block.querySelectorAll('.reader-line'));
       if (lines.length === 0) {
-        return block.textContent?.trim() ?? "";
+        return block.textContent?.trim() ?? '';
       }
       return lines
-        .map((line) => line.textContent ?? "")
-        .join("")
+        .map((line) => line.textContent ?? '')
+        .join('')
         .trim();
     })
     .filter(Boolean);
@@ -74,7 +72,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
   void _isPagedMode;
 
   const tts = useTts();
-  const ttsProgressText = ref("—");
+  const ttsProgressText = ref('—');
   const ttsScrollHighlightIdx = ref(-1);
 
   // TTS 分页模式状态（跨章节持续累计）
@@ -120,11 +118,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
     ttsFeedChapter = activeChapterIndex.value;
     let globalIdx = 0;
 
-    const collectPageSegments = (
-      page: number,
-      chapterIdx: number,
-      pageHtml: string,
-    ): string[] => {
+    const collectPageSegments = (page: number, chapterIdx: number, pageHtml: string): string[] => {
       const paragraphs = extractPageParagraphs(pageHtml);
       const segments: string[] = [];
       paragraphs.forEach((paragraph, paragraphIndex) => {
@@ -144,11 +138,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
 
     const initialSegments: string[] = [];
     for (let page = startPage; page < pages.length; page++) {
-      const pageSegments = collectPageSegments(
-        page,
-        ttsFeedChapter,
-        pages[page] ?? "",
-      );
+      const pageSegments = collectPageSegments(page, ttsFeedChapter, pages[page] ?? '');
       if (pageSegments.length === 0) {
         continue;
       }
@@ -169,7 +159,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
         const pageSegments = collectPageSegments(
           nextPage,
           ttsFeedChapter,
-          currentPages[nextPage] ?? "",
+          currentPages[nextPage] ?? '',
         );
         return pageSegments.length > 0 ? pageSegments : onNeedMore();
       }
@@ -187,11 +177,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
         return null;
       }
 
-      const pageSegments = collectPageSegments(
-        0,
-        ttsFeedChapter,
-        newPages[0] ?? "",
-      );
+      const pageSegments = collectPageSegments(0, ttsFeedChapter, newPages[0] ?? '');
       return pageSegments.length > 0 ? pageSegments : onNeedMore();
     };
 
@@ -202,18 +188,11 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
       }
 
       const total =
-        meta.chapterIdx === activeChapterIndex.value
-          ? activePagedPages.value.length
-          : 0;
+        meta.chapterIdx === activeChapterIndex.value ? activePagedPages.value.length : 0;
       ttsProgressText.value =
-        total > 0
-          ? `第 ${meta.page + 1}/${total} 页`
-          : `第 ${meta.page + 1} 页`;
+        total > 0 ? `第 ${meta.page + 1}/${total} 页` : `第 ${meta.page + 1} 页`;
 
-      if (
-        meta.chapterIdx === activeChapterIndex.value &&
-        meta.page !== pagedPageIndex.value
-      ) {
+      if (meta.chapterIdx === activeChapterIndex.value && meta.page !== pagedPageIndex.value) {
         setPagedPage(meta.page);
       }
 
@@ -238,9 +217,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
     ttsFeedChapter = activeChapterIndex.value;
 
     const paragraphs = content.value.split(/\n+/).filter((p) => p.trim());
-    const initialSegs = paragraphs
-      .slice(startPara)
-      .flatMap((p) => splitIntoSegments(p));
+    const initialSegs = paragraphs.slice(startPara).flatMap((p) => splitIntoSegments(p));
 
     if (initialSegs.length === 0) {
       return null;
@@ -248,7 +225,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
 
     const segToParaMap: number[] = [];
     for (let pi = startPara; pi < paragraphs.length; pi++) {
-      const segs = splitIntoSegments(paragraphs[pi] ?? "");
+      const segs = splitIntoSegments(paragraphs[pi] ?? '');
       for (let si = 0; si < segs.length; si++) {
         segToParaMap.push(pi);
       }
@@ -263,7 +240,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
       const newParas = content.value.split(/\n+/).filter((p) => p.trim());
       const newSegs = newParas.flatMap((p) => splitIntoSegments(p));
       for (let pi = 0; pi < newParas.length; pi++) {
-        const segs = splitIntoSegments(newParas[pi] ?? "");
+        const segs = splitIntoSegments(newParas[pi] ?? '');
         for (let si = 0; si < segs.length; si++) {
           segToParaMap.push(pi);
         }
@@ -285,11 +262,10 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
           if (!container) {
             return;
           }
-          const paras =
-            container.querySelectorAll<HTMLElement>(".scroll-mode__para");
+          const paras = container.querySelectorAll<HTMLElement>('.scroll-mode__para');
           paras[paraIdx]?.scrollIntoView({
-            behavior: "smooth",
-            block: "center",
+            behavior: 'smooth',
+            block: 'center',
           });
         });
       }
@@ -327,7 +303,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
     }
 
     showTtsBar.value = true;
-    ttsProgressText.value = "—";
+    ttsProgressText.value = '—';
     tts.startReading(opts);
   }
 
@@ -339,7 +315,7 @@ export function useReaderTtsManager(options: UseReaderTtsManagerOptions) {
         tts.stop();
         ttsScrollHighlightIdx.value = -1;
         pagedModeRef.value?.clearTtsHighlight?.();
-        ttsProgressText.value = "—";
+        ttsProgressText.value = '—';
       }
     },
   );

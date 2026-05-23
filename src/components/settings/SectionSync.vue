@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { useDialog, useMessage } from 'naive-ui';
+import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
 import QRCode from 'qrcode';
 import { computed, onMounted, ref } from 'vue';
+import { useBackAwareDialog as useDialog } from '@/composables/useBackAwareDialog';
 import { invokeWithTimeout } from '@/composables/useInvoke';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import {
   useSync,
   type SyncConflict,
@@ -52,14 +53,14 @@ const providerOptions = [
   { label: '百度网盘', value: 'baidu_netdisk' },
 ];
 
-useOverlayBackstack(() => qrVisible.value, closeQr);
-useOverlayBackstack(
+useOverlay(() => qrVisible.value, closeQr);
+useOverlay(
   () => scanVisible.value,
   () => {
     scanVisible.value = false;
   },
 );
-useOverlayBackstack(
+useOverlay(
   () => baiduAuthVisible.value,
   () => {
     baiduAuthVisible.value = false;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import type { PaginationMeasurementData } from "./composables/usePagination";
+import { computed } from 'vue';
+import type { PaginationMeasurementData } from './composables/usePagination';
 
 const props = defineProps<{
   /** 测量数据，null 时不显示 */
@@ -17,17 +17,12 @@ const displayData = computed(() => {
   const widthDiff = m.containerWidth - m.availableWidth;
   const heightDiff = m.containerHeight - m.availableHeight;
   const widthDiffPct =
-    m.containerWidth > 0
-      ? ((widthDiff / m.containerWidth) * 100).toFixed(1)
-      : "0";
+    m.containerWidth > 0 ? ((widthDiff / m.containerWidth) * 100).toFixed(1) : '0';
   const heightDiffPct =
-    m.containerHeight > 0
-      ? ((heightDiff / m.containerHeight) * 100).toFixed(1)
-      : "0";
+    m.containerHeight > 0 ? ((heightDiff / m.containerHeight) * 100).toFixed(1) : '0';
 
   const compensation = m.pretextCompensation;
-  const compensationStr =
-    compensation !== undefined ? compensation.toFixed(4) : null;
+  const compensationStr = compensation !== undefined ? compensation.toFixed(4) : null;
   const compensationPctStr =
     compensation !== undefined ? ((1 - compensation) * 100).toFixed(2) : null;
 
@@ -62,13 +57,13 @@ const lineCount = computed(() => {
 });
 
 const handleCopyData = async () => {
-  if (!displayData.value) return;
+  if (!displayData.value) {return;}
 
   const data = displayData.value;
   const compensationLine =
     data.compensationStr !== null
       ? `\nCanvas/DOM 校准比: ${data.compensationStr} (偏差 ${data.compensationPctStr}%)`
-      : "";
+      : '';
   const text = `排版测量诊断数据
 引擎: ${data.engine}${compensationLine}
 
@@ -92,7 +87,7 @@ const handleCopyData = async () => {
   try {
     await navigator.clipboard.writeText(text);
   } catch (err) {
-    console.error("复制失败:", err);
+    console.error('复制失败:', err);
   }
 };
 </script>
@@ -102,9 +97,7 @@ const handleCopyData = async () => {
     <!-- 标题栏 -->
     <div class="layout-debug-indicator__header">
       <span class="layout-debug-indicator__title">排版测量诊断</span>
-      <span class="layout-debug-indicator__engine"
-        >引擎: {{ displayData.engine }}</span
-      >
+      <span class="layout-debug-indicator__engine">引擎: {{ displayData.engine }}</span>
       <span
         v-if="displayData.compensationStr !== null"
         class="layout-debug-indicator__compensation"
@@ -114,11 +107,7 @@ const handleCopyData = async () => {
         }"
         >校准: {{ displayData.compensationStr }}</span
       >
-      <button
-        class="layout-debug-indicator__copy-btn"
-        title="复制诊断数据"
-        @click="handleCopyData"
-      >
+      <button class="layout-debug-indicator__copy-btn" title="复制诊断数据" @click="handleCopyData">
         复制
       </button>
     </div>
@@ -132,9 +121,7 @@ const handleCopyData = async () => {
           >(可用: {{ displayData.availableWidth }}px)</span
         >
         <span class="layout-debug-indicator__diff"
-          >差异: {{ displayData.widthDiff }}px ({{
-            displayData.widthDiffPct
-          }}%)</span
+          >差异: {{ displayData.widthDiff }}px ({{ displayData.widthDiffPct }}%)</span
         >
       </div>
       <div class="layout-debug-indicator__row">
@@ -143,9 +130,7 @@ const handleCopyData = async () => {
           >(可用: {{ displayData.availableHeight }}px)</span
         >
         <span class="layout-debug-indicator__diff"
-          >差异: {{ displayData.heightDiff }}px ({{
-            displayData.heightDiffPct
-          }}%)</span
+          >差异: {{ displayData.heightDiff }}px ({{ displayData.heightDiffPct }}%)</span
         >
       </div>
     </div>
@@ -154,18 +139,10 @@ const handleCopyData = async () => {
     <div class="layout-debug-indicator__section">
       <div class="layout-debug-indicator__label">页边距</div>
       <div class="layout-debug-indicator__padding-grid">
-        <div class="layout-debug-indicator__padding-item">
-          L: {{ displayData.paddingLeft }}px
-        </div>
-        <div class="layout-debug-indicator__padding-item">
-          R: {{ displayData.paddingRight }}px
-        </div>
-        <div class="layout-debug-indicator__padding-item">
-          T: {{ displayData.paddingTop }}px
-        </div>
-        <div class="layout-debug-indicator__padding-item">
-          B: {{ displayData.paddingBottom }}px
-        </div>
+        <div class="layout-debug-indicator__padding-item">L: {{ displayData.paddingLeft }}px</div>
+        <div class="layout-debug-indicator__padding-item">R: {{ displayData.paddingRight }}px</div>
+        <div class="layout-debug-indicator__padding-item">T: {{ displayData.paddingTop }}px</div>
+        <div class="layout-debug-indicator__padding-item">B: {{ displayData.paddingBottom }}px</div>
       </div>
     </div>
 
@@ -175,9 +152,7 @@ const handleCopyData = async () => {
       <div class="layout-debug-indicator__row">
         <span>字号: {{ displayData.fontSize }}px</span>
         <span>行高: {{ displayData.lineHeightPx }}px</span>
-        <span class="layout-debug-indicator__muted"
-          >(预计 {{ lineCount }} 行)</span
-        >
+        <span class="layout-debug-indicator__muted">(预计 {{ lineCount }} 行)</span>
       </div>
     </div>
 
@@ -190,8 +165,7 @@ const handleCopyData = async () => {
       class="layout-debug-indicator__warning"
     >
       ⚠️ Canvas/DOM 宽度偏差
-      {{ displayData.compensationPctStr }}%，DPI/fontScale
-      导致测量不一致，行宽已自动补偿
+      {{ displayData.compensationPctStr }}%，DPI/fontScale 导致测量不一致，行宽已自动补偿
     </div>
     <div
       v-else-if="parseFloat(displayData.widthDiffPct) > 5"
@@ -214,7 +188,7 @@ const handleCopyData = async () => {
   border-radius: 6px;
   padding: 10px;
   font-size: 12px;
-  font-family: "Courier New", monospace;
+  font-family: 'Courier New', monospace;
   z-index: 9998;
   max-height: 500px;
   overflow-y: auto;
@@ -266,7 +240,7 @@ const handleCopyData = async () => {
 .layout-debug-indicator__compensation {
   font-size: 11px;
   color: #81c784;
-  font-family: "Courier New", monospace;
+  font-family: 'Courier New', monospace;
 }
 
 .layout-debug-indicator__compensation--warn {

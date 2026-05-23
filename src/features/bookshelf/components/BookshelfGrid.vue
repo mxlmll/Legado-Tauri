@@ -2,10 +2,10 @@
   BookshelfGrid — 书架滚动网格和下拉刷新容器。
 -->
 <script setup lang="ts">
-import { BookOpen } from 'lucide-vue-next';
-import type { ShelfBook } from '@/stores';
-import ShelfBookCard from '@/components/bookshelf/ShelfBookCard.vue';
-import { useShelfPullRefresh } from '@/composables/useShelfPullRefresh';
+import { BookOpen } from "lucide-vue-next";
+import type { ShelfBook } from "@/stores";
+import ShelfBookCard from "@/components/bookshelf/ShelfBookCard.vue";
+import { useShelfPullRefresh } from "@/composables/useShelfPullRefresh";
 
 const props = defineProps<{
   loading: boolean;
@@ -19,30 +19,43 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'select', book: ShelfBook): void;
-  (e: 'contextmenu', book: ShelfBook, event: MouseEvent): void;
-  (e: 'refresh'): Promise<void>;
+  (e: "select", book: ShelfBook): void;
+  (e: "contextmenu", book: ShelfBook, event: MouseEvent): void;
+  (e: "refresh"): Promise<void>;
 }>();
 
 // 下拉刷新
-const { pullDistance, isRefreshing, isReady, onTouchStart, onTouchMove, onTouchEnd, onMouseDown } =
-  useShelfPullRefresh({
-    onRefresh: async () => {
-      await emit('refresh');
-    },
-  });
+const {
+  pullDistance,
+  isRefreshing,
+  isReady,
+  isActivePulling,
+  PULL_THRESHOLD,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+  onMouseDown,
+} = useShelfPullRefresh({
+  onRefresh: async () => {
+    await emit("refresh");
+  },
+});
 </script>
 
 <template>
   <div class="bs-wrapper">
-    <!-- 下拉刷新指示器 -->
+    <!-- 下拉刷新指示器：用 height 驱动展开，拖动期间禁用 transition 避免弹跳，
+         rAF 节流保证每帧最多一次 Vue 更新。-->
     <div
       class="bs-pull-indicator"
       :class="{
         'bs-pull-indicator--ready': isReady,
         'bs-pull-indicator--refreshing': isRefreshing,
       }"
-      :style="{ height: `${pullDistance}px` }"
+      :style="{
+        height: `${isRefreshing ? PULL_THRESHOLD : pullDistance}px`,
+        transition: isActivePulling ? 'none' : 'height 0.2s ease-out',
+      }"
     >
       <div class="bs-pull-indicator__content">
         <!-- 刷新动画 -->
@@ -117,9 +130,13 @@ const { pullDistance, isRefreshing, isReady, onTouchStart, onTouchMove, onTouchE
             :key="book.id"
             :book="book"
             :privacy-mode-enabled="privacyModeEnabled"
-            :loading="openingBookId === book.id || tocRefreshingBookIds.has(book.id)"
+            :loading="
+              openingBookId === book.id || tocRefreshingBookIds.has(book.id)
+            "
             :loading-blocks-interaction="openingBookId === book.id"
-            :loading-label="tocRefreshingBookIds.has(book.id) ? '检查更新中' : '加载中'"
+            :loading-label="
+              tocRefreshingBookIds.has(book.id) ? '检查更新中' : '加载中'
+            "
             :edit-mode="editMode"
             :selected="selectedBookIds?.has(book.id)"
             @select="emit('select', $event)"
@@ -142,11 +159,12 @@ const { pullDistance, isRefreshing, isReady, onTouchStart, onTouchMove, onTouchE
 .bs-pull-indicator {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
+  padding-bottom: 10px;
   height: 0;
   overflow: hidden;
-  transition: height 0.1s ease-out;
+  /* transition 由 style 绑定控制，拖动时为 none，释放后才启用 */
 }
 
 .bs-pull-indicator__content {
@@ -159,7 +177,7 @@ const { pullDistance, isRefreshing, isReady, onTouchStart, onTouchMove, onTouchE
 }
 
 .bs-pull-indicator--refreshing .bs-pull-indicator__content,
-.bs-pull-indicator:not([style*='height: 0']) .bs-pull-indicator__content {
+.bs-pull-indicator--ready .bs-pull-indicator__content {
   opacity: 1;
 }
 
@@ -233,7 +251,10 @@ const { pullDistance, isRefreshing, isReady, onTouchStart, onTouchMove, onTouchE
 
 .bs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--book-card-col-min, 120px), 1fr));
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--book-card-col-min, 120px), 1fr)
+  );
   gap: 12px;
   padding-top: 4px;
 }

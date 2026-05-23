@@ -1,10 +1,10 @@
-import { useMessage } from "naive-ui";
-import { ref, watch, type Ref } from "vue";
-import type { ChapterGroup, ChapterItem } from "@/stores";
+import { useMessage } from 'naive-ui';
+import { ref, watch, type Ref } from 'vue';
+import type { ChapterGroup, ChapterItem } from '@/stores';
 // import { useMusicPlayerStore } from "@/stores"; // TODO: 音乐功能暂时屏蔽，待启用时取消注释
-import { usePreferencesStore } from "@/stores/preferences";
-import { safeRandomUUID } from "@/utils/uuid";
-import type { ReaderBookInfo } from "../components/reader/types";
+import { usePreferencesStore } from '@/stores/preferences';
+import { safeRandomUUID } from '@/utils/uuid';
+import type { ReaderBookInfo } from '../components/reader/types';
 
 interface ReaderSwitchShelfBook {
   name: string;
@@ -43,11 +43,7 @@ interface UseInlineBookReaderOptions {
   drawerBookUrl: Ref<string>;
   drawerFileName: Ref<string>;
   privacyExitTick: Ref<unknown>;
-  runChapterList: (
-    fileName: string,
-    tocUrl: string,
-    taskId?: string,
-  ) => Promise<unknown>;
+  runChapterList: (fileName: string, tocUrl: string, taskId?: string) => Promise<unknown>;
   cancelTask: (taskId: string) => void;
   ensureShelfLoaded: () => Promise<void>;
   getShelfId: (bookUrl: string, fileName: string) => string | undefined;
@@ -59,28 +55,27 @@ export function useInlineBookReader(options: UseInlineBookReaderOptions) {
   const message = useMessage();
   const prefStore = usePreferencesStore();
   const showReader = ref(false);
-  const readerChapterUrl = ref("");
-  const readerChapterName = ref("");
-  const readerFileName = ref("");
+  const readerChapterUrl = ref('');
+  const readerChapterName = ref('');
+  const readerFileName = ref('');
   const readerChapters = ref<ChapterItem[]>([]);
-  const readerChaptersKey = ref("");
+  const readerChaptersKey = ref('');
   const readerCurrentIndex = ref(0);
   const readerBookInfo = ref<ReaderBookInfo | undefined>();
-  const readerSourceType = ref("novel");
-  const readerShelfId = ref("");
+  const readerSourceType = ref('novel');
+  const readerShelfId = ref('');
   const readerChapterGroups = ref<ChapterGroup[] | undefined>();
   const readerActiveGroupIndex = ref<number | undefined>();
   const chapterListTaskId = ref<string | null>(null);
 
   function applySourceSwitchToReader(payload: ReaderSwitchPayload) {
     readerFileName.value = payload.shelfBook.fileName;
-    readerSourceType.value =
-      payload.shelfBook.sourceType ?? readerSourceType.value;
+    readerSourceType.value = payload.shelfBook.sourceType ?? readerSourceType.value;
     readerChapters.value = payload.chapters;
     readerCurrentIndex.value = Math.max(0, payload.matchedChapterIndex);
     const chapter = payload.chapters[readerCurrentIndex.value];
-    readerChapterUrl.value = payload.matchedChapterUrl ?? chapter?.url ?? "";
-    readerChapterName.value = chapter?.name ?? "";
+    readerChapterUrl.value = payload.matchedChapterUrl ?? chapter?.url ?? '';
+    readerChapterName.value = chapter?.name ?? '';
     readerBookInfo.value = {
       name: payload.shelfBook.name,
       author: payload.shelfBook.author,
@@ -100,10 +95,10 @@ export function useInlineBookReader(options: UseInlineBookReaderOptions) {
 
     if (
       !prefStore.devTools.fullModeEnabled &&
-      (payload.sourceType === "music" || payload.sourceType === "video")
+      (payload.sourceType === 'music' || payload.sourceType === 'video')
     ) {
       // TODO: 视频/音乐功能暂时屏蔽，待启用时删除此块并取消下方注释
-      message.warning("该功能暂时无法使用");
+      message.warning('该功能暂时无法使用');
       return;
     }
     // if (payload.sourceType === 'music') {
@@ -145,18 +140,16 @@ export function useInlineBookReader(options: UseInlineBookReaderOptions) {
     readerCurrentIndex.value = payload.index;
     readerBookInfo.value = payload.bookInfo;
     readerSourceType.value = payload.sourceType;
+    readerShelfId.value = '';
     readerChapterGroups.value = payload.chapterGroups;
     readerActiveGroupIndex.value = payload.activeGroupIndex;
 
     try {
       await options.ensureShelfLoaded();
       readerShelfId.value =
-        options.getShelfId(
-          options.drawerBookUrl.value,
-          options.drawerFileName.value,
-        ) ?? "";
+        options.getShelfId(options.drawerBookUrl.value, options.drawerFileName.value) ?? '';
     } catch {
-      readerShelfId.value = "";
+      readerShelfId.value = '';
     }
 
     const bookKey = `${options.drawerFileName.value}|${options.drawerBookUrl.value}`;
@@ -174,11 +167,7 @@ export function useInlineBookReader(options: UseInlineBookReaderOptions) {
       chapterListTaskId.value = taskId;
       try {
         const tocUrl = payload.tocUrl ?? options.drawerBookUrl.value;
-        const raw = await options.runChapterList(
-          options.drawerFileName.value,
-          tocUrl,
-          taskId,
-        );
+        const raw = await options.runChapterList(options.drawerFileName.value, tocUrl, taskId);
         readerChapters.value = Array.isArray(raw) ? (raw as ChapterItem[]) : [];
       } catch {
         // 加载失败不阻塞阅读

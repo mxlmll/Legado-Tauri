@@ -3,7 +3,7 @@ import { ChevronRight } from 'lucide-vue-next';
 import { ref } from 'vue';
 import type { BookItem } from '@/stores';
 import type { AggregatedBook, TaggedBookItem } from '@/types';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import { getBookMetaBadges, getBookMetaLine, getLatestChapterText } from '@/utils/bookMeta';
 import defaultLogoUrl from '../../assets/booksource-default.svg';
 import BookCoverImg from '../BookCoverImg.vue';
@@ -19,7 +19,7 @@ const emit = defineEmits<{
 
 const showSourcePicker = ref(false);
 
-useOverlayBackstack(
+useOverlay(
   () => showSourcePicker.value,
   () => {
     showSourcePicker.value = false;

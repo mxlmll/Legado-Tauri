@@ -11,7 +11,7 @@ import {
 } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import { ref, computed } from 'vue';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import { useAppConfigStore } from '@/stores';
 
 const props = withDefaults(
@@ -106,7 +106,7 @@ function handleClearTemporarySwitch() {
 }
 
 // 三点下拉菜单接入返回栈
-useOverlayBackstack(() => menuOpen.value, closeMenu);
+useOverlay(() => menuOpen.value, closeMenu);
 </script>
 
 <template>

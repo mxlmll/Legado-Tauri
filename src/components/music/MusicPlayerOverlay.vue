@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import {
   ChevronDown,
   ListMusic,
@@ -21,11 +21,11 @@ import {
  * - 控制：随机/上一首/播放-暂停/下一首/循环模式
  * - 右下：歌单切换按钮（弹出抽屉显示曲目列表）
  *
- * 通过 Teleport 挂载到 body，并接入 useOverlayBackstack 兼容返回键/Esc。
+ * 通过 Teleport 挂载到 body，并接入 useOverlay 兼容返回键/Esc。
  */
 import { storeToRefs } from 'pinia';
 import { computed, ref } from 'vue';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import { useMusicPlayerStore, type PlayMode } from '@/stores';
 import { getCoverImageUrl } from '@/utils/coverImage';
 
@@ -71,8 +71,8 @@ function close() {
   player.closeFullPlayer();
 }
 
-useOverlayBackstack(() => showFullPlayer.value && !showQueue.value, close);
-useOverlayBackstack(
+useOverlay(() => showFullPlayer.value && !showQueue.value, close);
+useOverlay(
   () => showQueue.value,
   () => (showQueue.value = false),
 );

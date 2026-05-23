@@ -4,8 +4,7 @@
 <script setup lang="ts">
 import { Bookmark } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
-import { computed, ref } from "vue";
-import { useOverlayBackstack } from "@/composables/useOverlayBackstack";
+import { computed, nextTick, ref } from "vue";
 import ReaderSourceSwitchBridge from "@/features/reader/components/ReaderSourceSwitchBridge.vue";
 import {
   useReaderActionsStore,
@@ -61,21 +60,22 @@ function onOverlayClick() {
   if (Date.now() - menuOpenTime.value <= 200) {
     return;
   }
-  settingsVisible.value = false;
+  if (settingsVisible.value) {
+    closeSettings();
+    return;
+  }
   readerUiStore.closeMenu();
 }
 
-function onOpenToc() {
+async function onOpenToc() {
   closeSettings();
-  readerUiStore.openToc();
+  await nextTick();
+  await readerUiStore.openToc();
 }
 
 function onSettingsVisibleChange(val: boolean) {
   settingsVisible.value = val;
 }
-
-// 菜单遮罩层接入返回栈（Back/Esc 关闭菜单）
-useOverlayBackstack(() => showMenu.value, readerUiStore.closeMenu);
 
 defineExpose({ closeSettings });
 </script>

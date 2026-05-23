@@ -12,6 +12,11 @@ import { usePreferencesStore } from '@/stores/preferences';
 import { useScriptBridgeStore } from '@/stores/scriptBridge';
 import { useDynamicConfig } from './useDynamicConfig';
 
+interface RefreshAllTocOptions {
+  /** 手动刷新时跳过自动更新开关和间隔限制。 */
+  force?: boolean;
+}
+
 // ── 最近检测时间持久化（bookId → timestamp ms） ───────────────────────────
 
 const lastCheckConfig = useDynamicConfig<Record<string, number>>({
@@ -61,7 +66,9 @@ async function refreshBookToc(
 
     // 同步更新书架中的 totalChapters
     if (fetched.length !== book.totalChapters) {
-      await bookshelfStore.patchBook(book.id, { totalChapters: fetched.length });
+      await bookshelfStore.patchBook(book.id, {
+        totalChapters: fetched.length,
+      });
     }
 
     setLastCheckTime(book.id, Date.now());
@@ -80,6 +87,15 @@ export function useTocAutoUpdate() {
   const bookshelfStore = useBookshelfStore();
   const scriptBridgeStore = useScriptBridgeStore();
 
+  function isAutoUpdateEnabled(trigger: 'onBookOpen' | 'onAppStart' | 'onShelfView'): boolean {
+    const cfg = preferencesStore.tocAutoUpdate;
+    return cfg.enabled && cfg[trigger];
+  }
+
+  function canRefreshBook(book: ShelfBook): boolean {
+    return !!book.fileName && !!book.bookUrl && book.fileName !== LOCAL_TXT_FILE_NAME;
+  }
+
   /** 检查某本书是否需要更新（根据最小间隔时间限制） */
   function isRefreshDue(bookId: string): boolean {
     const minInterval = preferencesStore.tocAutoUpdate.minIntervalSecs * 1000;
@@ -93,13 +109,9 @@ export function useTocAutoUpdate() {
    * @returns 新增章节数（-1 = 跳过或失败，0 = 已是最新）
    */
   async function refreshOnBookOpen(book: ShelfBook): Promise<number> {
-    const cfg = preferencesStore.tocAutoUpdate;
-    if (!cfg.enabled || !cfg.onBookOpen) {
+    if (!isAutoUpdateEnabled('onBookOpen') || !canRefreshBook(book)) {
       return -1;
     }
-    if (book.fileName === LOCAL_TXT_FILE_NAME) {
-      return -1;
-    } // 本地 TXT 书籍无需自动更新
     if (!isRefreshDue(book.id)) {
       return -1;
     }
@@ -111,16 +123,15 @@ export function useTocAutoUpdate() {
    * 仅在设置 enabled + onAppStart 开启，且单本书距离上次超过最小间隔时才执行。
    */
   async function refreshAllOnAppStart(): Promise<void> {
-    const cfg = preferencesStore.tocAutoUpdate;
-    if (!cfg.enabled || !cfg.onAppStart) {
+    if (!isAutoUpdateEnabled('onAppStart')) {
       return;
     }
 
-    for (const book of bookshelfStore.books) {
-      if (!book.fileName || !book.bookUrl) {
-        continue;
+    for (const book of [...bookshelfStore.books]) {
+      if (!isAutoUpdateEnabled('onAppStart')) {
+        break;
       }
-      if (book.fileName === LOCAL_TXT_FILE_NAME) {
+      if (!canRefreshBook(book)) {
         continue;
       }
       if (!isRefreshDue(book.id)) {
@@ -135,31 +146,30 @@ export function useTocAutoUpdate() {
    * 仅在设置 enabled + onShelfView 开启，且单本书距离上次超过最小间隔时才执行。
    * @returns 刷新结果摘要 { success: 成功数, failed: 失败数, updated: 新增章节总数 }
    */
-  async function refreshAllOnShelfView(): Promise<{
+  async function refreshAllOnShelfView(options: RefreshAllTocOptions = {}): Promise<{
     success: number;
     failed: number;
     updated: number;
   }> {
-    const cfg = preferencesStore.tocAutoUpdate;
+    const force = options.force === true;
     const result = { success: 0, failed: 0, updated: 0 };
 
-    // 如果设置未开启，仍允许手动刷新（忽略间隔限制）
-    const booksToRefresh = bookshelfStore.books.filter((b) => {
-      if (!b.fileName || !b.bookUrl) {
-        return false;
-      }
-      if (b.fileName === LOCAL_TXT_FILE_NAME) {
-        return false;
-      } // 本地 TXT 书籍无需自动更新
-      // 如果自动刷新未开启，则刷新所有书
-      if (!cfg.enabled || !cfg.onShelfView) {
-        return true;
-      }
-      // 否则检查间隔
-      return isRefreshDue(b.id);
-    });
+    if (!force && !isAutoUpdateEnabled('onShelfView')) {
+      return result;
+    }
 
-    for (const book of booksToRefresh) {
+    for (const book of [...bookshelfStore.books]) {
+      if (!canRefreshBook(book)) {
+        continue;
+      }
+      if (!force) {
+        if (!isAutoUpdateEnabled('onShelfView')) {
+          break;
+        }
+        if (!isRefreshDue(book.id)) {
+          continue;
+        }
+      }
       const count = await refreshBookToc(book, bookshelfStore, scriptBridgeStore);
       if (count >= 0) {
         result.success++;

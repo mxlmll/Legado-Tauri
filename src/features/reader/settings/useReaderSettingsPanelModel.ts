@@ -1,11 +1,12 @@
-import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue';
-import type { ReaderAppearancePatch } from '@/composables/useFrontendPlugins';
-import { PRESET_THEMES, type ReaderTapAction } from '@/components/reader/types';
-import { isTauri } from '@/composables/useEnv';
-import { useFrontendPlugins } from '@/composables/useFrontendPlugins';
-import { invokeWithTimeout } from '@/composables/useInvoke';
-import { useUserFonts } from '@/composables/useUserFonts';
-import { useReaderSettingsStore } from '@/stores';
+import { computed, onBeforeUnmount, ref, watch, type Ref } from "vue";
+import type { ReaderAppearancePatch } from "@/composables/useFrontendPlugins";
+import { PRESET_THEMES, type ReaderTapAction } from "@/components/reader/types";
+import { isTauri } from "@/composables/useEnv";
+import { useFrontendPlugins } from "@/composables/useFrontendPlugins";
+import { invokeWithTimeout } from "@/composables/useInvoke";
+import { useNavigationHistory } from "@/composables/useNavigationHistory";
+import { useUserFonts } from "@/composables/useUserFonts";
+import { useReaderSettingsStore } from "@/stores";
 import {
   BG_PRESETS,
   COMIC_FLIP_OPTIONS,
@@ -19,19 +20,19 @@ import {
   TEXT_SHADOW_PRESETS,
   THEME_ELEGANT_NAMES,
   type ThemeOption,
-} from './readerSettingsOptions';
+} from "./readerSettingsOptions";
 
 type SubPage =
-  | 'none'
-  | 'spacing'
-  | 'font'
-  | 'shortcuts'
-  | 'typography'
-  | 'pagePadding'
-  | 'tapControls'
-  | 'more'
-  | 'customFont'
-  | 'uploadedFont';
+  | "none"
+  | "spacing"
+  | "font"
+  | "shortcuts"
+  | "typography"
+  | "pagePadding"
+  | "tapControls"
+  | "more"
+  | "customFont"
+  | "uploadedFont";
 
 interface SysFont {
   name: string;
@@ -42,7 +43,7 @@ interface BackgroundOption {
   id: string;
   name: string;
   description?: string;
-  source: 'builtin' | 'plugin';
+  source: "builtin" | "plugin";
   value?: string;
   preview: {
     backgroundColor?: string;
@@ -59,7 +60,7 @@ interface SkinOption {
   id: string;
   name: string;
   description?: string;
-  source: 'builtin' | 'plugin';
+  source: "builtin" | "plugin";
   preview: ReaderAppearancePatch;
 }
 
@@ -80,21 +81,26 @@ export function useReaderSettingsPanelModel(options: {
   const { readerThemes, readerBackgrounds, readerSkins } = useFrontendPlugins();
   const TAP_ZONE_DEBUG_PREVIEW_MS = 1400;
 
-  const subPage = ref<SubPage>('none');
-  const prevPage = ref<SubPage>('none');
+  const subPage = ref<SubPage>("none");
+  // 用 useNavigationHistory 替代单层 prevPage，支持任意深度逐级返回。
+  const _nav = useNavigationHistory();
 
   function navigateTo(page: SubPage) {
-    prevPage.value = subPage.value;
+    const from = subPage.value;
     subPage.value = page;
+    // 向返回栈压入一层：硬件 / UI 返回时恢复到 from
+    _nav.push(() => {
+      subPage.value = from;
+    });
   }
 
+  // UI 返回按钮调用此函数（等价于 triggerClose）
   function goBack() {
-    subPage.value = prevPage.value;
-    prevPage.value = 'none';
+    _nav.pop();
   }
 
   watch(subPage, (page, previous) => {
-    if (previous === 'tapControls' && page !== 'tapControls') {
+    if (previous === "tapControls" && page !== "tapControls") {
       hideTapZoneDebugPreview();
     }
   });
@@ -123,28 +129,32 @@ export function useReaderSettingsPanelModel(options: {
     }
   }
 
-  const isComic = computed(() => options.sourceType.value === 'comic');
-  const isVideo = computed(() => options.sourceType.value === 'video');
+  const isComic = computed(() => options.sourceType.value === "comic");
+  const isVideo = computed(() => options.sourceType.value === "video");
   const canDumpPaginationLayout = computed(
-    () => !isComic.value && !isVideo.value && settings.flipMode !== 'scroll',
+    () => !isComic.value && !isVideo.value && settings.flipMode !== "scroll",
   );
-  const activeFlipOptions = computed(() => (isComic.value ? COMIC_FLIP_OPTIONS : FLIP_OPTIONS));
+  const activeFlipOptions = computed(() =>
+    isComic.value ? COMIC_FLIP_OPTIONS : FLIP_OPTIONS,
+  );
   const showExperimentalFlipModeHint = computed(() =>
     EXPERIMENTAL_FLIP_MODES.has(settings.flipMode),
   );
 
   const builtinThemeOptions = computed<ThemeOption[]>(() =>
-    (isComic.value ? PRESET_THEMES.slice(0, 1) : PRESET_THEMES).map((theme) => ({
-      id: `builtin:theme:${theme.name}`,
-      name: theme.name,
-      source: 'builtin',
-      theme,
-      preview: {
-        backgroundColor: theme.backgroundColor,
-        textColor: theme.textColor,
-        selectionColor: theme.selectionColor,
-      },
-    })),
+    (isComic.value ? PRESET_THEMES.slice(0, 1) : PRESET_THEMES).map(
+      (theme) => ({
+        id: `builtin:theme:${theme.name}`,
+        name: theme.name,
+        source: "builtin",
+        theme,
+        preview: {
+          backgroundColor: theme.backgroundColor,
+          textColor: theme.textColor,
+          selectionColor: theme.selectionColor,
+        },
+      }),
+    ),
   );
 
   const pluginThemeOptions = computed<ThemeOption[]>(() =>
@@ -152,10 +162,10 @@ export function useReaderSettingsPanelModel(options: {
       id: theme.id,
       name: theme.name,
       description: theme.description,
-      source: 'plugin',
+      source: "plugin",
       preview: {
-        backgroundColor: theme.preview.backgroundColor ?? '#ffffff',
-        textColor: theme.preview.textColor ?? '#1a1a1a',
+        backgroundColor: theme.preview.backgroundColor ?? "#ffffff",
+        textColor: theme.preview.textColor ?? "#1a1a1a",
         selectionColor: theme.preview.selectionColor,
       },
     })),
@@ -171,13 +181,14 @@ export function useReaderSettingsPanelModel(options: {
       return settings.themePresetId;
     }
     return (
-      builtinThemeOptions.value.find((option) => option.theme?.name === settings.theme.name)?.id ??
-      `builtin:theme:${settings.theme.name}`
+      builtinThemeOptions.value.find(
+        (option) => option.theme?.name === settings.theme.name,
+      )?.id ?? `builtin:theme:${settings.theme.name}`
     );
   });
 
   function selectThemeOption(option: ThemeOption) {
-    if (option.source === 'plugin') {
+    if (option.source === "plugin") {
       settings.themePresetId = option.id;
       return;
     }
@@ -187,15 +198,15 @@ export function useReaderSettingsPanelModel(options: {
   }
 
   function tapActionLabel(action: ReaderTapAction) {
-    return action === 'prev' ? '上一页' : '下一页';
+    return action === "prev" ? "上一页" : "下一页";
   }
 
   function tapActionIcon(action: ReaderTapAction) {
-    return action === 'prev' ? '‹' : '›';
+    return action === "prev" ? "‹" : "›";
   }
 
-  function setTapAction(side: 'left' | 'right', action: ReaderTapAction) {
-    if (side === 'left') {
+  function setTapAction(side: "left" | "right", action: ReaderTapAction) {
+    if (side === "left") {
       settings.tapLeftAction = action;
     } else {
       settings.tapRightAction = action;
@@ -203,9 +214,10 @@ export function useReaderSettingsPanelModel(options: {
     showTapZoneDebugPreview(TAP_ZONE_DEBUG_PREVIEW_MS);
   }
 
-  function toggleTapAction(side: 'left' | 'right') {
-    const current = side === 'left' ? settings.tapLeftAction : settings.tapRightAction;
-    setTapAction(side, current === 'prev' ? 'next' : 'prev');
+  function toggleTapAction(side: "left" | "right") {
+    const current =
+      side === "left" ? settings.tapLeftAction : settings.tapRightAction;
+    setTapAction(side, current === "prev" ? "next" : "prev");
   }
 
   function dumpPaginationLayout() {
@@ -214,8 +226,8 @@ export function useReaderSettingsPanelModel(options: {
 
   const systemFonts = ref<SysFont[]>([]);
   const systemFontsLoading = ref(false);
-  const systemFontsError = ref('');
-  const fontSearchQuery = ref('');
+  const systemFontsError = ref("");
+  const fontSearchQuery = ref("");
   const showAllFonts = ref(false);
 
   async function loadSystemFonts() {
@@ -223,9 +235,13 @@ export function useReaderSettingsPanelModel(options: {
       return;
     }
     systemFontsLoading.value = true;
-    systemFontsError.value = '';
+    systemFontsError.value = "";
     try {
-      const result = await invokeWithTimeout<SysFont[]>('list_system_fonts', {}, 15000);
+      const result = await invokeWithTimeout<SysFont[]>(
+        "list_system_fonts",
+        {},
+        15000,
+      );
       systemFonts.value = result;
       // TF-42: 在浏览器模式（iOS Safari 等）下，将服务端字体通过 @font-face 注入到页面，
       // 使 CSS font-family 能正确找到并下载字体文件，避免回退到系统默认字体。
@@ -241,10 +257,10 @@ export function useReaderSettingsPanelModel(options: {
 
   /** TF-42: 为浏览器客户端注入 @font-face CSS，让 iOS Safari 等设备能下载并渲染服务端字体 */
   function injectWebFontFaces(fonts: SysFont[]) {
-    const styleId = 'legado-server-font-faces';
+    const styleId = "legado-server-font-faces";
     let el = document.getElementById(styleId) as HTMLStyleElement | null;
     if (!el) {
-      el = document.createElement('style');
+      el = document.createElement("style");
       el.id = styleId;
       document.head.appendChild(el);
     }
@@ -254,7 +270,7 @@ export function useReaderSettingsPanelModel(options: {
         (f) =>
           `@font-face { font-family: "${f.name.replace(/"/g, '\\"')}"; src: url("/api/fonts/data?family=${encodeURIComponent(f.name)}"); font-display: swap; }`,
       )
-      .join('\n');
+      .join("\n");
   }
 
   const filteredSystemFonts = computed(() => {
@@ -268,24 +284,25 @@ export function useReaderSettingsPanelModel(options: {
   });
 
   async function copyFontList() {
-    const names = systemFonts.value.map((font) => font.name).join('\n');
+    const names = systemFonts.value.map((font) => font.name).join("\n");
     try {
       await navigator.clipboard.writeText(names);
     } catch {
-      const ta = document.createElement('textarea');
+      const ta = document.createElement("textarea");
       ta.value = names;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
       document.body.appendChild(ta);
       ta.select();
-      document.execCommand('copy');
+      document.execCommand("copy");
       document.body.removeChild(ta);
     }
   }
 
   const currentFontLabel = computed(() => {
     return (
-      FONT_PRESETS.find((font) => font.value === settings.typography.fontFamily)?.label ?? '自定义'
+      FONT_PRESETS.find((font) => font.value === settings.typography.fontFamily)
+        ?.label ?? "自定义"
     );
   });
 
@@ -293,15 +310,15 @@ export function useReaderSettingsPanelModel(options: {
     BG_PRESETS.map((bg) => ({
       id: bg.id,
       name: bg.name,
-      source: 'builtin',
+      source: "builtin",
       value: bg.value,
       preview: {
-        backgroundColor: '#ffffff',
-        backgroundImage: bg.thumb || 'none',
-        backgroundSize: 'auto',
-        backgroundPosition: 'center',
-        backgroundRepeat: bg.thumb ? 'repeat' : 'no-repeat',
-        textColor: '#1a1a1a',
+        backgroundColor: "#ffffff",
+        backgroundImage: bg.thumb || "none",
+        backgroundSize: "auto",
+        backgroundPosition: "center",
+        backgroundRepeat: bg.thumb ? "repeat" : "no-repeat",
+        textColor: "#1a1a1a",
       },
     })),
   );
@@ -311,15 +328,15 @@ export function useReaderSettingsPanelModel(options: {
       id: background.id,
       name: background.name,
       description: background.description,
-      source: 'plugin',
+      source: "plugin",
       preview: {
-        backgroundColor: background.preview.backgroundColor ?? '#f8f8f8',
-        backgroundImage: background.preview.backgroundImage ?? 'none',
-        backgroundSize: background.preview.backgroundSize ?? 'cover',
-        backgroundPosition: background.preview.backgroundPosition ?? 'center',
-        backgroundRepeat: background.preview.backgroundRepeat ?? 'no-repeat',
-        backgroundBlendMode: background.preview.backgroundBlendMode ?? 'normal',
-        textColor: background.preview.textColor ?? '#1a1a1a',
+        backgroundColor: background.preview.backgroundColor ?? "#f8f8f8",
+        backgroundImage: background.preview.backgroundImage ?? "none",
+        backgroundSize: background.preview.backgroundSize ?? "cover",
+        backgroundPosition: background.preview.backgroundPosition ?? "center",
+        backgroundRepeat: background.preview.backgroundRepeat ?? "no-repeat",
+        backgroundBlendMode: background.preview.backgroundBlendMode ?? "normal",
+        textColor: background.preview.textColor ?? "#1a1a1a",
       },
     })),
   );
@@ -334,33 +351,34 @@ export function useReaderSettingsPanelModel(options: {
       return settings.backgroundPresetId;
     }
     return (
-      builtinBackgroundOptions.value.find((option) => option.value === settings.backgroundImage)
-        ?.id ?? 'builtin:plain'
+      builtinBackgroundOptions.value.find(
+        (option) => option.value === settings.backgroundImage,
+      )?.id ?? "builtin:plain"
     );
   });
 
   function selectBackground(option: BackgroundOption) {
-    if (option.source === 'plugin') {
+    if (option.source === "plugin") {
       settings.backgroundPresetId = option.id;
-      settings.backgroundImage = '';
+      settings.backgroundImage = "";
       return;
     }
-    settings.backgroundPresetId = '';
-    settings.backgroundImage = option.value ?? '';
+    settings.backgroundPresetId = "";
+    settings.backgroundImage = option.value ?? "";
   }
 
   const skinOptions = computed<SkinOption[]>(() => [
     {
-      id: 'builtin:skin:none',
-      name: '默认',
-      source: 'builtin',
-      description: '使用系统默认阅读器布局',
+      id: "builtin:skin:none",
+      name: "默认",
+      source: "builtin",
+      description: "使用系统默认阅读器布局",
       preview: {
-        backgroundColor: '#101010',
-        textColor: '#f7f7f7',
+        backgroundColor: "#101010",
+        textColor: "#f7f7f7",
         styleVars: {
-          '--reader-top-bar-bg': 'rgba(0, 0, 0, 0.65)',
-          '--reader-body-surface': 'transparent',
+          "--reader-top-bar-bg": "rgba(0, 0, 0, 0.65)",
+          "--reader-body-surface": "transparent",
         },
       },
     },
@@ -368,21 +386,23 @@ export function useReaderSettingsPanelModel(options: {
       id: skin.id,
       name: skin.name,
       description: skin.description,
-      source: 'plugin' as const,
+      source: "plugin" as const,
       preview: skin.preview,
     })),
   ]);
 
-  const selectedSkinId = computed(() => settings.skinPresetId || 'builtin:skin:none');
+  const selectedSkinId = computed(
+    () => settings.skinPresetId || "builtin:skin:none",
+  );
 
   function selectSkin(option: SkinOption) {
-    settings.skinPresetId = option.source === 'plugin' ? option.id : '';
+    settings.skinPresetId = option.source === "plugin" ? option.id : "";
   }
 
   const tapZoneBarRef = ref<HTMLElement | null>(null);
-  let draggingDivider: 'left' | 'right' | null = null;
+  let draggingDivider: "left" | "right" | null = null;
 
-  function onDividerPointerDown(e: PointerEvent, which: 'left' | 'right') {
+  function onDividerPointerDown(e: PointerEvent, which: "left" | "right") {
     e.preventDefault();
     draggingDivider = which;
     showTapZoneDebugPreview(TAP_ZONE_DEBUG_PREVIEW_MS);
@@ -396,14 +416,20 @@ export function useReaderSettingsPanelModel(options: {
     const rect = tapZoneBarRef.value.getBoundingClientRect();
     const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const snapped = Math.round(relX * 20) / 20;
-    if (draggingDivider === 'left') {
-      const nextLeft = Math.max(0.1, Math.min(settings.tapZoneRight - 0.15, snapped));
+    if (draggingDivider === "left") {
+      const nextLeft = Math.max(
+        0.1,
+        Math.min(settings.tapZoneRight - 0.15, snapped),
+      );
       if (nextLeft !== settings.tapZoneLeft) {
         settings.tapZoneLeft = nextLeft;
         showTapZoneDebugPreview(TAP_ZONE_DEBUG_PREVIEW_MS);
       }
     } else {
-      const nextRight = Math.max(settings.tapZoneLeft + 0.15, Math.min(0.9, snapped));
+      const nextRight = Math.max(
+        settings.tapZoneLeft + 0.15,
+        Math.min(0.9, snapped),
+      );
       if (nextRight !== settings.tapZoneRight) {
         settings.tapZoneRight = nextRight;
         showTapZoneDebugPreview(TAP_ZONE_DEBUG_PREVIEW_MS);

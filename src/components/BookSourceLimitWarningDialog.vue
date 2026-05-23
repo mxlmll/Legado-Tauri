@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 
 interface Props {
   show?: boolean;
@@ -18,7 +18,7 @@ const emits = defineEmits<{
 const showDialog = ref(props.show);
 
 // ── 返回栈集成 ────────────────────────────────────────────────────────────
-useOverlayBackstack(
+useOverlay(
   () => showDialog.value,
   () => {
     showDialog.value = false;

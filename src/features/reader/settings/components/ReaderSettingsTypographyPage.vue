@@ -238,7 +238,7 @@ const emit = defineEmits<{
   cursor: pointer;
 }
 
-.reader-settings__color-swatch input[type="color"] {
+.reader-settings__color-swatch input[type='color'] {
   position: absolute;
   inset: 0;
   width: 100%;

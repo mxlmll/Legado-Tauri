@@ -1,16 +1,17 @@
-﻿<!-- InstalledSourcesTab — 已安装书源列表、导入导出、编辑与目录管理入口。 -->
+<!-- InstalledSourcesTab — 已安装书源列表、导入导出、编辑与目录管理入口。 -->
 <script setup lang="ts">
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { Search } from 'lucide-vue-next';
-import { useMessage, useDialog } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { eventEmit } from '@/composables/useEventBus';
-import { invokeWithTimeout } from '@/composables/useInvoke';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
-import { useBookSourceStore } from '@/stores';
-import { saveExportFile } from '@/utils/exportFile';
-import defaultLogoUrl from '../../assets/booksource-default.svg';
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { Search } from "lucide-vue-next";
+import { useMessage } from "naive-ui";
+import { storeToRefs } from "pinia";
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useBackAwareDialog as useDialog } from "@/composables/useBackAwareDialog";
+import { eventEmit } from "@/composables/useEventBus";
+import { invokeWithTimeout } from "@/composables/useInvoke";
+import { useOverlay } from "@/composables/useOverlay";
+import { useBookSourceStore } from "@/stores";
+import { saveExportFile } from "@/utils/exportFile";
+import defaultLogoUrl from "../../assets/booksource-default.svg";
 import {
   type BookSourceMeta,
   readBookSource,
@@ -28,10 +29,10 @@ import {
   configReadJson,
   configWrite,
   configDeleteKey,
-} from '../../composables/useBookSource';
-import BookSourceEditorModal from '../BookSourceEditorModal.vue';
-import BookSourceInstallDialog from '../BookSourceInstallDialog.vue';
-import SourceCard from './SourceCard.vue';
+} from "../../composables/useBookSource";
+import BookSourceEditorModal from "../BookSourceEditorModal.vue";
+import BookSourceInstallDialog from "../BookSourceInstallDialog.vue";
+import SourceCard from "./SourceCard.vue";
 
 const props = defineProps<{
   sources: BookSourceMeta[];
@@ -51,19 +52,175 @@ const bookSourceStore = useBookSourceStore();
 const dialog = useDialog();
 
 const { exploreDisabled, searchDisabled } = storeToRefs(bookSourceStore);
-const { setExploreUserEnabled, setSearchUserEnabled, getPendingUpdate } = bookSourceStore;
+const { setExploreUserEnabled, setSearchUserEnabled, getPendingUpdate } =
+  bookSourceStore;
 
 // ---- 搜索过滤 ----
-const searchQuery = ref('');
+const searchQuery = ref("");
 const filtered = computed(() => {
   const q = searchQuery.value.trim();
   if (!q) {
     return props.sources;
   }
   return props.sources.filter(
-    (s) => s.name.includes(q) || s.url.includes(q) || s.tags.some((t) => t.includes(q)),
+    (s) =>
+      s.name.includes(q) ||
+      s.url.includes(q) ||
+      s.tags.some((t) => t.includes(q)),
   );
 });
+
+// ---- 批量管理 ----
+const batchMode = ref(false);
+const selectedKeys = ref(new Set<string>());
+
+const allSelected = computed(
+  () =>
+    filtered.value.length > 0 &&
+    filtered.value.every((s) => selectedKeys.value.has(s.sourceKey)),
+);
+const someSelected = computed(
+  () =>
+    !allSelected.value &&
+    filtered.value.some((s) => selectedKeys.value.has(s.sourceKey)),
+);
+
+function toggleBatchMode() {
+  batchMode.value = !batchMode.value;
+  if (!batchMode.value) {
+    selectedKeys.value = new Set();
+  }
+}
+
+function toggleSelectAll(checked: boolean) {
+  if (checked) {
+    selectedKeys.value = new Set(filtered.value.map((s) => s.sourceKey));
+  } else {
+    selectedKeys.value = new Set();
+  }
+}
+
+function toggleSelect(src: BookSourceMeta) {
+  const newSet = new Set(selectedKeys.value);
+  if (newSet.has(src.sourceKey)) {
+    newSet.delete(src.sourceKey);
+  } else {
+    newSet.add(src.sourceKey);
+  }
+  selectedKeys.value = newSet;
+}
+
+async function batchSetEnabled(enabled: boolean) {
+  const selected = filtered.value.filter((s) =>
+    selectedKeys.value.has(s.sourceKey),
+  );
+  if (!selected.length) {
+    message.warning("请先选择书源");
+    return;
+  }
+  let ok = 0;
+  for (const src of selected) {
+    if (src.enabled !== enabled) {
+      try {
+        await toggleBookSource(src.fileName, enabled, src.sourceDir);
+        src.enabled = enabled;
+        ok++;
+      } catch {
+        // skip
+      }
+    }
+  }
+  if (ok) {
+    message.success(`已${enabled ? "启用" : "禁用"} ${ok} 个书源`);
+  } else {
+    message.info(`所选书源均已${enabled ? "启用" : "禁用"}`);
+  }
+}
+
+async function batchExport() {
+  const selected = filtered.value.filter((s) =>
+    selectedKeys.value.has(s.sourceKey),
+  );
+  if (!selected.length) {
+    message.warning("请先选择书源");
+    return;
+  }
+  let ok = 0;
+  const items: Array<{ fileName: string; content: string }> = [];
+  for (const src of selected) {
+    try {
+      const content = await readBookSource(src.fileName, src.sourceDir);
+      items.push({ fileName: src.fileName, content });
+      ok++;
+    } catch {
+      // skip
+    }
+  }
+  if (!items.length) {
+    message.error("书源读取失败，无法导出");
+    return;
+  }
+  const saved = await saveExportFile({
+    defaultName: `booksources-selected-${new Date().toISOString().slice(0, 10)}.json`,
+    mime: "application/json;charset=utf-8",
+    text: JSON.stringify(items, null, 2),
+    filterName: "JSON",
+    extensions: ["json"],
+  });
+  if (saved) {
+    message.success(`已导出 ${ok} 个书源`);
+  }
+}
+
+function confirmBatchDelete() {
+  const selected = filtered.value.filter((s) =>
+    selectedKeys.value.has(s.sourceKey),
+  );
+  if (!selected.length) {
+    message.warning("请先选择书源");
+    return;
+  }
+  dialog.warning({
+    title: "批量删除",
+    content: `确认删除选中的 ${selected.length} 个书源？此操作将删除磁盘文件，不可恢复。`,
+    positiveText: "删除",
+    negativeText: "取消",
+    onPositiveClick: async () => {
+      let ok = 0;
+      for (const src of selected) {
+        try {
+          await deleteBookSource(src.fileName, src.sourceDir);
+          ok++;
+        } catch {
+          // skip
+        }
+      }
+      if (ok) {
+        message.success(`已删除 ${ok} 个书源`);
+        selectedKeys.value = new Set();
+        emits("reload");
+      }
+    },
+  });
+}
+
+async function exportSingleSource(src: BookSourceMeta) {
+  try {
+    const content = await readBookSource(src.fileName, src.sourceDir);
+    const saved = await saveExportFile({
+      defaultName: src.fileName,
+      mime: "text/javascript;charset=utf-8",
+      text: content,
+      filterName: "JavaScript",
+      extensions: ["js"],
+    });
+    if (saved) {
+      message.success(`已导出「${src.name}」`);
+    }
+  } catch (e: unknown) {
+    message.error(`导出失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 
 // ---- 目录相关 ----
 async function openSourceDirInExplorer() {
@@ -71,17 +228,19 @@ async function openSourceDirInExplorer() {
     return;
   }
   try {
-    await invokeWithTimeout('open_dir_in_explorer', { path: props.sourceDir });
+    await invokeWithTimeout("open_dir_in_explorer", { path: props.sourceDir });
   } catch (e: unknown) {
-    message.error(`无法打开目录: ${e instanceof Error ? e.message : String(e)}`);
+    message.error(
+      `无法打开目录: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 
 const shortSourceDir = computed(() => {
   if (!props.sourceDir) {
-    return '';
+    return "";
   }
-  const sep = props.sourceDir.includes('\\') ? '\\' : '/';
+  const sep = props.sourceDir.includes("\\") ? "\\" : "/";
   const parts = props.sourceDir.split(sep).filter(Boolean);
   if (parts.length <= 3) {
     return props.sourceDir;
@@ -90,7 +249,7 @@ const shortSourceDir = computed(() => {
 });
 
 function shortDir(dir: string) {
-  const sep = dir.includes('\\') ? '\\' : '/';
+  const sep = dir.includes("\\") ? "\\" : "/";
   const parts = dir.split(sep).filter(Boolean);
   if (parts.length <= 3) {
     return dir;
@@ -107,7 +266,7 @@ const externalDirs = computed(() => {
 
 const showDirManager = ref(false);
 
-useOverlayBackstack(
+useOverlay(
   () => showDirManager.value,
   () => {
     showDirManager.value = false;
@@ -116,18 +275,18 @@ useOverlayBackstack(
 
 // ---- 导入在线书源 ----
 const showUrlInputModal = ref(false);
-const urlInputValue = ref('');
+const urlInputValue = ref("");
 const showInstallDialog = ref(false);
-const installDialogUrl = ref('');
+const installDialogUrl = ref("");
 
-useOverlayBackstack(
+useOverlay(
   () => showUrlInputModal.value,
   () => {
     showUrlInputModal.value = false;
   },
 );
 
-useOverlayBackstack(
+useOverlay(
   () => showInstallDialog.value,
   () => {
     showInstallDialog.value = false;
@@ -135,18 +294,18 @@ useOverlayBackstack(
 );
 
 function importFromUrl() {
-  urlInputValue.value = '';
+  urlInputValue.value = "";
   showUrlInputModal.value = true;
 }
 
 function confirmUrlInput() {
   const url = urlInputValue.value.trim();
   if (!url) {
-    message.warning('请输入书源地址');
+    message.warning("请输入书源地址");
     return;
   }
   if (!/^https?:\/\//i.test(url)) {
-    message.warning('请输入有效的 http(s) 地址');
+    message.warning("请输入有效的 http(s) 地址");
     return;
   }
   showUrlInputModal.value = false;
@@ -161,7 +320,7 @@ async function addExternalDir() {
       return;
     }
     await addBookSourceDir(picked);
-    emits('reload');
+    emits("reload");
     message.success(`已添加目录: ${shortDir(picked)}`);
   } catch (e: unknown) {
     message.error(`添加失败: ${e instanceof Error ? e.message : String(e)}`);
@@ -171,7 +330,7 @@ async function addExternalDir() {
 async function removeExternalDir(dir: string) {
   try {
     await removeBookSourceDir(dir);
-    emits('reload');
+    emits("reload");
     message.success(`已移除目录: ${shortDir(dir)}`);
   } catch (e: unknown) {
     message.error(`移除失败: ${e instanceof Error ? e.message : String(e)}`);
@@ -180,19 +339,19 @@ async function removeExternalDir(dir: string) {
 
 // ---- 编辑器弹窗 ----
 const showEditor = ref(false);
-const editorTitle = ref('');
-const editorContent = ref('');
-const editorFile = ref('');
-const editorSourceDir = ref('');
+const editorTitle = ref("");
+const editorContent = ref("");
+const editorFile = ref("");
+const editorSourceDir = ref("");
 const editorSaving = ref(false);
 const editorLoading = ref(false);
-const editorLoadError = ref('');
+const editorLoadError = ref("");
 const editorReloaded = ref(false);
 const editorOpenKey = ref(0);
 const updatingSourceSet = ref(new Set<string>());
 
 // ---- 每书源最小请求延迟覆盖 ----
-const MIN_DELAY_KEY = '__min_delay_ms';
+const MIN_DELAY_KEY = "__min_delay_ms";
 /** fileName → 已加载的覆盖值（null = 未加载，0 = 跟随全局） */
 const sourceDelayOverrides = ref<Map<string, number>>(new Map());
 
@@ -204,7 +363,10 @@ async function loadDelayOverride(fileName: string): Promise<void> {
   sourceDelayOverrides.value.set(fileName, v ?? 0);
 }
 
-async function saveDelayOverride(src: BookSourceMeta, val: number | null): Promise<void> {
+async function saveDelayOverride(
+  src: BookSourceMeta,
+  val: number | null,
+): Promise<void> {
   const effective = val === null || val <= 0 ? 0 : val;
   if (effective === 0) {
     await configDeleteKey(src.fileName, MIN_DELAY_KEY);
@@ -217,14 +379,17 @@ async function saveDelayOverride(src: BookSourceMeta, val: number | null): Promi
   await reloadSingleSource(src);
 }
 
-async function openEditor(src?: BookSourceMeta, newType?: 'novel' | 'comic' | 'video') {
+async function openEditor(
+  src?: BookSourceMeta,
+  newType?: "novel" | "comic" | "video",
+) {
   editorReloaded.value = false;
-  editorLoadError.value = '';
+  editorLoadError.value = "";
   if (src) {
     editorTitle.value = `编辑：${src.name}`;
     editorFile.value = src.fileName;
     editorSourceDir.value = src.sourceDir;
-    editorContent.value = '';
+    editorContent.value = "";
     editorLoading.value = true;
     editorOpenKey.value += 1;
     showEditor.value = true;
@@ -238,11 +403,12 @@ async function openEditor(src?: BookSourceMeta, newType?: 'novel' | 'comic' | 'v
       editorLoading.value = false;
     }
   } else {
-    editorTitle.value = '新建书源';
-    editorFile.value = '';
-    editorSourceDir.value = '';
+    editorTitle.value = "新建书源";
+    editorFile.value = "";
+    editorSourceDir.value = "";
     editorLoading.value = false;
-    editorContent.value = newType === 'video' ? newVideoSourceTemplate() : newBookSourceTemplate();
+    editorContent.value =
+      newType === "video" ? newVideoSourceTemplate() : newBookSourceTemplate();
     editorOpenKey.value += 1;
     showEditor.value = true;
   }
@@ -250,24 +416,28 @@ async function openEditor(src?: BookSourceMeta, newType?: 'novel' | 'comic' | 'v
 
 async function saveEditor() {
   if (editorLoading.value) {
-    message.warning('书源仍在读取中，请稍后再保存');
+    message.warning("书源仍在读取中，请稍后再保存");
     return;
   }
   if (editorLoadError.value) {
-    message.warning('书源读取失败，无法保存');
+    message.warning("书源读取失败，无法保存");
     return;
   }
   if (!editorFile.value) {
     const match = editorContent.value.match(/@name\s+(.+)/);
-    const name = match?.[1]?.trim() || '未命名书源';
+    const name = match?.[1]?.trim() || "未命名书源";
     editorFile.value = toSafeFileName(name);
   }
   editorSaving.value = true;
   try {
-    await saveBookSource(editorFile.value, editorContent.value, editorSourceDir.value || undefined);
-    message.success('已保存');
+    await saveBookSource(
+      editorFile.value,
+      editorContent.value,
+      editorSourceDir.value || undefined,
+    );
+    message.success("已保存");
     showEditor.value = false;
-    emits('reload');
+    emits("reload");
   } catch (e: unknown) {
     message.error(`保存失败: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
@@ -277,7 +447,7 @@ async function saveEditor() {
 
 async function openEditorInVscode() {
   if (!editorFile.value) {
-    message.warning('请先保存书源，再用 VS Code 打开');
+    message.warning("请先保存书源，再用 VS Code 打开");
     return;
   }
   try {
@@ -289,24 +459,28 @@ async function openEditorInVscode() {
 
 async function openEditorExternal() {
   if (!editorFile.value) {
-    message.warning('请先保存书源，再用外部编辑器打开');
+    message.warning("请先保存书源，再用外部编辑器打开");
     return;
   }
   try {
-    await openInExternalEditor(editorFile.value, editorSourceDir.value || undefined);
+    await openInExternalEditor(
+      editorFile.value,
+      editorSourceDir.value || undefined,
+    );
   } catch (e: unknown) {
     message.error(`${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
 function importFromFile() {
-  const input = document.createElement('input');
-  input.type = 'file';
+  const input = document.createElement("input");
+  input.type = "file";
   // Android 不识别 .js 扩展名过滤（会灰化文件），改用 MIME 类型；
   // text/* 兼容 text/javascript / text/plain 等，确保 Android 文件管理器可选 .js 文件
-  input.accept = 'text/javascript,application/javascript,text/plain,.js,application/json,.json';
+  input.accept =
+    "text/javascript,application/javascript,text/plain,.js,application/json,.json";
   input.multiple = true;
-  input.addEventListener('change', async () => {
+  input.addEventListener("change", async () => {
     if (!input.files?.length) {
       return;
     }
@@ -316,14 +490,18 @@ function importFromFile() {
     for (const file of files) {
       try {
         const text = await file.text();
-        if (file.name.toLowerCase().endsWith('.json')) {
+        if (file.name.toLowerCase().endsWith(".json")) {
           // JSON 批量导入：[{ fileName, content }] 格式
-          const arr: Array<{ fileName: string; content: string }> = JSON.parse(text);
+          const arr: Array<{ fileName: string; content: string }> =
+            JSON.parse(text);
           if (!Array.isArray(arr)) {
-            throw new Error('JSON 格式错误，应为数组');
+            throw new Error("JSON 格式错误，应为数组");
           }
           for (const item of arr) {
-            if (typeof item.fileName === 'string' && typeof item.content === 'string') {
+            if (
+              typeof item.fileName === "string" &&
+              typeof item.content === "string"
+            ) {
               await saveBookSource(item.fileName, item.content);
               ok++;
             }
@@ -333,7 +511,9 @@ function importFromFile() {
           ok++;
         }
       } catch (e) {
-        errors.push(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
+        errors.push(
+          `${file.name}: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     }
     for (const err of errors) {
@@ -341,7 +521,7 @@ function importFromFile() {
     }
     if (ok) {
       message.success(`已导入 ${ok} 个书源`);
-      emits('reload');
+      emits("reload");
     }
   });
   input.click();
@@ -350,7 +530,7 @@ function importFromFile() {
 async function exportSources() {
   const sources = props.sources;
   if (!sources.length) {
-    message.warning('没有可导出的书源');
+    message.warning("没有可导出的书源");
     return;
   }
   let ok = 0;
@@ -365,15 +545,15 @@ async function exportSources() {
     }
   }
   if (!items.length) {
-    message.error('书源读取失败，无法导出');
+    message.error("书源读取失败，无法导出");
     return;
   }
   const saved = await saveExportFile({
     defaultName: `booksources-${new Date().toISOString().slice(0, 10)}.json`,
-    mime: 'application/json;charset=utf-8',
+    mime: "application/json;charset=utf-8",
     text: JSON.stringify(items, null, 2),
-    filterName: 'JSON',
-    extensions: ['json'],
+    filterName: "JSON",
+    extensions: ["json"],
   });
   if (saved) {
     message.success(`已导出 ${ok} 个书源`);
@@ -396,17 +576,19 @@ async function onToggle(src: BookSourceMeta) {
 
 function confirmDelete(src: BookSourceMeta) {
   dialog.warning({
-    title: '删除书源',
+    title: "删除书源",
     content: `确认删除「${src.name}」？此操作将删除磁盘文件，不可恢复。`,
-    positiveText: '删除',
-    negativeText: '取消',
+    positiveText: "删除",
+    negativeText: "取消",
     onPositiveClick: async () => {
       try {
         await deleteBookSource(src.fileName, src.sourceDir);
-        emits('reload');
-        message.success('已删除');
+        emits("reload");
+        message.success("已删除");
       } catch (e: unknown) {
-        message.error(`删除失败: ${e instanceof Error ? e.message : String(e)}`);
+        message.error(
+          `删除失败: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     },
   });
@@ -414,9 +596,9 @@ function confirmDelete(src: BookSourceMeta) {
 
 async function reloadAllSources() {
   try {
-    emits('reload');
-    await eventEmit('app:booksource-reload', { scope: 'all' });
-    message.success('已重载所有书源');
+    emits("reload");
+    await eventEmit("app:booksource-reload", { scope: "all" });
+    message.success("已重载所有书源");
   } catch {
     /* ignore */
   }
@@ -425,9 +607,9 @@ async function reloadAllSources() {
 async function reloadSingleSource(src: BookSourceMeta) {
   try {
     bookSourceStore.invalidateCapability(src.fileName);
-    emits('reload');
-    await eventEmit('app:booksource-reload', {
-      scope: 'single',
+    emits("reload");
+    await eventEmit("app:booksource-reload", {
+      scope: "single",
       fileName: src.fileName,
     });
     message.success(`已重载「${src.name}」`);
@@ -443,9 +625,9 @@ async function applySourceUpdate(src: BookSourceMeta) {
   updatingSourceSet.value.add(src.uuid);
   try {
     await bookSourceStore.applyUpdate(src.fileName);
-    emits('reload');
-    await eventEmit('app:booksource-reload', {
-      scope: 'single',
+    emits("reload");
+    await eventEmit("app:booksource-reload", {
+      scope: "single",
       fileName: src.fileName,
     });
     message.success(`已升级「${src.name}」`);
@@ -469,7 +651,10 @@ function ensureCapabilities() {
 async function handleFileChange(fileName: string) {
   if (showEditor.value && editorFile.value === fileName) {
     try {
-      editorContent.value = await readBookSource(fileName, editorSourceDir.value || undefined);
+      editorContent.value = await readBookSource(
+        fileName,
+        editorSourceDir.value || undefined,
+      );
       editorReloaded.value = true;
       setTimeout(() => {
         editorReloaded.value = false;
@@ -486,7 +671,7 @@ function openDirManager() {
 
 // 移动端外部编辑器：切回前台时检查文件是否已被外部修改
 async function onVisibilityChange() {
-  if (document.visibilityState !== 'visible') {
+  if (document.visibilityState !== "visible") {
     return;
   }
   if (showEditor.value && editorFile.value) {
@@ -495,11 +680,11 @@ async function onVisibilityChange() {
 }
 
 onMounted(() => {
-  document.addEventListener('visibilitychange', onVisibilityChange);
+  document.addEventListener("visibilitychange", onVisibilityChange);
 });
 
 onUnmounted(() => {
-  document.removeEventListener('visibilitychange', onVisibilityChange);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
 });
 
 defineExpose({
@@ -532,10 +717,38 @@ defineExpose({
       <!-- 统计 -->
       <span class="bv-stat">
         共 {{ filtered.length }} 个书源， 已启用
-        {{ filtered.filter((s) => s.enabled).length }} 个<template v-if="sourceDirs.length > 1"
+        {{ filtered.filter((s) => s.enabled).length }} 个<template
+          v-if="sourceDirs.length > 1"
           >，{{ sourceDirs.length }} 个目录</template
         >
       </span>
+      <n-button
+        size="small"
+        :type="batchMode ? 'primary' : 'default'"
+        quaternary
+        @click="toggleBatchMode"
+        >批量管理</n-button
+      >
+    </div>
+    <!-- 批量操作栏 -->
+    <div v-if="batchMode" class="bv-batch-bar">
+      <n-checkbox
+        :checked="allSelected"
+        :indeterminate="someSelected"
+        @update:checked="toggleSelectAll"
+      >
+        <span class="bv-batch-stat">
+          {{ selectedKeys.size > 0 ? `已选 ${selectedKeys.size} 个` : "全选" }}
+        </span>
+      </n-checkbox>
+      <div class="bv-batch-actions">
+        <n-button size="tiny" @click="batchSetEnabled(true)">启用</n-button>
+        <n-button size="tiny" @click="batchSetEnabled(false)">禁用</n-button>
+        <n-button size="tiny" @click="batchExport">导出</n-button>
+        <n-button size="tiny" type="error" ghost @click="confirmBatchDelete"
+          >删除</n-button
+        >
+      </div>
     </div>
     <!-- 列表 -->
     <n-spin :show="loading" class="bv-source-list-wrap">
@@ -548,21 +761,34 @@ defineExpose({
           :default-logo-url="defaultLogoUrl"
           :search-enabled="!searchDisabled.has(src.fileName)"
           :explore-enabled="!exploreDisabled.has(src.fileName)"
-          :capabilities="bookSourceStore.getCachedCapabilities(src.fileName) ?? undefined"
+          :capabilities="
+            bookSourceStore.getCachedCapabilities(src.fileName) ?? undefined
+          "
           :delay-override="sourceDelayOverrides.get(src.fileName) ?? 0"
           :update-info="getPendingUpdate(src.uuid)"
           :update-busy="updatingSourceSet.has(src.uuid)"
+          :batch-mode="batchMode"
+          :selected="selectedKeys.has(src.sourceKey)"
           @toggle="onToggle(src)"
           @edit="openEditor(src)"
           @reload="reloadSingleSource(src)"
           @delete="confirmDelete(src)"
+          @export="exportSingleSource(src)"
+          @select="toggleSelect(src)"
           @navigate-debug="
             emits('navigateTab', 'debug');
             emits('selectDebugSource', src);
           "
           @open-url="openUrl($event)"
-          @toggle-search="setSearchUserEnabled(src.fileName, searchDisabled.has(src.fileName))"
-          @toggle-explore="setExploreUserEnabled(src.fileName, exploreDisabled.has(src.fileName))"
+          @toggle-search="
+            setSearchUserEnabled(src.fileName, searchDisabled.has(src.fileName))
+          "
+          @toggle-explore="
+            setExploreUserEnabled(
+              src.fileName,
+              exploreDisabled.has(src.fileName),
+            )
+          "
           @load-delay="loadDelayOverride(src.fileName)"
           @save-delay="saveDelayOverride(src, $event)"
           @apply-update="applySourceUpdate(src)"
@@ -604,14 +830,20 @@ defineExpose({
       <div class="dir-mgr__item dir-mgr__item--builtin">
         <div class="dir-mgr__path">
           <n-tag size="tiny" type="primary" :bordered="false">内置</n-tag>
-          <span class="dir-mgr__path-text" :title="sourceDir">{{ shortSourceDir }}</span>
+          <span class="dir-mgr__path-text" :title="sourceDir">{{
+            shortSourceDir
+          }}</span>
         </div>
-        <n-button size="tiny" quaternary @click="openSourceDirInExplorer">打开</n-button>
+        <n-button size="tiny" quaternary @click="openSourceDirInExplorer"
+          >打开</n-button
+        >
       </div>
       <div v-for="dir in externalDirs" :key="dir" class="dir-mgr__item">
         <div class="dir-mgr__path">
           <n-tag size="tiny" type="info" :bordered="false">外部</n-tag>
-          <span class="dir-mgr__path-text" :title="dir">{{ shortDir(dir) }}</span>
+          <span class="dir-mgr__path-text" :title="dir">{{
+            shortDir(dir)
+          }}</span>
         </div>
         <div class="dir-mgr__actions">
           <n-button
@@ -620,7 +852,11 @@ defineExpose({
             @click="invokeWithTimeout('open_dir_in_explorer', { path: dir })"
             >打开</n-button
           >
-          <n-button size="tiny" quaternary type="error" @click="removeExternalDir(dir)"
+          <n-button
+            size="tiny"
+            quaternary
+            type="error"
+            @click="removeExternalDir(dir)"
             >移除</n-button
           >
         </div>
@@ -633,9 +869,19 @@ defineExpose({
       />
     </div>
     <template #footer>
-      <div style="display: flex; justify-content: space-between; align-items: center">
-        <span class="dir-mgr__hint">外部目录中的 .js 书源将被自动载入，文件变动实时监听。</span>
-        <n-button type="primary" size="small" @click="addExternalDir">添加外部目录</n-button>
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        "
+      >
+        <span class="dir-mgr__hint"
+          >外部目录中的 .js 书源将被自动载入，文件变动实时监听。</span
+        >
+        <n-button type="primary" size="small" @click="addExternalDir"
+          >添加外部目录</n-button
+        >
       </div>
     </template>
   </n-modal>
@@ -681,10 +927,35 @@ defineExpose({
 
 /* ---- 统计 ---- */
 .bv-stat {
-  flex-shrink: 0;
+  flex: 1;
   font-size: 0.75rem;
   color: var(--color-text-muted);
   white-space: nowrap;
+}
+
+/* ---- 批量操作栏 ---- */
+.bv-batch-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.bv-batch-stat {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.bv-batch-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 /* ---- Pane ---- */

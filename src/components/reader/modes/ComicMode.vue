@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { eventListen } from "@/composables/useEventBus";
-import { toFileSrcSync } from "@/composables/useFileSrc";
+import { eventListen } from '@/composables/useEventBus';
+import { toFileSrcSync } from '@/composables/useFileSrc';
 /**
  * ComicMode — 漫画阅读模式（纯竖向滚动，显示图片列表）
  *
@@ -11,21 +11,10 @@ import { toFileSrcSync } from "@/composables/useFileSrc";
  * - 缓存模式（默认）：前端拿到全部 URL 后立即开始阅读；Rust 后端后台顺序缓存并按页通知前端切换到本地文件
  * - 直读模式：前端直接使用图片 URL，浏览器自动加载
  */
-import { storeToRefs } from "pinia";
-import {
-  ref,
-  watch,
-  computed,
-  onMounted,
-  onBeforeUnmount,
-  nextTick,
-  type Ref,
-} from "vue";
-import { useAppConfigStore } from "@/stores";
-import {
-  comicDownloadImages,
-  comicGetPageSizes,
-} from "../../../composables/useBookSource";
+import { storeToRefs } from 'pinia';
+import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick, type Ref } from 'vue';
+import { useAppConfigStore } from '@/stores';
+import { comicDownloadImages, comicGetPageSizes } from '../../../composables/useBookSource';
 
 const props = defineProps<{
   content: string;
@@ -56,14 +45,14 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "tap", zone: "left" | "center" | "right"): void;
-  (e: "progress", ratio: number): void;
-  (e: "prevChapter"): void;
-  (e: "nextChapter"): void;
+  (e: 'tap', zone: 'left' | 'center' | 'right'): void;
+  (e: 'progress', ratio: number): void;
+  (e: 'prevChapter'): void;
+  (e: 'nextChapter'): void;
   /** 用户向上滚动进入上一章区域（无缝向前翻章） */
-  (e: "prevChapterEntered"): void;
+  (e: 'prevChapterEntered'): void;
   /** 用户向下滚动进入下一章区域，携带当前章节内容区高度（用于无缝滚动位置补偿） */
-  (e: "nextChapterEntered", sectionHeight: number): void;
+  (e: 'nextChapterEntered', sectionHeight: number): void;
 }>();
 
 interface ComicPage {
@@ -104,7 +93,7 @@ const pages = ref<ComicPage[]>([]);
 const pageSizes = ref<ComicPageSize[]>([]);
 const visibleImages = ref<Set<number>>(new Set());
 const loading = ref(false);
-const error = ref("");
+const error = ref('');
 let loadVersion = 0;
 let unlistenComicPageCached: (() => void) | null = null;
 let unlistenComicPageFailed: (() => void) | null = null;
@@ -127,9 +116,7 @@ const nextPageSizes = ref<ComicPageSize[]>([]);
 let seamlessSwapAnchorOffset: number | null = null;
 let seamlessSwapFallbackOffset = -1;
 let seamlessPromotedPageSizes: ComicPageSize[] | null = null;
-const pendingAdjacentPageSizes: Partial<
-  Record<"prev" | "next", ComicPageSize[]>
-> = {};
+const pendingAdjacentPageSizes: Partial<Record<'prev' | 'next', ComicPageSize[]>> = {};
 /** 向上无缝翻章标志：不重置 scrollTop */
 let isBackwardSeamless = false;
 /** 上一章进入事件是否已触发（每次 prevContent 变化后重置） */
@@ -163,9 +150,7 @@ function mergePageSizes(
 ): ComicPageSize[] {
   const normalizedCurrent = normalizePageSizes(current, length);
   const normalizedIncoming = normalizePageSizes(incoming, length);
-  return normalizedIncoming.map(
-    (size, idx) => size ?? normalizedCurrent[idx] ?? null,
-  );
+  return normalizedIncoming.map((size, idx) => size ?? normalizedCurrent[idx] ?? null);
 }
 
 function stopSeamlessCurrentTopCorrection() {
@@ -175,7 +160,7 @@ function stopSeamlessCurrentTopCorrection() {
     seamlessCurrentTopCorrectionRaf = 0;
   }
   if (seamlessCorrectionElement) {
-    seamlessCorrectionElement.style.scrollBehavior = "";
+    seamlessCorrectionElement.style.scrollBehavior = '';
     seamlessCorrectionElement = null;
   }
 }
@@ -207,7 +192,7 @@ function startSeamlessCurrentTopCorrection() {
     const currentTop = currentSection.offsetTop;
     const delta = currentTop - lastTop;
     if (Math.abs(delta) >= 1) {
-      currentEl.style.scrollBehavior = "auto";
+      currentEl.style.scrollBehavior = 'auto';
       currentEl.scrollTop = Math.max(0, currentEl.scrollTop + delta);
     }
     lastTop = currentTop;
@@ -229,9 +214,8 @@ function prepareSeamlessSwap(prevSectionHeight: number) {
   seamlessPromotedPageSizes = clonePageSizes(nextPageSizes.value);
   pendingAdjacentPageSizes.prev = clonePageSizes(pageSizes.value);
   const el = containerRef.value;
-  const nextTop =
-    nextSectionRef.value?.offsetTop ?? nextChapterSentinelRef.value?.offsetTop;
-  if (el && typeof nextTop === "number") {
+  const nextTop = nextSectionRef.value?.offsetTop ?? nextChapterSentinelRef.value?.offsetTop;
+  if (el && typeof nextTop === 'number') {
     seamlessSwapAnchorOffset = el.scrollTop - nextTop;
     seamlessSwapFallbackOffset = -1;
     return;
@@ -268,22 +252,17 @@ function setupSentinel() {
         if (entry.isIntersecting) {
           const rootEl = containerRef.value;
           const nextTop =
-            nextSectionRef.value?.offsetTop ??
-            nextChapterSentinelRef.value?.offsetTop;
-          if (
-            rootEl &&
-            typeof nextTop === "number" &&
-            rootEl.scrollTop < nextTop - 1
-          ) {
+            nextSectionRef.value?.offsetTop ?? nextChapterSentinelRef.value?.offsetTop;
+          if (rootEl && typeof nextTop === 'number' && rootEl.scrollTop < nextTop - 1) {
             return;
           }
           teardownSentinel();
           const sectionH = currentSectionRef.value?.offsetHeight ?? 0;
-          emit("nextChapterEntered", sectionH);
+          emit('nextChapterEntered', sectionH);
         }
       }
     },
-    { root, rootMargin: "0px 0px -40% 0px" },
+    { root, rootMargin: '0px 0px -40% 0px' },
   );
   sentinelObserver.observe(el);
 }
@@ -296,13 +275,11 @@ let loadComplete: Promise<void> = Promise.resolve();
 function parseImageUrls(raw: string): string[] {
   const trimmed = raw.trim();
   // 尝试 JSON 数组
-  if (trimmed.startsWith("[")) {
+  if (trimmed.startsWith('[')) {
     try {
       const arr = JSON.parse(trimmed);
       if (Array.isArray(arr)) {
-        return arr.filter(
-          (u: unknown) => typeof u === "string" && u.length > 0,
-        );
+        return arr.filter((u: unknown) => typeof u === 'string' && u.length > 0);
       }
     } catch {
       /* fallback */
@@ -310,17 +287,17 @@ function parseImageUrls(raw: string): string[] {
   }
   // 换行分隔
   return trimmed
-    .split("\n")
+    .split('\n')
     .map((s) => s.trim())
-    .filter((s) => s.length > 0 && s.startsWith("http"));
+    .filter((s) => s.length > 0 && s.startsWith('http'));
 }
 
 function isDirectSrc(src: string): boolean {
   return (
     /^(https?:)?\/\//i.test(src) ||
-    src.startsWith("data:") ||
-    src.startsWith("blob:") ||
-    src.startsWith("asset:")
+    src.startsWith('data:') ||
+    src.startsWith('blob:') ||
+    src.startsWith('asset:')
   );
 }
 
@@ -331,11 +308,11 @@ function toRenderableSrc(src: string): string {
 function createPages(urls: string[], holdForProxy = false): ComicPage[] {
   return urls.map((url) => ({
     remoteUrl: url,
-    src: holdForProxy ? "" : url,
+    src: holdForProxy ? '' : url,
     cachedSrc: null,
     loaded: false,
     failed: false,
-    failureReason: "",
+    failureReason: '',
     pending: holdForProxy,
     decoding: false,
     retryFailed: false,
@@ -354,28 +331,25 @@ function resetPages(
   pages.value = createPages(urls, holdForProxy);
 }
 
-function applyResolvedSourcesToPageList(
-  pageList: ComicPage[],
-  sources: string[],
-) {
+function applyResolvedSourcesToPageList(pageList: ComicPage[], sources: string[]) {
   for (const [idx, source] of sources.entries()) {
     const page = pageList[idx];
     if (!page) {
       continue;
     }
     // 空字符串表示该页需要解码，Rust 暂不提供原始 URL，等待 comic:page-cached 事件
-    if (source === "") {
+    if (source === '') {
       page.pending = true;
       continue;
     }
     const renderable = toRenderableSrc(source);
-    page.decoding = source.includes("mode=decode");
+    page.decoding = source.includes('mode=decode');
     page.cachedSrc = renderable === page.remoteUrl ? null : renderable;
     if (page.src !== renderable) {
       page.src = renderable;
       page.loaded = false;
       page.failed = false;
-      page.failureReason = "";
+      page.failureReason = '';
     }
     page.pending = false;
   }
@@ -406,17 +380,17 @@ function applyCachedPage(pageIndex: number, localPath: string) {
     page.src = localSrc;
     page.loaded = false;
     page.failed = false;
-    page.failureReason = "";
+    page.failureReason = '';
   }
 
   scheduleRestoreCorrection();
 }
 
 function setScrollTopInstantly(el: HTMLElement, top: number) {
-  el.style.scrollBehavior = "auto";
+  el.style.scrollBehavior = 'auto';
   el.scrollTop = Math.max(0, top);
   requestAnimationFrame(() => {
-    el.style.scrollBehavior = "";
+    el.style.scrollBehavior = '';
   });
 }
 
@@ -427,7 +401,7 @@ async function loadImages(
 ) {
   const currentVersion = ++loadVersion;
   const urls = parseImageUrls(props.content);
-  error.value = "";
+  error.value = '';
 
   // 创建新的 loadComplete Promise，供 restoreToScrollRatio 等待
   loadResolve?.();
@@ -496,14 +470,14 @@ async function loadImages(
 }
 
 async function loadAdjacentPages(
-  side: "prev" | "next",
+  side: 'prev' | 'next',
   raw: string | undefined,
   chapterUrl: string | undefined,
   chapterIndex: number | undefined,
 ) {
   const version = ++adjacentLoadVersion[side];
-  const target = side === "prev" ? prevPages : nextPages;
-  const targetSizes = side === "prev" ? prevPageSizes : nextPageSizes;
+  const target = side === 'prev' ? prevPages : nextPages;
+  const targetSizes = side === 'prev' ? prevPageSizes : nextPageSizes;
   const initialPageSizes = pendingAdjacentPageSizes[side];
   pendingAdjacentPageSizes[side] = undefined;
   const urls = raw ? parseImageUrls(raw) : [];
@@ -513,11 +487,9 @@ async function loadAdjacentPages(
     return;
   }
 
-  const fallbackIndex = props.chapterIndex + (side === "prev" ? -1 : 1);
+  const fallbackIndex = props.chapterIndex + (side === 'prev' ? -1 : 1);
   const effectiveChapterIndex =
-    typeof chapterIndex === "number" && chapterIndex >= 0
-      ? chapterIndex
-      : fallbackIndex;
+    typeof chapterIndex === 'number' && chapterIndex >= 0 ? chapterIndex : fallbackIndex;
   const effectiveChapterUrl = chapterUrl || props.chapterUrl;
   targetSizes.value = normalizePageSizes(initialPageSizes, urls.length);
   target.value = createPages(urls, true);
@@ -546,11 +518,7 @@ async function loadAdjacentPages(
           effectiveChapterIndex,
         );
         if (version === adjacentLoadVersion[side]) {
-          targetSizes.value = mergePageSizes(
-            targetSizes.value,
-            sizes,
-            urls.length,
-          );
+          targetSizes.value = mergePageSizes(targetSizes.value, sizes, urls.length);
         }
       } catch {
         // 相邻章节尺寸只是稳定布局的优化，失败不影响继续阅读。
@@ -563,20 +531,14 @@ async function loadAdjacentPages(
     for (const page of target.value) {
       page.pending = false;
       page.failed = true;
-      page.failureReason =
-        cause instanceof Error ? cause.message : String(cause);
+      page.failureReason = cause instanceof Error ? cause.message : String(cause);
       page.loaded = false;
     }
   }
 }
 
 watch(
-  () => [
-    props.content,
-    props.fileName,
-    props.chapterUrl,
-    comicCacheEnabled.value,
-  ],
+  () => [props.content, props.fileName, props.chapterUrl, comicCacheEnabled.value],
   async () => {
     const anchorOffset = seamlessSwapAnchorOffset;
     const fallbackOffset = seamlessSwapFallbackOffset;
@@ -640,7 +602,7 @@ watch(
   async ([val, chapterUrl, chapterIndex], oldVal) => {
     const wasEmpty = !oldVal?.[0];
     const isNowFilled = !!val;
-    void loadAdjacentPages("prev", val, chapterUrl, chapterIndex);
+    void loadAdjacentPages('prev', val, chapterUrl, chapterIndex);
     prevChapterEnteredFired = false;
     prevBoundaryFallbackFired = false;
 
@@ -669,7 +631,7 @@ watch(
       comicCacheEnabled.value,
     ] as const,
   async ([val, chapterUrl, chapterIndex, isLoading]) => {
-    void loadAdjacentPages("next", val, chapterUrl, chapterIndex);
+    void loadAdjacentPages('next', val, chapterUrl, chapterIndex);
     nextBoundaryFallbackFired = false;
     teardownSentinel();
     if (val || isLoading) {
@@ -696,10 +658,8 @@ function onScroll() {
     currentSectionRef.value?.offsetHeight ?? Math.max(0, scrollHeight - prevH);
   const adjustedScrollTop = Math.max(0, scrollTop - prevH);
   const ratio =
-    currentSectionH <= clientHeight
-      ? 1
-      : adjustedScrollTop / (currentSectionH - clientHeight);
-  emit("progress", Math.min(1, Math.max(0, ratio)));
+    currentSectionH <= clientHeight ? 1 : adjustedScrollTop / (currentSectionH - clientHeight);
+  emit('progress', Math.min(1, Math.max(0, ratio)));
 
   const prevAtTop = atTop.value;
   const prevAtBottom = atBottom.value;
@@ -717,7 +677,7 @@ function onScroll() {
   if (!prevChapterEnteredFired && prevH > 0 && hasPrevChapterContent.value) {
     if (scrollTop <= prevH * 0.6) {
       prevChapterEnteredFired = true;
-      emit("prevChapterEntered");
+      emit('prevChapterEntered');
     }
   }
 
@@ -728,7 +688,7 @@ function onScroll() {
     scrollTop >= nextTop - 1
   ) {
     nextBoundaryFallbackFired = true;
-    emit("nextChapterEntered", currentSectionRef.value?.offsetHeight ?? 0);
+    emit('nextChapterEntered', currentSectionRef.value?.offsetHeight ?? 0);
   }
 
   if (
@@ -739,7 +699,7 @@ function onScroll() {
     atTop.value
   ) {
     prevBoundaryFallbackFired = true;
-    emit("prevChapterEntered");
+    emit('prevChapterEntered');
   }
 
   if (
@@ -750,13 +710,13 @@ function onScroll() {
     atBottom.value
   ) {
     nextBoundaryFallbackFired = true;
-    emit("nextChapterEntered", currentSectionRef.value?.offsetHeight ?? 0);
+    emit('nextChapterEntered', currentSectionRef.value?.offsetHeight ?? 0);
   }
 }
 
 /* ── 触控区域 ── */
 function onTapContainer() {
-  emit("tap", "center");
+  emit('tap', 'center');
 }
 
 onBeforeUnmount(() => {
@@ -776,7 +736,7 @@ function setupObserver() {
         }
       }
     },
-    { root: containerRef.value, rootMargin: "200px 0px" },
+    { root: containerRef.value, rootMargin: '200px 0px' },
   );
 }
 
@@ -820,7 +780,7 @@ function onImageLoad(idx: number, event: Event) {
   updatePageNaturalSize(idx, event.target as HTMLImageElement);
   page.loaded = true;
   page.failed = false;
-  page.failureReason = "";
+  page.failureReason = '';
   page.decoding = false;
   scheduleRestoreCorrection();
 }
@@ -835,37 +795,32 @@ function onImageError(idx: number) {
     page.src = page.cachedSrc;
     page.loaded = false;
     page.failed = false;
-    page.failureReason = "";
+    page.failureReason = '';
     return;
   }
 
   page.failed = true;
-  page.failureReason = "浏览器无法加载后端返回的图片地址";
+  page.failureReason = '浏览器无法加载后端返回的图片地址';
   page.loaded = false;
   page.decoding = false;
 }
 
-function onAdjacentImageLoad(
-  side: "prev" | "next",
-  idx: number,
-  page: ComicPage,
-  event: Event,
-) {
+function onAdjacentImageLoad(side: 'prev' | 'next', idx: number, page: ComicPage, event: Event) {
   updatePageNaturalSizeIn(
-    side === "prev" ? prevPageSizes : nextPageSizes,
+    side === 'prev' ? prevPageSizes : nextPageSizes,
     idx,
     event.target as HTMLImageElement,
   );
   page.loaded = true;
   page.failed = false;
-  page.failureReason = "";
+  page.failureReason = '';
   page.decoding = false;
 }
 
 function onAdjacentImageError(page: ComicPage) {
   page.loaded = false;
   page.failed = true;
-  page.failureReason = "浏览器无法加载后端返回的图片地址";
+  page.failureReason = '浏览器无法加载后端返回的图片地址';
   page.decoding = false;
 }
 
@@ -874,20 +829,15 @@ onMounted(async () => {
   // 关键修复：Vue 3 的 :ref 回调在 onMounted 之前执行，彼时 observer 尚为 null，
   // 导致初次渲染的页面元素全部未被注册。在 observer 创建后立即补扫 DOM，
   // 确保直读模式（同步完成）和所有图片已缓存（立即 resolve）等场景均能正确显示图片。
-  currentSectionRef.value
-    ?.querySelectorAll<HTMLElement>(".comic-mode__page")
-    .forEach((el, i) => {
-      el.dataset.idx = String(i);
-      observer?.observe(el);
-    });
+  currentSectionRef.value?.querySelectorAll<HTMLElement>('.comic-mode__page').forEach((el, i) => {
+    el.dataset.idx = String(i);
+    observer?.observe(el);
+  });
   unlistenComicPageCached = await eventListen<ComicPageCachedPayload>(
-    "comic:page-cached",
+    'comic:page-cached',
     (event) => {
       const { payload } = event;
-      if (
-        payload.file_name !== props.fileName ||
-        payload.chapter_url !== props.chapterUrl
-      ) {
+      if (payload.file_name !== props.fileName || payload.chapter_url !== props.chapterUrl) {
         return;
       }
       applyCachedPage(payload.page_index, payload.local_path);
@@ -895,20 +845,17 @@ onMounted(async () => {
   );
 
   unlistenComicPageFailed = await eventListen<ComicPageFailedPayload>(
-    "comic:page-failed",
+    'comic:page-failed',
     (event) => {
       const { payload } = event;
-      if (
-        payload.file_name !== props.fileName ||
-        payload.chapter_url !== props.chapterUrl
-      ) {
+      if (payload.file_name !== props.fileName || payload.chapter_url !== props.chapterUrl) {
         return;
       }
       const page = pages.value[payload.page_index];
       if (page) {
         page.retryFailed = true;
         page.failed = true;
-        page.failureReason = payload.error ?? "后端下载失败";
+        page.failureReason = payload.error ?? '后端下载失败';
       }
     },
   );
@@ -931,15 +878,11 @@ function observeImg(el: Element | null, idx: number) {
 
 /* ── 页码显示（0-based，与其他翻页模式保持一致） ── */
 const currentPage = computed(() => {
-  const sorted = [...visibleImages.value].toSorted(
-    (a: number, b: number) => a - b,
-  );
+  const sorted = [...visibleImages.value].toSorted((a: number, b: number) => a - b);
   return sorted.length > 0 ? sorted[0] : 0;
 });
 const totalPages = computed(() => pages.value.length);
-const currentPageDisplay = computed(() =>
-  totalPages.value > 0 ? currentPage.value + 1 : 0,
-);
+const currentPageDisplay = computed(() => (totalPages.value > 0 ? currentPage.value + 1 : 0));
 
 /**
  * 跳到指定图片页（0-based），通过 offsetTop 瞬间定位，
@@ -951,7 +894,7 @@ function goToPage(idx: number) {
   if (!container || !section) {
     return;
   }
-  const pageEls = section.querySelectorAll<HTMLElement>(".comic-mode__page");
+  const pageEls = section.querySelectorAll<HTMLElement>('.comic-mode__page');
   const target = pageEls[idx];
   if (target) {
     container.scrollTop = target.offsetTop;
@@ -1001,8 +944,8 @@ function getReadingScrollRatio(): number {
   return getSectionRatio(currentSectionRef.value);
 }
 
-function getAdjacentScrollRatio(side: "prev" | "next"): number {
-  return side === "prev"
+function getAdjacentScrollRatio(side: 'prev' | 'next'): number {
+  return side === 'prev'
     ? getSectionRatio(prevSectionRef.value)
     : getSectionRatio(nextSectionRef.value);
 }
@@ -1012,7 +955,7 @@ function getPageIndexWithin(section: HTMLElement | null): number {
   if (!container || !section) {
     return 0;
   }
-  const pageEls = section.querySelectorAll<HTMLElement>(".comic-mode__page");
+  const pageEls = section.querySelectorAll<HTMLElement>('.comic-mode__page');
   if (pageEls.length === 0) {
     return 0;
   }
@@ -1040,8 +983,8 @@ function getReadingPageIndex(): number {
   return currentPage.value;
 }
 
-function getAdjacentPageIndex(side: "prev" | "next"): number {
-  return side === "prev"
+function getAdjacentPageIndex(side: 'prev' | 'next'): number {
+  return side === 'prev'
     ? getPageIndexWithin(prevSectionRef.value)
     : getPageIndexWithin(nextSectionRef.value);
 }
@@ -1065,13 +1008,8 @@ function pageStyle(idx: number): Record<string, string> {
   return sizeToPageStyle(pageSizes.value[idx]);
 }
 
-function adjacentPageStyle(
-  side: "prev" | "next",
-  idx: number,
-): Record<string, string> {
-  return sizeToPageStyle(
-    side === "prev" ? prevPageSizes.value[idx] : nextPageSizes.value[idx],
-  );
+function adjacentPageStyle(side: 'prev' | 'next', idx: number): Record<string, string> {
+  return sizeToPageStyle(side === 'prev' ? prevPageSizes.value[idx] : nextPageSizes.value[idx]);
 }
 
 /**
@@ -1100,9 +1038,7 @@ async function restoreToScrollRatio(ratio: number) {
     // 等 Vue 将 pageSizes 变化渲染到 DOM
     await nextTick();
     // 等浏览器完成布局重排
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => resolve()),
-    );
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
     scrollToRatio(restoreRatio.value);
 
@@ -1111,9 +1047,7 @@ async function restoreToScrollRatio(ratio: number) {
     let stableFrames = 0;
     let lastScrollHeight = -1;
     for (let i = 0; i < 12; i++) {
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => resolve()),
-      );
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const el = containerRef.value;
       if (!el) {
         break;
@@ -1145,9 +1079,7 @@ function scrollToRatio(ratio: number) {
     return;
   }
   const prevH = prevSectionRef.value?.offsetHeight ?? 0;
-  const currentH =
-    currentSectionRef.value?.offsetHeight ??
-    Math.max(0, el.scrollHeight - prevH);
+  const currentH = currentSectionRef.value?.offsetHeight ?? Math.max(0, el.scrollHeight - prevH);
   const maxScroll = Math.max(0, currentH - el.clientHeight);
   el.scrollTop = prevH + ratio * maxScroll;
 }
@@ -1179,7 +1111,7 @@ async function retryPage(idx: number) {
     if (pages.value[idx]) {
       pages.value[idx].retryFailed = true;
       pages.value[idx].failed = true;
-      pages.value[idx].failureReason = "重新触发后端下载失败";
+      pages.value[idx].failureReason = '重新触发后端下载失败';
     }
   }
 }
@@ -1193,9 +1125,7 @@ const showNextChapterSurface = computed(
   () => hasNextChapterContent.value || !!props.nextChapterLoading,
 );
 /** 无下一章且无预加载内容时显示结束画面 */
-const showEndScreen = computed(
-  () => !props.hasNext && !showNextChapterSurface.value,
-);
+const showEndScreen = computed(() => !props.hasNext && !showNextChapterSurface.value);
 
 defineExpose({
   goToPage,
@@ -1219,12 +1149,7 @@ defineExpose({
 </script>
 
 <template>
-  <div
-    ref="containerRef"
-    class="comic-mode"
-    @click="onTapContainer"
-    @scroll.passive="onScroll"
-  >
+  <div ref="containerRef" class="comic-mode" @click="onTapContainer" @scroll.passive="onScroll">
     <div v-if="loading && totalPages === 0" class="comic-mode__loading">
       <n-spin size="large" />
       <span>加载图片中...</span>
@@ -1250,9 +1175,7 @@ defineExpose({
               :style="adjacentPageStyle('prev', idx)"
             >
               <template v-if="page.pending">
-                <div
-                  class="comic-mode__placeholder comic-mode__placeholder--overlay"
-                >
+                <div class="comic-mode__placeholder comic-mode__placeholder--overlay">
                   <n-spin size="small" />
                   <span>上一章第 {{ idx + 1 }} 页准备中...</span>
                 </div>
@@ -1261,10 +1184,7 @@ defineExpose({
                 <img
                   :src="page.src"
                   :alt="`上一章第 ${idx + 1} 页`"
-                  :class="[
-                    'comic-mode__img',
-                    { 'comic-mode__img--ready': page.loaded },
-                  ]"
+                  :class="['comic-mode__img', { 'comic-mode__img--ready': page.loaded }]"
                   loading="lazy"
                   @load="onAdjacentImageLoad('prev', idx, page, $event)"
                   @error="onAdjacentImageError(page)"
@@ -1276,16 +1196,14 @@ defineExpose({
                   <n-spin v-if="!page.failed" size="small" />
                   <span>{{
                     page.failed
-                      ? "图片加载失败"
+                      ? '图片加载失败'
                       : page.decoding
                         ? `上一章第 ${idx + 1} 页解码中...`
                         : `上一章第 ${idx + 1} 页加载中...`
                   }}</span>
-                  <span
-                    v-if="page.failed && page.failureReason"
-                    class="comic-mode__fail-detail"
-                    >{{ page.failureReason }}</span
-                  >
+                  <span v-if="page.failed && page.failureReason" class="comic-mode__fail-detail">{{
+                    page.failureReason
+                  }}</span>
                 </div>
               </template>
             </div>
@@ -1298,9 +1216,7 @@ defineExpose({
         <!-- 章节分隔线（上一章 → 当前章） -->
         <div class="comic-mode__chapter-sep">
           <div class="comic-mode__chapter-sep-line" />
-          <p class="comic-mode__chapter-sep-title">
-            {{ prevChapterTitle || "上一章" }}结束
-          </p>
+          <p class="comic-mode__chapter-sep-title">{{ prevChapterTitle || '上一章' }}结束</p>
         </div>
       </template>
 
@@ -1316,9 +1232,7 @@ defineExpose({
           <template v-if="shouldShow(idx)">
             <!-- 书源需要解码时显示占位，等待 Rust 处理完成 -->
             <template v-if="page.pending">
-              <div
-                class="comic-mode__placeholder comic-mode__placeholder--overlay"
-              >
+              <div class="comic-mode__placeholder comic-mode__placeholder--overlay">
                 <n-spin size="small" />
                 <span>第 {{ idx + 1 }} 页解码中...</span>
               </div>
@@ -1327,10 +1241,7 @@ defineExpose({
               <img
                 :src="page.src"
                 :alt="`第 ${idx + 1} 页`"
-                :class="[
-                  'comic-mode__img',
-                  { 'comic-mode__img--ready': page.loaded },
-                ]"
+                :class="['comic-mode__img', { 'comic-mode__img--ready': page.loaded }]"
                 loading="lazy"
                 @load="onImageLoad(idx, $event)"
                 @error="onImageError(idx)"
@@ -1341,14 +1252,10 @@ defineExpose({
               >
                 <n-spin v-if="!page.failed" size="small" />
                 <template v-if="page.retryFailed">
-                  <span class="comic-mode__fail-text"
-                    >第 {{ idx + 1 }} 页下载失败</span
-                  >
-                  <span
-                    v-if="page.failureReason"
-                    class="comic-mode__fail-detail"
-                    >{{ page.failureReason }}</span
-                  >
+                  <span class="comic-mode__fail-text">第 {{ idx + 1 }} 页下载失败</span>
+                  <span v-if="page.failureReason" class="comic-mode__fail-detail">{{
+                    page.failureReason
+                  }}</span>
                   <n-button
                     size="small"
                     type="primary"
@@ -1360,16 +1267,14 @@ defineExpose({
                 </template>
                 <span v-else>{{
                   page.failed
-                    ? "图片加载失败"
+                    ? '图片加载失败'
                     : page.decoding
                       ? `第 ${idx + 1} 页解码中...`
                       : `第 ${idx + 1} 页加载中...`
                 }}</span>
-                <span
-                  v-if="page.failed && page.failureReason"
-                  class="comic-mode__fail-detail"
-                  >{{ page.failureReason }}</span
-                >
+                <span v-if="page.failed && page.failureReason" class="comic-mode__fail-detail">{{
+                  page.failureReason
+                }}</span>
               </div>
             </template>
           </template>
@@ -1391,15 +1296,11 @@ defineExpose({
         <div class="comic-mode__chapter-sep">
           <div class="comic-mode__chapter-sep-line" />
           <p class="comic-mode__chapter-sep-title">
-            {{ nextChapterTitle || "下一章" }}
+            {{ nextChapterTitle || '下一章' }}
           </p>
         </div>
         <!-- 哨兵元素：进入视口时触发章节切换 -->
-        <div
-          ref="nextChapterSentinelRef"
-          class="comic-mode__sentinel"
-          aria-hidden="true"
-        />
+        <div ref="nextChapterSentinelRef" class="comic-mode__sentinel" aria-hidden="true" />
         <!-- 下一章图片：先经漫画缓存/代理解析，避免 WebView 直连 CDN 被拦截。 -->
         <div ref="nextSectionRef">
           <template v-if="hasNextChapterContent">
@@ -1410,9 +1311,7 @@ defineExpose({
               :style="adjacentPageStyle('next', idx)"
             >
               <template v-if="page.pending">
-                <div
-                  class="comic-mode__placeholder comic-mode__placeholder--overlay"
-                >
+                <div class="comic-mode__placeholder comic-mode__placeholder--overlay">
                   <n-spin size="small" />
                   <span>下一章第 {{ idx + 1 }} 页准备中...</span>
                 </div>
@@ -1421,10 +1320,7 @@ defineExpose({
                 <img
                   :src="page.src"
                   :alt="`下一章第 ${idx + 1} 页`"
-                  :class="[
-                    'comic-mode__img',
-                    { 'comic-mode__img--ready': page.loaded },
-                  ]"
+                  :class="['comic-mode__img', { 'comic-mode__img--ready': page.loaded }]"
                   loading="lazy"
                   @load="onAdjacentImageLoad('next', idx, page, $event)"
                   @error="onAdjacentImageError(page)"
@@ -1436,16 +1332,14 @@ defineExpose({
                   <n-spin v-if="!page.failed" size="small" />
                   <span>{{
                     page.failed
-                      ? "图片加载失败"
+                      ? '图片加载失败'
                       : page.decoding
                         ? `下一章第 ${idx + 1} 页解码中...`
                         : `下一章第 ${idx + 1} 页加载中...`
                   }}</span>
-                  <span
-                    v-if="page.failed && page.failureReason"
-                    class="comic-mode__fail-detail"
-                    >{{ page.failureReason }}</span
-                  >
+                  <span v-if="page.failed && page.failureReason" class="comic-mode__fail-detail">{{
+                    page.failureReason
+                  }}</span>
                 </div>
               </template>
             </div>
@@ -1557,11 +1451,7 @@ defineExpose({
   height: auto;
   gap: 10px;
   flex-direction: column;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.72),
-    rgba(255, 255, 255, 0.92)
-  );
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.92));
   font-size: 0.95rem;
   opacity: 1;
 }

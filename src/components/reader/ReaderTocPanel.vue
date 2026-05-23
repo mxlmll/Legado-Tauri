@@ -2,16 +2,15 @@
   阅读器目录与书籍详情抽屉，负责章节检索、跳转、缓存操作和当前阅读章节定位。
 -->
 <script setup lang="ts">
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { useVirtualList } from '@vueuse/core';
-import { Trash2, RefreshCw, Download } from 'lucide-vue-next';
-import { ref, nextTick, watch, computed } from 'vue';
-import type { ChapterItem } from '@/stores';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
-import type { ReaderBookInfo } from './types';
-import AppInput from '../base/AppInput.vue';
-import AppTabs from '../base/AppTabs.vue';
-import BookCoverImg from '../BookCoverImg.vue';
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { useVirtualList } from "@vueuse/core";
+import { Trash2, RefreshCw, Download } from "lucide-vue-next";
+import { ref, nextTick, watch, computed } from "vue";
+import type { ChapterItem } from "@/stores";
+import type { ReaderBookInfo } from "./types";
+import AppInput from "../base/AppInput.vue";
+import AppTabs from "../base/AppTabs.vue";
+import BookCoverImg from "../BookCoverImg.vue";
 
 defineOptions({ inheritAttrs: false });
 
@@ -31,29 +30,24 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:show', val: boolean): void;
-  (e: 'select', idx: number): void;
-  (e: 'refresh-toc'): void;
+  (e: "update:show", val: boolean): void;
+  (e: "select", idx: number): void;
+  (e: "refresh-toc"): void;
   /** 清理单章缓存（章节索引） */
-  (e: 'clear-chapter-cache', idx: number): void;
+  (e: "clear-chapter-cache", idx: number): void;
   /** 清理全书所有章节缓存 */
-  (e: 'clear-all-cache'): void;
+  (e: "clear-all-cache"): void;
 }>();
 
-useOverlayBackstack(
-  () => props.show,
-  () => emit('update:show', false),
-);
-
-type TabKey = 'toc' | 'detail';
+type TabKey = "toc" | "detail";
 const TOC_ITEM_HEIGHT = 48;
-const activeTab = ref<TabKey>('toc');
+const activeTab = ref<TabKey>("toc");
 const tocTabs = [
-  { key: 'toc', label: '目录' },
-  { key: 'detail', label: '详情' },
+  { key: "toc", label: "目录" },
+  { key: "detail", label: "详情" },
 ];
 
-const searchQuery = ref('');
+const searchQuery = ref("");
 
 /** 过滤后的章节列表（带原始索引） */
 const filteredChapters = computed(() => {
@@ -71,20 +65,27 @@ const {
   containerProps,
   wrapperProps,
   scrollTo,
-} = useVirtualList(filteredChapters, { itemHeight: TOC_ITEM_HEIGHT, overscan: 8 });
+} = useVirtualList(filteredChapters, {
+  itemHeight: TOC_ITEM_HEIGHT,
+  overscan: 8,
+});
 
 function getTocListElement() {
-  return document.querySelector<HTMLElement>('.reader-toc__list');
+  return document.querySelector<HTMLElement>(".reader-toc__list");
 }
 
 async function scrollCurrentChapterIntoView() {
-  const idx = filteredChapters.value.findIndex((item) => item.index === props.currentIndex);
+  const idx = filteredChapters.value.findIndex(
+    (item) => item.index === props.currentIndex,
+  );
   if (idx < 0) {
     return;
   }
 
   const listEl = getTocListElement();
-  const visibleCount = listEl ? Math.max(1, Math.floor(listEl.clientHeight / TOC_ITEM_HEIGHT)) : 1;
+  const visibleCount = listEl
+    ? Math.max(1, Math.floor(listEl.clientHeight / TOC_ITEM_HEIGHT))
+    : 1;
   const firstVisibleIndex = Math.max(0, idx - Math.floor(visibleCount / 2));
 
   // 虚拟列表的 scrollTo 默认会把目标项贴到顶部；这里先滚到目标附近，
@@ -99,9 +100,10 @@ async function scrollCurrentChapterIntoView() {
     }
     const centeredTop = Math.max(
       0,
-      idx * TOC_ITEM_HEIGHT - Math.max(0, currentListEl.clientHeight - TOC_ITEM_HEIGHT) / 2,
+      idx * TOC_ITEM_HEIGHT -
+        Math.max(0, currentListEl.clientHeight - TOC_ITEM_HEIGHT) / 2,
     );
-    currentListEl.scrollTo({ top: centeredTop, behavior: 'auto' });
+    currentListEl.scrollTo({ top: centeredTop, behavior: "auto" });
   });
 }
 
@@ -126,7 +128,7 @@ function onTocPointerUp(e: PointerEvent) {
   const dy = e.clientY - tocSwipeStartY;
   tocSwipePointerId = null;
   if (dx < -64 && Math.abs(dx) > Math.abs(dy) * 1.35) {
-    emit('update:show', false);
+    emit("update:show", false);
   }
 }
 
@@ -141,7 +143,7 @@ watch(
   (val) => {
     if (val) {
       nextTick(() => {
-        if (activeTab.value === 'toc') {
+        if (activeTab.value === "toc") {
           void scrollCurrentChapterIntoView();
         }
       });
@@ -150,9 +152,15 @@ watch(
 );
 
 watch(
-  () => [props.currentIndex, props.show, activeTab.value, searchQuery.value] as const,
+  () =>
+    [
+      props.currentIndex,
+      props.show,
+      activeTab.value,
+      searchQuery.value,
+    ] as const,
   ([, show, tab]) => {
-    if (!show || tab !== 'toc') {
+    if (!show || tab !== "toc") {
       return;
     }
     nextTick(() => {
@@ -162,16 +170,16 @@ watch(
 );
 
 function onSelect(idx: number) {
-  emit('select', idx);
-  emit('update:show', false);
+  emit("select", idx);
+  emit("update:show", false);
 }
 
 function formatTime(ts?: number) {
   if (!ts) {
-    return '—';
+    return "—";
   }
   const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 const detailRows = computed(() => {
@@ -181,40 +189,40 @@ const detailRows = computed(() => {
   }
   const rows: { label: string; value: string; isUrl?: boolean }[] = [];
   if (b.sourceName) {
-    rows.push({ label: '来源扩展', value: b.sourceName });
+    rows.push({ label: "来源扩展", value: b.sourceName });
   }
   if (b.fileName) {
-    rows.push({ label: '书源文件', value: b.fileName });
+    rows.push({ label: "书源文件", value: b.fileName });
   }
   if (b.bookUrl) {
-    rows.push({ label: '书籍地址', value: b.bookUrl, isUrl: true });
+    rows.push({ label: "书籍地址", value: b.bookUrl, isUrl: true });
   }
   if (b.kind) {
-    rows.push({ label: '分类标签', value: b.kind });
+    rows.push({ label: "分类标签", value: b.kind });
   }
   if (b.status) {
-    rows.push({ label: '状态', value: b.status });
+    rows.push({ label: "状态", value: b.status });
   }
   if (b.lastChapter) {
-    rows.push({ label: '最新章节', value: b.lastChapter });
+    rows.push({ label: "最新章节", value: b.lastChapter });
   }
   if (b.wordCount) {
-    rows.push({ label: '字数', value: b.wordCount });
+    rows.push({ label: "字数", value: b.wordCount });
   }
   if (b.chapterCount) {
-    rows.push({ label: '章节总数', value: `${b.chapterCount} 章` });
+    rows.push({ label: "章节总数", value: `${b.chapterCount} 章` });
   }
   if (b.updateTime) {
-    rows.push({ label: '更新时间', value: b.updateTime });
+    rows.push({ label: "更新时间", value: b.updateTime });
   }
   if (b.totalChapters) {
-    rows.push({ label: '目录章节数', value: `${b.totalChapters} 章` });
+    rows.push({ label: "目录章节数", value: `${b.totalChapters} 章` });
   }
   if (b.addedAt) {
-    rows.push({ label: '加入时间', value: formatTime(b.addedAt) });
+    rows.push({ label: "加入时间", value: formatTime(b.addedAt) });
   }
   if (b.lastReadAt) {
-    rows.push({ label: '最后阅读', value: formatTime(b.lastReadAt) });
+    rows.push({ label: "最后阅读", value: formatTime(b.lastReadAt) });
   }
   return rows;
 });
@@ -223,7 +231,11 @@ const detailRows = computed(() => {
 <template>
   <!-- 遮罩 -->
   <Transition name="reader-toc-fade">
-    <div v-if="show" class="reader-toc__overlay" @click="emit('update:show', false)" />
+    <div
+      v-if="show"
+      class="reader-toc__overlay"
+      @click="emit('update:show', false)"
+    />
   </Transition>
 
   <!-- 面板 -->
@@ -245,9 +257,13 @@ const detailRows = computed(() => {
           :alt="bookInfo.name"
         />
         <div class="reader-toc__book-meta">
-          <div class="reader-toc__book-name" :title="bookInfo.name">{{ bookInfo.name }}</div>
+          <div class="reader-toc__book-name" :title="bookInfo.name">
+            {{ bookInfo.name }}
+          </div>
           <div class="reader-toc__book-author">{{ bookInfo.author }}</div>
-          <div v-if="bookInfo.kind" class="reader-toc__book-kind">{{ bookInfo.kind }}</div>
+          <div v-if="bookInfo.kind" class="reader-toc__book-kind">
+            {{ bookInfo.kind }}
+          </div>
         </div>
       </div>
 
@@ -271,7 +287,11 @@ const detailRows = computed(() => {
         </div>
         <!-- 详细信息 -->
         <div class="reader-toc__info-list">
-          <div v-for="row in detailRows" :key="row.label" class="reader-toc__info-row">
+          <div
+            v-for="row in detailRows"
+            :key="row.label"
+            class="reader-toc__info-row"
+          >
             <span class="reader-toc__info-label">{{ row.label }}</span>
             <a
               v-if="row.isUrl"
@@ -281,10 +301,14 @@ const detailRows = computed(() => {
               @click.prevent="openUrl(row.value)"
               >{{ row.value }}</a
             >
-            <span v-else class="reader-toc__info-value" :title="row.value">{{ row.value }}</span>
+            <span v-else class="reader-toc__info-value" :title="row.value">{{
+              row.value
+            }}</span>
           </div>
         </div>
-        <div v-if="!bookInfo && !detailRows.length" class="reader-toc__empty">暂无书籍详细信息</div>
+        <div v-if="!bookInfo && !detailRows.length" class="reader-toc__empty">
+          暂无书籍详细信息
+        </div>
       </div>
 
       <!-- 目录列表 -->
@@ -304,12 +328,14 @@ const detailRows = computed(() => {
             <button
               class="reader-toc__refresh-btn"
               :disabled="props.refreshingToc"
-              :class="{ 'reader-toc__refresh-btn--spinning': props.refreshingToc }"
+              :class="{
+                'reader-toc__refresh-btn--spinning': props.refreshingToc,
+              }"
               title="更新目录"
               @click="emit('refresh-toc')"
             >
               <RefreshCw :size="14" />
-              {{ props.refreshingToc ? '更新中…' : '更新目录' }}
+              {{ props.refreshingToc ? "更新中…" : "更新目录" }}
             </button>
           </div>
         </div>
@@ -318,7 +344,10 @@ const detailRows = computed(() => {
           <AppInput v-model="searchQuery" placeholder="搜索章节…" />
         </div>
         <!-- 虚拟滚动章节列表 -->
-        <div v-bind="containerProps" class="reader-toc__list app-scrollbar app-scrollbar--inverse">
+        <div
+          v-bind="containerProps"
+          class="reader-toc__list app-scrollbar app-scrollbar--inverse"
+        >
           <div v-bind="wrapperProps">
             <div
               v-for="item in virtualList"
@@ -329,7 +358,8 @@ const detailRows = computed(() => {
               :class="{
                 'reader-toc__item--active': item.data.index === currentIndex,
                 'reader-toc__item--read':
-                  item.data.index !== currentIndex && readIndices?.has(item.data.index),
+                  item.data.index !== currentIndex &&
+                  readIndices?.has(item.data.index),
                 'reader-toc__item--cached': cachedIndices?.has(item.data.index),
                 'reader-toc__item--no-cache':
                   cachedIndices &&
@@ -361,7 +391,11 @@ const detailRows = computed(() => {
               >
               <button
                 class="reader-toc__item-clear"
-                :class="{ 'reader-toc__item-clear--visible': cachedIndices?.has(item.data.index) }"
+                :class="{
+                  'reader-toc__item-clear--visible': cachedIndices?.has(
+                    item.data.index,
+                  ),
+                }"
                 :disabled="!cachedIndices?.has(item.data.index)"
                 :aria-hidden="!cachedIndices?.has(item.data.index)"
                 title="清除本章缓存"
@@ -399,7 +433,10 @@ const detailRows = computed(() => {
   flex-direction: column;
   /* 无 bookInfo 头部时，tabs 直接贴顶，用 padding-top 避让状态栏 */
   padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
-  padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  padding-bottom: var(
+    --safe-area-inset-bottom,
+    env(safe-area-inset-bottom, 0px)
+  );
   touch-action: pan-y;
 }
 

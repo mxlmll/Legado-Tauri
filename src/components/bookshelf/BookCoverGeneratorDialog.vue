@@ -2,7 +2,7 @@
 import { Check, RefreshCw } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import { useBookshelfStore, type ShelfBook } from '@/stores';
 import { BUILTIN_COVER_GENERATORS } from '@/utils/defaultCoverGenerators';
 import BookCoverImg from '../BookCoverImg.vue';
@@ -125,7 +125,7 @@ function closeDialog() {
   emit('update:show', false);
 }
 
-useOverlayBackstack(() => props.show, closeDialog);
+useOverlay(() => props.show, closeDialog);
 
 watch(
   () => [props.show, props.book] as const,

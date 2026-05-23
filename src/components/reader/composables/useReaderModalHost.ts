@@ -15,7 +15,7 @@ import type { ChapterItem } from "@/stores";
 import type { CachedChapter } from "@/types";
 import { eventListenSync } from "@/composables/useEventBus";
 import { FRONTEND_PLUGIN_TOAST_EVENT } from "@/composables/useFrontendPlugins";
-import { useOverlayBackstack } from "@/composables/useOverlayBackstack";
+import { useOverlay } from "@/composables/useOverlay";
 import { useUserFonts } from "@/composables/useUserFonts";
 import { createReaderCacheController } from "@/features/reader/services/readerCache";
 import {
@@ -385,21 +385,6 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
 
       options.localAddedShelfId.value = result.id;
 
-      const readingChapterIndex = options.getReadingChapterIndex();
-      const chapter = options.getChapter(readingChapterIndex);
-      if (chapter) {
-        await options
-          .updateProgress(
-            result.id,
-            readingChapterIndex,
-            options.getReadingChapterUrl() || chapter.url,
-            {
-              ...options.buildProgressPayload(),
-            },
-          )
-          .catch(() => {});
-      }
-
       options.message.success("已加入书架");
       options.emitAddedToShelf(result.id);
       return true;
@@ -438,53 +423,47 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
     options.emitUpdateShow(false);
   }
 
-  async function closeWithBackBehavior() {
-    await close();
-    if (options.settings.backBehavior === "desktop") {
-      try {
-        const { getCurrentWindow } = await import("@tauri-apps/api/window");
-        await getCurrentWindow().minimize();
-      } catch {
-        // 非 Tauri 环境忽略
-      }
-    }
-  }
-
-  useOverlayBackstack(
+  const { reactivate: reactivateReaderBackHandler } = useOverlay(
     () => options.getShow(),
     () => {
       void closeWithBackBehavior();
     },
   );
 
-  useOverlayBackstack(
+  async function closeWithBackBehavior() {
+    if (options.settings.backBehavior === "desktop") {
+      try {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        await getCurrentWindow().minimize();
+        // handler 已被消耗但 reader 仍显示，重新注册以备下次返回
+        reactivateReaderBackHandler();
+        return;
+      } catch {
+        // Tauri 不可用时降级为书架行为
+      }
+    }
+    await close();
+  }
+
+  let reactivateMenuBackHandler = () => {};
+  const menuOverlay = useOverlay(
     () => options.getShow() && options.showMenu.value,
     () => {
-      options.settingsVisible.value = false;
-      options.closeMenuLayerSettings();
+      if (options.settingsVisible.value) {
+        options.settingsVisible.value = false;
+        options.closeMenuLayerSettings();
+        reactivateMenuBackHandler();
+        return;
+      }
       options.showMenu.value = false;
     },
   );
+  reactivateMenuBackHandler = menuOverlay.reactivate;
 
-  useOverlayBackstack(
+  useOverlay(
     () => options.getShow() && options.showToc.value,
     () => {
       options.showToc.value = false;
-    },
-  );
-
-  useOverlayBackstack(
-    () => options.getShow() && options.settingsVisible.value,
-    () => {
-      options.settingsVisible.value = false;
-      options.closeMenuLayerSettings();
-    },
-  );
-
-  useOverlayBackstack(
-    () => options.getShow() && options.showSourceSwitchDialog.value,
-    () => {
-      options.showSourceSwitchDialog.value = false;
     },
   );
 
@@ -495,8 +474,12 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
       } else if (!options.showMenu.value) {
         options.readerUiStore.openMenu();
       } else {
-        options.settingsVisible.value = false;
-        options.showMenu.value = false;
+        if (options.settingsVisible.value) {
+          options.settingsVisible.value = false;
+          options.closeMenuLayerSettings();
+        } else {
+          options.showMenu.value = false;
+        }
       }
       return;
     }
@@ -567,8 +550,12 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
       if (options.showToc.value) {
         options.showToc.value = false;
       } else if (options.showMenu.value) {
-        options.settingsVisible.value = false;
-        options.showMenu.value = false;
+        if (options.settingsVisible.value) {
+          options.settingsVisible.value = false;
+          options.closeMenuLayerSettings();
+        } else {
+          options.showMenu.value = false;
+        }
       } else {
         options.readerUiStore.openMenu();
       }
@@ -715,6 +702,7 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
     ensureFrontendPlugins: options.ensureFrontendPlugins,
     ensureUserFontsLoaded: loadUserFonts,
     getShelfBook: options.getShelfBook,
+    getChapter: options.getChapter,
     activateBookSettings: options.activateBookSettings,
     deactivateBookSettings: options.deactivateBookSettings,
     clearLocalAddedShelfId: () => {

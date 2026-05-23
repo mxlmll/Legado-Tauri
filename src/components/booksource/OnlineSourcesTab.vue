@@ -1,8 +1,9 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { useMessage, useDialog } from 'naive-ui';
+import { useMessage } from 'naive-ui';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useBackAwareDialog as useDialog } from '@/composables/useBackAwareDialog';
+import { useOverlay } from '@/composables/useOverlay';
 import { safeRandomUUID } from '@/utils/uuid';
 import { formatVersion, compareVersions } from '@/utils/versionUtils';
 import defaultLogoUrl from '../../assets/booksource-default.svg';
@@ -85,7 +86,7 @@ const bulkForceUpdating = ref(false);
 const showRepoModal = ref(false);
 const repoForm = ref({ id: '', name: '', url: '', description: '' });
 
-useOverlayBackstack(
+useOverlay(
   () => showRepoModal.value,
   () => {
     showRepoModal.value = false;

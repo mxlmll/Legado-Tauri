@@ -1,7 +1,7 @@
-﻿<!-- ExtensionsView — 前端插件管理页，负责插件安装、编辑、启停、排序、示例与配置管理。 -->
+<!-- ExtensionsView — 前端插件管理页，负责插件安装、编辑、启停、排序、示例与配置管理。 -->
 <script setup lang="ts">
 import { Folder, Search, Code2 } from 'lucide-vue-next';
-import { useMessage, useDialog, type DropdownOption } from 'naive-ui';
+import { useMessage, type DropdownOption } from 'naive-ui';
 import { storeToRefs } from 'pinia';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import JavaScriptHighlightEditor from '@/components/base/JavaScriptHighlightEditor.vue';
@@ -9,10 +9,11 @@ import ExampleCard from '@/components/extensions/ExampleCard.vue';
 import ExtensionCard from '@/components/extensions/ExtensionCard.vue';
 import AppPageHeader from '@/components/layout/AppPageHeader.vue';
 import MobileToolbarMenu from '@/components/layout/MobileToolbarMenu.vue';
+import { useBackAwareDialog as useDialog } from '@/composables/useBackAwareDialog';
 import { isMobile } from '@/composables/useEnv';
 import { eventListen } from '@/composables/useEventBus';
 import { invokeWithTimeout } from '@/composables/useInvoke';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 import {
   useFrontendPluginsStore,
   type PluginSettingValue,
@@ -69,19 +70,19 @@ const settingsFields = ref<ResolvedPluginSettingField[]>([]);
 const settingsValues = ref<Record<string, PluginSettingValue>>({});
 const settingsDraftValues = ref<Record<string, PluginSettingValue>>({});
 
-useOverlayBackstack(
+useOverlay(
   () => showEditor.value,
   () => {
     showEditor.value = false;
   },
 );
-useOverlayBackstack(
+useOverlay(
   () => showPreview.value,
   () => {
     showPreview.value = false;
   },
 );
-useOverlayBackstack(
+useOverlay(
   () => showSettings.value,
   () => {
     showSettings.value = false;
@@ -92,7 +93,7 @@ const showUrlImport = ref(false);
 const urlImportUrl = ref('');
 const urlImporting = ref(false);
 
-useOverlayBackstack(
+useOverlay(
   () => showUrlImport.value,
   () => {
     showUrlImport.value = false;

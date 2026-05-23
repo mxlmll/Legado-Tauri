@@ -2,7 +2,7 @@
 import { GripVertical } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 import type { BookSourceMeta } from '@/types';
-import { useOverlayBackstack } from '@/composables/useOverlayBackstack';
+import { useOverlay } from '@/composables/useOverlay';
 
 const props = defineProps<{
   show: boolean;
@@ -14,7 +14,7 @@ const emit = defineEmits<{
   confirm: [fileNames: string[]];
 }>();
 
-useOverlayBackstack(
+useOverlay(
   () => props.show,
   () => emit('update:show', false),
 );
