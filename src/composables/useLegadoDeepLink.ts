@@ -2,6 +2,7 @@ import { isTauri, isHarmonyNative } from './useEnv';
 import { eventListen } from './useEventBus';
 
 const LEGADO_SCHEME = 'legado:';
+const DEEP_LINK_DEDUPE_MS = 1000;
 
 // ── 深链接类型定义 ────────────────────────────────────────────────────────────
 export type LegadoDeepLinkPayload =
@@ -114,36 +115,70 @@ export function parseLegadoBookSourceUrl(rawUrl: string): string {
 
 type DeepLinkHandler = (urls: string[]) => void;
 
-interface HarmonyDeepLinkPayload {
+interface DeepLinkEventPayloadObject {
   urls?: string[];
   url?: string;
 }
 
+type NativeDeepLinkPayload = DeepLinkEventPayloadObject | string[] | string | null | undefined;
+
+function readDeepLinkUrls(payload: NativeDeepLinkPayload): string[] {
+  if (typeof payload === 'string') {
+    return payload ? [payload] : [];
+  }
+  if (Array.isArray(payload)) {
+    return payload.filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
+  }
+  if (payload && typeof payload === 'object') {
+    if (Array.isArray(payload.urls)) {
+      return payload.urls.filter(
+        (url): url is string => typeof url === 'string' && url.trim().length > 0,
+      );
+    }
+    if (typeof payload.url === 'string' && payload.url.trim()) {
+      return [payload.url];
+    }
+  }
+  return [];
+}
+
 export async function installLegadoDeepLinkListener(handler: DeepLinkHandler): Promise<() => void> {
   const unlisteners: Array<() => void> = [];
+  const recentLinks = new Map<string, number>();
+
+  const deliver = (urls: string[]) => {
+    const now = Date.now();
+    const unique = urls.filter((url) => {
+      const normalized = url.trim();
+      if (!normalized) {
+        return false;
+      }
+      const lastSeenAt = recentLinks.get(normalized) ?? 0;
+      recentLinks.set(normalized, now);
+      return now - lastSeenAt > DEEP_LINK_DEDUPE_MS;
+    });
+    if (unique.length) {
+      handler(unique);
+    }
+  };
 
   if (isTauri) {
     try {
       const { getCurrent, onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
       const current = await getCurrent();
       if (current?.length) {
-        handler(current);
+        deliver(current);
       }
-      const unlisten = await onOpenUrl((urls) => handler(urls));
+      const unlisten = await onOpenUrl((urls) => deliver(urls));
       unlisteners.push(unlisten);
     } catch (e) {
       console.warn('[LegadoDeepLink] Tauri deep-link 初始化失败:', e);
     }
   }
 
-  if (isHarmonyNative) {
-    const unlisten = await eventListen<HarmonyDeepLinkPayload>('deep-link://new-url', (event) => {
-      const payload = event.payload;
-      if (Array.isArray(payload?.urls)) {
-        handler(payload.urls);
-      } else if (payload?.url) {
-        handler([payload.url]);
-      }
+  if (isTauri || isHarmonyNative) {
+    const unlisten = await eventListen<NativeDeepLinkPayload>('deep-link://new-url', (event) => {
+      deliver(readDeepLinkUrls(event.payload));
     });
     unlisteners.push(unlisten);
   }
@@ -154,7 +189,7 @@ export async function installLegadoDeepLinkListener(handler: DeepLinkHandler): P
     const fromHash = url.hash.startsWith('#legado=') ? url.hash.slice('#legado='.length) : '';
     const current = fromQuery ?? fromHash;
     if (current) {
-      handler([current]);
+      deliver([current]);
     }
   }
 

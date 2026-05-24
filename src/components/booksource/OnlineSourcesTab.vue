@@ -946,6 +946,7 @@ onUnmounted(() => {
 
 defineExpose({
   openAddRepo,
+  openAddRepoFromDeepLink,
   fetchOnlineSources,
   removeActiveRepo,
   recheckInstalledSources,

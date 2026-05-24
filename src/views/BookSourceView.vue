@@ -1,47 +1,63 @@
 ﻿<script setup lang="ts">
-import { Folder } from 'lucide-vue-next';
-import { useMessage } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
+import { Folder } from "lucide-vue-next";
+import { useMessage } from "naive-ui";
+import { storeToRefs } from "pinia";
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from "vue";
 import type {
   DebugSourceTabInstance,
   InstalledSourcesTabInstance,
   OnlineSourcesTabInstance,
-} from '@/types';
-import { eventEmit, eventListen } from '@/composables/useEventBus';
-import { invokeWithTimeout } from '@/composables/useInvoke';
-import { useMobileHorizontalSwipe } from '@/composables/useMobileHorizontalSwipe';
-import { useBookSourceStore } from '@/stores';
-import AiSourceTab from '../components/booksource/AiSourceTab.vue';
-import DebugSourceTab from '../components/booksource/DebugSourceTab.vue';
-import InstalledSourcesTab from '../components/booksource/InstalledSourcesTab.vue';
-import OnlineSourcesTab from '../components/booksource/OnlineSourcesTab.vue';
-import TestSourcesTab from '../components/booksource/TestSourcesTab.vue';
-import AppPageHeader from '../components/layout/AppPageHeader.vue';
-import MobileToolbarMenu from '../components/layout/MobileToolbarMenu.vue';
-import { type BookSourceMeta, getBookSourceDir } from '../composables/useBookSource';
-import { isMobile } from '../composables/useEnv';
+} from "@/types";
+import { eventEmit, eventListen } from "@/composables/useEventBus";
+import { invokeWithTimeout } from "@/composables/useInvoke";
+import { useMobileHorizontalSwipe } from "@/composables/useMobileHorizontalSwipe";
+import { useBookSourceStore, useNavigationStore } from "@/stores";
+import AiSourceTab from "../components/booksource/AiSourceTab.vue";
+import DebugSourceTab from "../components/booksource/DebugSourceTab.vue";
+import InstalledSourcesTab from "../components/booksource/InstalledSourcesTab.vue";
+import OnlineSourcesTab from "../components/booksource/OnlineSourcesTab.vue";
+import TestSourcesTab from "../components/booksource/TestSourcesTab.vue";
+import AppPageHeader from "../components/layout/AppPageHeader.vue";
+import MobileToolbarMenu from "../components/layout/MobileToolbarMenu.vue";
+import {
+  type BookSourceMeta,
+  getBookSourceDir,
+} from "../composables/useBookSource";
+import { isMobile } from "../composables/useEnv";
 
 const message = useMessage();
 const bookSourceStore = useBookSourceStore();
+const navigationStore = useNavigationStore();
 
 // sources / loading / streamingLoaded 直接响应式引用 store，流式批次到达时自动更新
-const { sources, loading, sourceDirs: storeDirs, streamingLoaded } = storeToRefs(bookSourceStore);
+const {
+  sources,
+  loading,
+  sourceDirs: storeDirs,
+  streamingLoaded,
+} = storeToRefs(bookSourceStore);
+const { onlineRepoDeepLinkRequest } = storeToRefs(navigationStore);
 
-type BookSourceTab = 'installed' | 'online' | 'debug' | 'test' | 'ai';
-const BOOK_SOURCE_TABS: BookSourceTab[] = ['installed', 'online', 'debug', 'test', 'ai'];
+type BookSourceTab = "installed" | "online" | "debug" | "test" | "ai";
+const BOOK_SOURCE_TABS: BookSourceTab[] = [
+  "installed",
+  "online",
+  "debug",
+  "test",
+  "ai",
+];
 
-const activeTab = ref<BookSourceTab>('installed');
+const activeTab = ref<BookSourceTab>("installed");
 
 // ---- 共享状态 ----
-const sourceDir = ref('');
+const sourceDir = ref("");
 const sourceDirs = computed(() => storeDirs.value);
 
 const shortSourceDir = computed(() => {
   if (!sourceDir.value) {
-    return '';
+    return "";
   }
-  const sep = sourceDir.value.includes('\\') ? '\\' : '/';
+  const sep = sourceDir.value.includes("\\") ? "\\" : "/";
   const parts = sourceDir.value.split(sep).filter(Boolean);
   if (parts.length <= 3) {
     return sourceDir.value;
@@ -54,9 +70,11 @@ async function openSourceDirInExplorer() {
     return;
   }
   try {
-    await invokeWithTimeout('open_dir_in_explorer', { path: sourceDir.value });
+    await invokeWithTimeout("open_dir_in_explorer", { path: sourceDir.value });
   } catch (e: unknown) {
-    message.error(`无法打开目录: ${e instanceof Error ? e.message : String(e)}`);
+    message.error(
+      `无法打开目录: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 
@@ -70,7 +88,10 @@ async function loadSources() {
   _loadSourcesInFlight = true;
   try {
     // bookSourceStore.loadSources() 内部流式追加 sources，目录信息单独取
-    const [, dir] = await Promise.all([bookSourceStore.loadSources(), getBookSourceDir()]);
+    const [, dir] = await Promise.all([
+      bookSourceStore.loadSources(),
+      getBookSourceDir(),
+    ]);
     sourceDir.value = dir;
     // sourceDirs 通过 storeToRefs 已响应式绑定，无需手动同步
   } catch (e: unknown) {
@@ -94,28 +115,55 @@ function onNavigateTab(tab: string) {
 
 function onSelectDebugSource(source: BookSourceMeta) {
   pendingDebugSource.value = source;
-  activeTab.value = 'debug';
+  activeTab.value = "debug";
+}
+
+async function handleOnlineRepoDeepLinkRequest() {
+  const request = onlineRepoDeepLinkRequest.value;
+  if (!request) {
+    return;
+  }
+
+  activeTab.value = "online";
+  await nextTick();
+  if (!onlineRef.value) {
+    await nextTick();
+  }
+  if (!onlineRef.value) {
+    return;
+  }
+
+  onlineRef.value.openAddRepoFromDeepLink(request.url, request.name);
+  navigationStore.consumeOnlineRepoDeepLinkRequest(request.id);
 }
 
 watch(
   () => [activeTab.value, debugRef.value, pendingDebugSource.value] as const,
   async ([tab, debugInstance, source]) => {
-    if (tab !== 'debug' || !debugInstance || !source) {
+    if (tab !== "debug" || !debugInstance || !source) {
       return;
     }
     await nextTick();
     debugInstance.setDebugSource(source);
     pendingDebugSource.value = null;
   },
-  { flush: 'post' },
+  { flush: "post" },
 );
 
-function switchActiveTab(direction: 'prev' | 'next') {
+watch(
+  () => [onlineRepoDeepLinkRequest.value?.id, onlineRef.value] as const,
+  () => {
+    void handleOnlineRepoDeepLinkRequest();
+  },
+  { flush: "post", immediate: true },
+);
+
+function switchActiveTab(direction: "prev" | "next") {
   const idx = BOOK_SOURCE_TABS.indexOf(activeTab.value);
   if (idx < 0) {
     return;
   }
-  const nextIdx = direction === 'next' ? idx + 1 : idx - 1;
+  const nextIdx = direction === "next" ? idx + 1 : idx - 1;
   if (nextIdx < 0 || nextIdx >= BOOK_SOURCE_TABS.length) {
     return;
   }
@@ -129,64 +177,64 @@ const {
   onSwipePointerCancel,
   onSwipeClickCapture,
 } = useMobileHorizontalSwipe({
-  onSwipeLeft: () => switchActiveTab('next'),
-  onSwipeRight: () => switchActiveTab('prev'),
+  onSwipeLeft: () => switchActiveTab("next"),
+  onSwipeRight: () => switchActiveTab("prev"),
 });
 
 // ── 移动端工具栏菜单 ──────────────────────────────────────────────────
 const newSourceOptions = [
-  { label: '小说书源', key: 'new-novel' },
-  { label: '视频书源', key: 'new-video' },
+  { label: "小说书源", key: "new-novel" },
+  { label: "视频书源", key: "new-video" },
 ];
 
 const mobileMenuOptions = computed(() => [
-  { label: '目录管理', key: 'dir' },
-  { label: '导入本地', key: 'import-file' },
-  { label: '导入在线', key: 'import-online' },
-  { label: '导出书源', key: 'export-file' },
-  { label: '新建书源', key: 'new', children: newSourceOptions },
-  { label: '全部重载', key: 'reload', disabled: loading.value },
+  { label: "目录管理", key: "dir" },
+  { label: "导入本地", key: "import-file" },
+  { label: "导入在线", key: "import-online" },
+  { label: "导出书源", key: "export-file" },
+  { label: "新建书源", key: "new", children: newSourceOptions },
+  { label: "全部重载", key: "reload", disabled: loading.value },
 ]);
 
 const onlineMenuOptions = computed(() => [
-  { label: '获取列表', key: 'fetch-online' },
-  { label: '添加仓库', key: 'add-online-repo' },
-  { label: '移除仓库', key: 'remove-online-repo' },
-  { label: '重新检查', key: 'recheck-online' },
-  { label: '批量安装', key: 'install-all-online' },
-  { label: '批量更新', key: 'update-all-online' },
-  { label: '批量强制更新', key: 'force-update-all-online' },
+  { label: "获取列表", key: "fetch-online" },
+  { label: "添加仓库", key: "add-online-repo" },
+  { label: "移除仓库", key: "remove-online-repo" },
+  { label: "重新检查", key: "recheck-online" },
+  { label: "批量安装", key: "install-all-online" },
+  { label: "批量更新", key: "update-all-online" },
+  { label: "批量强制更新", key: "force-update-all-online" },
 ]);
 
 const onlineBatchOptions = [
-  { label: '重新检查', key: 'recheck-online' },
-  { label: '批量安装', key: 'install-all-online' },
-  { label: '批量更新', key: 'update-all-online' },
-  { label: '批量强制更新', key: 'force-update-all-online' },
+  { label: "重新检查", key: "recheck-online" },
+  { label: "批量安装", key: "install-all-online" },
+  { label: "批量更新", key: "update-all-online" },
+  { label: "批量强制更新", key: "force-update-all-online" },
 ];
 
 function handleMobileMenuSelect(key: string) {
   switch (key) {
-    case 'dir':
+    case "dir":
       installedRef.value?.openDirManager();
       break;
-    case 'import-file':
+    case "import-file":
       installedRef.value?.importFromFile();
       break;
-    case 'import-online':
+    case "import-online":
       installedRef.value?.importFromUrl();
       break;
-    case 'export-file':
+    case "export-file":
       void installedRef.value?.exportSources();
       break;
-    case 'new':
-    case 'new-novel':
-      installedRef.value?.openEditor(undefined, 'novel');
+    case "new":
+    case "new-novel":
+      installedRef.value?.openEditor(undefined, "novel");
       break;
-    case 'new-video':
-      installedRef.value?.openEditor(undefined, 'video');
+    case "new-video":
+      installedRef.value?.openEditor(undefined, "video");
       break;
-    case 'reload':
+    case "reload":
       installedRef.value?.reloadAllSources();
       break;
   }
@@ -194,25 +242,25 @@ function handleMobileMenuSelect(key: string) {
 
 function handleOnlineMenuSelect(key: string) {
   switch (key) {
-    case 'fetch-online':
+    case "fetch-online":
       void onlineRef.value?.fetchOnlineSources();
       break;
-    case 'add-online-repo':
+    case "add-online-repo":
       onlineRef.value?.openAddRepo();
       break;
-    case 'remove-online-repo':
+    case "remove-online-repo":
       onlineRef.value?.removeActiveRepo();
       break;
-    case 'recheck-online':
+    case "recheck-online":
       void onlineRef.value?.recheckInstalledSources();
       break;
-    case 'install-all-online':
+    case "install-all-online":
       void onlineRef.value?.installAll();
       break;
-    case 'update-all-online':
+    case "update-all-online":
       void onlineRef.value?.updateAll();
       break;
-    case 'force-update-all-online':
+    case "force-update-all-online":
       onlineRef.value?.confirmForceUpdateAll();
       break;
   }
@@ -224,7 +272,7 @@ async function handleForceReload() {
     return;
   }
   await loadSources();
-  await eventEmit('app:booksource-reload', { scope: 'all' });
+  await eventEmit("app:booksource-reload", { scope: "all" });
 }
 
 // ── 初始化 ──
@@ -242,12 +290,12 @@ onMounted(async () => {
   }
 
   const unlisten = await eventListen<{ fileName?: string; reason?: string }>(
-    'booksource:changed',
+    "booksource:changed",
     async (event) => {
       const { fileName, reason } = event.payload ?? {};
       if (fileName) {
         // toggle 操作仅修改 enabled 字段，前端已就地更新，无需全量重载（避免列表滚动到顶部）
-        if (reason === 'toggle') {
+        if (reason === "toggle") {
           return;
         }
         bookSourceStore.invalidateCapability(fileName);
@@ -267,11 +315,14 @@ onMounted(async () => {
   }
   unlistenFileChange = unlisten;
 
-  const unlistenReload = await eventListen<{ view?: string }>('app:view-reload', async (event) => {
-    if (event.payload?.view === 'booksource') {
-      await handleForceReload();
-    }
-  });
+  const unlistenReload = await eventListen<{ view?: string }>(
+    "app:view-reload",
+    async (event) => {
+      if (event.payload?.view === "booksource") {
+        await handleForceReload();
+      }
+    },
+  );
 
   if (!_bsvMounted) {
     unlistenReload();
@@ -291,7 +342,11 @@ onUnmounted(() => {
 
 <template>
   <div class="booksource-view">
-    <AppPageHeader title="书源管理" :divider="true" :hide-subtitle-on-mobile="true">
+    <AppPageHeader
+      title="书源管理"
+      :divider="true"
+      :hide-subtitle-on-mobile="true"
+    >
       <template #title-extra>
         <div
           class="bv-header__dir bv-header__dir--clickable"
@@ -311,7 +366,10 @@ onUnmounted(() => {
       <template #subtitle> 管理已安装书源、浏览在线仓库 </template>
       <template #actions>
         <template v-if="activeTab === 'installed'">
-          <MobileToolbarMenu :options="mobileMenuOptions" @select="handleMobileMenuSelect">
+          <MobileToolbarMenu
+            :options="mobileMenuOptions"
+            @select="handleMobileMenuSelect"
+          >
             <n-button
               size="small"
               quaternary
@@ -319,10 +377,16 @@ onUnmounted(() => {
               @click="installedRef?.openDirManager()"
               >目录</n-button
             >
-            <n-button size="small" quaternary @click="installedRef?.importFromFile()"
+            <n-button
+              size="small"
+              quaternary
+              @click="installedRef?.importFromFile()"
               >导入本地</n-button
             >
-            <n-button size="small" quaternary @click="installedRef?.importFromUrl()"
+            <n-button
+              size="small"
+              quaternary
+              @click="installedRef?.importFromUrl()"
               >导入在线</n-button
             >
             <n-dropdown
@@ -332,18 +396,34 @@ onUnmounted(() => {
             >
               <n-button size="small" type="primary">新建书源</n-button>
             </n-dropdown>
-            <n-button size="small" :loading="loading" @click="installedRef?.reloadAllSources()"
+            <n-button
+              size="small"
+              :loading="loading"
+              @click="installedRef?.reloadAllSources()"
               >全部重载</n-button
             >
           </MobileToolbarMenu>
         </template>
         <template v-else-if="activeTab === 'online'">
-          <MobileToolbarMenu :options="onlineMenuOptions" @select="handleOnlineMenuSelect">
-            <n-button size="small" type="primary" @click="onlineRef?.fetchOnlineSources()"
+          <MobileToolbarMenu
+            :options="onlineMenuOptions"
+            @select="handleOnlineMenuSelect"
+          >
+            <n-button
+              size="small"
+              type="primary"
+              @click="onlineRef?.fetchOnlineSources()"
               >获取列表</n-button
             >
-            <n-button size="small" quaternary @click="onlineRef?.openAddRepo()">添加仓库</n-button>
-            <n-button size="small" quaternary @click="onlineRef?.removeActiveRepo()">移除</n-button>
+            <n-button size="small" quaternary @click="onlineRef?.openAddRepo()"
+              >添加仓库</n-button
+            >
+            <n-button
+              size="small"
+              quaternary
+              @click="onlineRef?.removeActiveRepo()"
+              >移除</n-button
+            >
             <n-dropdown
               trigger="click"
               :options="onlineBatchOptions"
@@ -369,7 +449,9 @@ onUnmounted(() => {
         :show-indicator="false"
         processing
       />
-      <span class="bv-streaming-bar__text">正在加载书源 · 已加载 {{ streamingLoaded }} 条</span>
+      <span class="bv-streaming-bar__text"
+        >正在加载书源 · 已加载 {{ streamingLoaded }} 条</span
+      >
     </div>
 
     <!-- 主 Tabs -->
@@ -461,7 +543,7 @@ onUnmounted(() => {
 
 .bv-header__dir-path {
   font-size: var(--fs-11);
-  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-family: "Cascadia Code", "Consolas", monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
