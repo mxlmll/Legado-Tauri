@@ -6,13 +6,30 @@
  * 滚动至下一章区域时自动触发 next-chapter-entered 事件通知父组件切换章节元数据。
  * 无下一章时在底部显示章节结束画面。
  */
-import { NSpin } from 'naive-ui';
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { NSpin } from "naive-ui";
+import {
+  ref,
+  computed,
+  watch,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
+import {
+  createParagraphCommentSummaryMap,
+  formatParagraphCommentCount,
+  type ParagraphCommentClickPayload,
+  type ParagraphCommentSummary,
+} from "@/features/reader/services/readerParagraphComments";
 import {
   decodeScrollLineAnchor,
   encodeScrollLineAnchor,
   type ScrollLineAnchor,
-} from '../composables/useReaderPosition';
+} from "../composables/useReaderPosition";
+import {
+  splitReaderParagraphs,
+  type ReaderParagraph,
+} from "../utils/paragraphs";
 
 const props = defineProps<{
   content: string;
@@ -28,6 +45,7 @@ const props = defineProps<{
   /** 预加载的下一章章节名 */
   nextChapterTitle?: string;
   nextChapterLoading?: boolean;
+  paragraphCommentSummaries?: ParagraphCommentSummary[];
   paragraphSpacing: number;
   textIndent: number;
   hasPrev?: boolean;
@@ -43,14 +61,15 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'progress', ratio: number): void;
-  (e: 'reachStart'): void;
-  (e: 'reachEnd'): void;
-  (e: 'tap', zone: 'left' | 'center' | 'right'): void;
+  (e: "progress", ratio: number): void;
+  (e: "reachStart"): void;
+  (e: "reachEnd"): void;
+  (e: "tap", zone: "left" | "center" | "right"): void;
   /** 用户向上滚动进入上一章区域（无缝向前翻章） */
-  (e: 'prev-chapter-entered'): void;
+  (e: "prev-chapter-entered"): void;
   /** 用户向下滚动进入下一章区域，携带当前章节内容区高度（用于无缝滚动位置补偿） */
-  (e: 'next-chapter-entered', sectionHeight: number): void;
+  (e: "next-chapter-entered", sectionHeight: number): void;
+  (e: "paragraph-comment-click", payload: ParagraphCommentClickPayload): void;
 }>();
 
 const scrollRef = ref<HTMLElement | null>(null);
@@ -59,9 +78,12 @@ const currentSectionRef = ref<HTMLElement | null>(null);
 const nextSectionRef = ref<HTMLElement | null>(null);
 const nextChapterSentinelRef = ref<HTMLElement | null>(null);
 
-const paragraphs = ref<string[]>([]);
-const prevParagraphs = ref<string[]>([]);
-const nextParagraphs = ref<string[]>([]);
+const paragraphs = ref<ReaderParagraph[]>([]);
+const prevParagraphs = ref<ReaderParagraph[]>([]);
+const nextParagraphs = ref<ReaderParagraph[]>([]);
+const paragraphCommentSummaryMap = computed(() =>
+  createParagraphCommentSummaryMap(props.paragraphCommentSummaries ?? []),
+);
 
 /** 是否已滚动到底部附近 */
 const atBottom = ref(false);
@@ -91,8 +113,9 @@ let restoreRunToken = 0;
  */
 function prepareSeamlessSwap(prevSectionHeight: number) {
   const el = scrollRef.value;
-  const nextTop = nextSectionRef.value?.offsetTop ?? nextChapterSentinelRef.value?.offsetTop;
-  if (el && typeof nextTop === 'number') {
+  const nextTop =
+    nextSectionRef.value?.offsetTop ?? nextChapterSentinelRef.value?.offsetTop;
+  if (el && typeof nextTop === "number") {
     seamlessSwapAnchorOffset = el.scrollTop - nextTop;
     seamlessSwapFallbackOffset = -1;
     return;
@@ -131,20 +154,25 @@ function setupSentinel() {
         if (entry.isIntersecting) {
           const rootEl = scrollRef.value;
           const nextTop =
-            nextSectionRef.value?.offsetTop ?? nextChapterSentinelRef.value?.offsetTop;
-          if (rootEl && typeof nextTop === 'number' && rootEl.scrollTop < nextTop - 1) {
+            nextSectionRef.value?.offsetTop ??
+            nextChapterSentinelRef.value?.offsetTop;
+          if (
+            rootEl &&
+            typeof nextTop === "number" &&
+            rootEl.scrollTop < nextTop - 1
+          ) {
             return;
           }
           teardownSentinel();
           const sectionH = currentSectionRef.value?.offsetHeight ?? 0;
-          emit('next-chapter-entered', sectionH);
+          emit("next-chapter-entered", sectionH);
         }
       }
     },
     {
       root,
       // 哨兵进入视口上半部分时触发（给父组件留出预加载时间）
-      rootMargin: '0px 0px -40% 0px',
+      rootMargin: "0px 0px -40% 0px",
     },
   );
   sentinelObserver.observe(el);
@@ -191,7 +219,8 @@ async function runRestoreAnchor(anchor: number, token: number): Promise<void> {
     await waitNextFrame();
     scrollToReadingAnchor(anchor);
 
-    const adjacentStable = !props.prevChapterLoading && !props.nextChapterLoading;
+    const adjacentStable =
+      !props.prevChapterLoading && !props.nextChapterLoading;
     if (adjacentStable && isReadingAnchorAtTop(anchor)) {
       stableFrames += 1;
       if (stableFrames >= 3) {
@@ -212,7 +241,7 @@ async function runRestoreAnchor(anchor: number, token: number): Promise<void> {
 watch(
   () => props.content,
   async (val) => {
-    paragraphs.value = val.split(/\n+/).filter((p) => p.trim());
+    paragraphs.value = splitReaderParagraphs(val);
     atBottom.value = false;
     atTop.value = true;
     prevChapterEnteredFired = false;
@@ -228,7 +257,7 @@ watch(
       await nextTick();
       const el = scrollRef.value;
       if (el) {
-        el.style.scrollBehavior = 'auto';
+        el.style.scrollBehavior = "auto";
         if (anchorOffset !== null) {
           const currentTop = currentSectionRef.value?.offsetTop ?? 0;
           el.scrollTop = Math.max(0, currentTop + anchorOffset);
@@ -236,7 +265,7 @@ watch(
           el.scrollTop = Math.max(0, el.scrollTop - fallbackOffset);
         }
         requestAnimationFrame(() => {
-          el.style.scrollBehavior = '';
+          el.style.scrollBehavior = "";
         });
       }
       return;
@@ -257,10 +286,10 @@ watch(
     if (!el) {
       return;
     }
-    el.style.scrollBehavior = 'auto';
+    el.style.scrollBehavior = "auto";
     el.scrollTop = prevSectionRef.value?.offsetHeight ?? 0;
     requestAnimationFrame(() => {
-      el.style.scrollBehavior = '';
+      el.style.scrollBehavior = "";
     });
     void applyPendingRestoreAnchor();
   },
@@ -271,7 +300,7 @@ watch(
 watch(
   () => props.nextChapterContent,
   async (val) => {
-    nextParagraphs.value = val ? val.split(/\n+/).filter((p) => p.trim()) : [];
+    nextParagraphs.value = val ? splitReaderParagraphs(val) : [];
     nextBoundaryFallbackFired = false;
     teardownSentinel();
     if (val) {
@@ -289,7 +318,7 @@ watch(
   async (val, oldVal) => {
     const wasEmpty = !oldVal;
     const isNowFilled = !!val;
-    prevParagraphs.value = val ? val.split(/\n+/).filter((p) => p.trim()) : [];
+    prevParagraphs.value = val ? splitReaderParagraphs(val) : [];
     prevChapterEnteredFired = false;
     prevBoundaryFallbackFired = false;
 
@@ -302,10 +331,10 @@ watch(
       await nextTick();
       const prevH = prevSectionRef.value?.offsetHeight ?? 0;
       if (prevH > 0 && el) {
-        el.style.scrollBehavior = 'auto';
+        el.style.scrollBehavior = "auto";
         el.scrollTop = Math.max(0, savedTop + prevH - oldPrevH);
         requestAnimationFrame(() => {
-          el.style.scrollBehavior = '';
+          el.style.scrollBehavior = "";
         });
         void applyPendingRestoreAnchor();
       }
@@ -327,10 +356,10 @@ onBeforeUnmount(() => {
 // ── 书签高亮 ───────────────────────────────────────────────────
 function escapeHtml(text: string): string {
   return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function highlightParagraph(text: string): string {
@@ -345,9 +374,31 @@ function highlightParagraph(text: string): string {
       continue;
     }
     const escapedBm = escapeHtml(bmText);
-    result = result.split(escapedBm).join(`<mark class="reader-bookmark">${escapedBm}</mark>`);
+    result = result
+      .split(escapedBm)
+      .join(`<mark class="reader-bookmark">${escapedBm}</mark>`);
   }
   return result;
+}
+
+function getParagraphCommentSummary(
+  paragraphIndex: number,
+): ParagraphCommentSummary | undefined {
+  return paragraphCommentSummaryMap.value.get(paragraphIndex);
+}
+
+function isParagraphCommentTarget(target: EventTarget | null): boolean {
+  return !!(
+    target instanceof Element && target.closest(".reader-paragraph-comment")
+  );
+}
+
+function onParagraphCommentClick(paragraphIndex: number) {
+  const summary = getParagraphCommentSummary(paragraphIndex);
+  if (!summary) {
+    return;
+  }
+  emit("paragraph-comment-click", { ...summary, paragraphIndex });
 }
 
 // ── 触摸事件 ────────────────────────────────────────────────────────
@@ -361,15 +412,19 @@ function onTouchStart(e: TouchEvent) {
 }
 
 function onTouchEnd(e: TouchEvent) {
+  if (isParagraphCommentTarget(e.target)) {
+    return;
+  }
   if (e.changedTouches.length === 1) {
     const t = e.changedTouches[0];
     const dx = Math.abs(t.clientX - touchStartX);
     const dy = Math.abs(t.clientY - touchStartY);
     const selection = window.getSelection();
-    const hasSelection = !!selection && !selection.isCollapsed && !!selection.toString().trim();
+    const hasSelection =
+      !!selection && !selection.isCollapsed && !!selection.toString().trim();
     if (dx < 15 && dy < 15 && !hasSelection) {
       suppressNextClick = true;
-      emit('tap', 'center');
+      emit("tap", "center");
     }
   }
 }
@@ -391,8 +446,11 @@ function onScroll() {
   const ratio =
     currentSectionH <= clientHeight
       ? 1
-      : Math.min(1, Math.max(0, adjustedScrollTop / (currentSectionH - clientHeight)));
-  emit('progress', ratio);
+      : Math.min(
+          1,
+          Math.max(0, adjustedScrollTop / (currentSectionH - clientHeight)),
+        );
+  emit("progress", ratio);
 
   const prevAtTop = atTop.value;
   const prevAtBottom = atBottom.value;
@@ -407,17 +465,17 @@ function onScroll() {
   }
 
   if (!prevAtTop && atTop.value) {
-    emit('reachStart');
+    emit("reachStart");
   }
   if (!prevAtBottom && atBottom.value) {
-    emit('reachEnd');
+    emit("reachEnd");
   }
 
   // 检测向上进入上一章：滚到上一章区域前 60% 时触发一次
   if (!prevChapterEnteredFired && prevH > 0 && hasPrevChapterContent.value) {
     if (scrollTop <= prevH * 0.6) {
       prevChapterEnteredFired = true;
-      emit('prev-chapter-entered');
+      emit("prev-chapter-entered");
     }
   }
 
@@ -428,7 +486,7 @@ function onScroll() {
     scrollTop >= nextTop - 1
   ) {
     nextBoundaryFallbackFired = true;
-    emit('next-chapter-entered', currentSectionRef.value?.offsetHeight ?? 0);
+    emit("next-chapter-entered", currentSectionRef.value?.offsetHeight ?? 0);
   }
 
   if (
@@ -439,7 +497,7 @@ function onScroll() {
     atTop.value
   ) {
     prevBoundaryFallbackFired = true;
-    emit('prev-chapter-entered');
+    emit("prev-chapter-entered");
   }
 
   if (
@@ -450,12 +508,15 @@ function onScroll() {
     atBottom.value
   ) {
     nextBoundaryFallbackFired = true;
-    emit('next-chapter-entered', currentSectionRef.value?.offsetHeight ?? 0);
+    emit("next-chapter-entered", currentSectionRef.value?.offsetHeight ?? 0);
   }
 }
 
 // ── 点击 ────────────────────────────────────────────────────────────
-function onClick(_e: MouseEvent) {
+function onClick(e: MouseEvent) {
+  if (isParagraphCommentTarget(e.target)) {
+    return;
+  }
   const selection = window.getSelection();
   if (selection && !selection.isCollapsed && selection.toString().trim()) {
     return;
@@ -464,7 +525,7 @@ function onClick(_e: MouseEvent) {
     suppressNextClick = false;
     return;
   }
-  emit('tap', 'center');
+  emit("tap", "center");
 }
 
 // ── 公开方法 ─────────────────────────────────────────────────────────
@@ -474,12 +535,14 @@ function scrollToRatio(ratio: number) {
     return;
   }
   const prevH = prevSectionRef.value?.offsetHeight ?? 0;
-  const currentH = currentSectionRef.value?.offsetHeight ?? Math.max(0, el.scrollHeight - prevH);
+  const currentH =
+    currentSectionRef.value?.offsetHeight ??
+    Math.max(0, el.scrollHeight - prevH);
   const max = Math.max(0, currentH - el.clientHeight);
-  el.style.scrollBehavior = 'auto';
+  el.style.scrollBehavior = "auto";
   el.scrollTop = prevH + max * Math.min(1, Math.max(0, ratio));
   requestAnimationFrame(() => {
-    el.style.scrollBehavior = '';
+    el.style.scrollBehavior = "";
   });
 }
 
@@ -489,21 +552,22 @@ function scrollToParagraph(index: number) {
   if (!el || !section) {
     return;
   }
-  const paras = section.querySelectorAll<HTMLElement>('.scroll-mode__para');
+  const paras = section.querySelectorAll<HTMLElement>(".scroll-mode__para");
   if (paras.length === 0) {
     scrollToRatio(0);
     return;
   }
-  const target = paras[Math.min(Math.max(Math.floor(index), 0), paras.length - 1)];
+  const target =
+    paras[Math.min(Math.max(Math.floor(index), 0), paras.length - 1)];
   if (!target) {
     return;
   }
   const containerTop = el.getBoundingClientRect().top;
   const targetTop = target.getBoundingClientRect().top;
-  el.style.scrollBehavior = 'auto';
+  el.style.scrollBehavior = "auto";
   el.scrollTop = Math.max(0, el.scrollTop + targetTop - containerTop);
   requestAnimationFrame(() => {
-    el.style.scrollBehavior = '';
+    el.style.scrollBehavior = "";
   });
 }
 
@@ -515,11 +579,13 @@ interface LineBox {
 function getLineGroupingTolerance(para: HTMLElement): number {
   const style = window.getComputedStyle(para);
   const lineHeight = Number.parseFloat(style.lineHeight);
-  return Number.isFinite(lineHeight) && lineHeight > 0 ? Math.max(2, lineHeight * 0.35) : 6;
+  return Number.isFinite(lineHeight) && lineHeight > 0
+    ? Math.max(2, lineHeight * 0.35)
+    : 6;
 }
 
 function getParagraphTextHost(para: HTMLElement): HTMLElement {
-  return para.querySelector<HTMLElement>('.scroll-mode__text') ?? para;
+  return para.querySelector<HTMLElement>(".scroll-mode__text") ?? para;
 }
 
 function getParagraphLineBoxes(para: HTMLElement): LineBox[] {
@@ -547,14 +613,20 @@ function getParagraphLineBoxes(para: HTMLElement): LineBox[] {
   return lines;
 }
 
-function getSectionFirstVisibleLineAnchor(section: HTMLElement | null): ScrollLineAnchor {
+function getSectionFirstVisibleLineAnchor(
+  section: HTMLElement | null,
+): ScrollLineAnchor {
   const el = scrollRef.value;
   if (!el || !section) {
     return { paragraphIndex: 0, lineIndex: 0 };
   }
   const containerTop = el.getBoundingClientRect().top;
-  const paras = section.querySelectorAll<HTMLElement>('.scroll-mode__para');
-  for (let paragraphIndex = 0; paragraphIndex < paras.length; paragraphIndex++) {
+  const paras = section.querySelectorAll<HTMLElement>(".scroll-mode__para");
+  for (
+    let paragraphIndex = 0;
+    paragraphIndex < paras.length;
+    paragraphIndex++
+  ) {
     const lines = getParagraphLineBoxes(paras[paragraphIndex]);
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
       if (lines[lineIndex].bottom > containerTop + 1) {
@@ -575,13 +647,14 @@ function scrollToParagraphLine(paragraphIndex: number, lineIndex: number) {
     return;
   }
 
-  const paras = section.querySelectorAll<HTMLElement>('.scroll-mode__para');
+  const paras = section.querySelectorAll<HTMLElement>(".scroll-mode__para");
   if (paras.length === 0) {
     scrollToRatio(0);
     return;
   }
 
-  const para = paras[Math.min(Math.max(Math.floor(paragraphIndex), 0), paras.length - 1)];
+  const para =
+    paras[Math.min(Math.max(Math.floor(paragraphIndex), 0), paras.length - 1)];
   const lines = getParagraphLineBoxes(para);
   const targetLineIndex = Math.min(
     Math.max(Math.floor(lineIndex), 0),
@@ -594,10 +667,10 @@ function scrollToParagraphLine(paragraphIndex: number, lineIndex: number) {
   }
 
   const containerTop = el.getBoundingClientRect().top;
-  el.style.scrollBehavior = 'auto';
+  el.style.scrollBehavior = "auto";
   el.scrollTop = Math.max(0, el.scrollTop + targetLine.top - containerTop);
   requestAnimationFrame(() => {
-    el.style.scrollBehavior = '';
+    el.style.scrollBehavior = "";
   });
 }
 
@@ -660,8 +733,8 @@ function getReadingScrollRatio(): number {
   return getSectionRatio(currentSectionRef.value);
 }
 
-function getAdjacentScrollRatio(side: 'prev' | 'next'): number {
-  return side === 'prev'
+function getAdjacentScrollRatio(side: "prev" | "next"): number {
+  return side === "prev"
     ? getSectionRatio(prevSectionRef.value)
     : getSectionRatio(nextSectionRef.value);
 }
@@ -672,7 +745,7 @@ function getSectionFirstVisibleParaIndex(section: HTMLElement | null): number {
     return 0;
   }
   const containerTop = el.getBoundingClientRect().top;
-  const paras = section.querySelectorAll<HTMLElement>('.scroll-mode__para');
+  const paras = section.querySelectorAll<HTMLElement>(".scroll-mode__para");
   for (let i = 0; i < paras.length; i++) {
     const rect = paras[i]?.getBoundingClientRect();
     if (!rect) {
@@ -707,21 +780,21 @@ function getReadingLineAnchor(): number {
   return encodeScrollLineAnchor(anchor.paragraphIndex, anchor.lineIndex);
 }
 
-function getAdjacentParagraphIndex(side: 'prev' | 'next'): number {
-  return side === 'prev'
+function getAdjacentParagraphIndex(side: "prev" | "next"): number {
+  return side === "prev"
     ? getSectionFirstVisibleParaIndex(prevSectionRef.value)
     : getSectionFirstVisibleParaIndex(nextSectionRef.value);
 }
 
-function getAdjacentLineAnchor(side: 'prev' | 'next'): number {
+function getAdjacentLineAnchor(side: "prev" | "next"): number {
   const anchor =
-    side === 'prev'
+    side === "prev"
       ? getSectionFirstVisibleLineAnchor(prevSectionRef.value)
       : getSectionFirstVisibleLineAnchor(nextSectionRef.value);
   return encodeScrollLineAnchor(anchor.paragraphIndex, anchor.lineIndex);
 }
 
-function scrollByPage(direction: 'up' | 'down'): boolean {
+function scrollByPage(direction: "up" | "down"): boolean {
   const el = scrollRef.value;
   if (!el) {
     return false;
@@ -733,20 +806,22 @@ function scrollByPage(direction: 'up' | 'down'): boolean {
   const current = el.scrollTop;
   const step = Math.max(80, Math.floor(el.clientHeight * 0.86));
   const target =
-    direction === 'down' ? Math.min(maxScrollTop, current + step) : Math.max(0, current - step);
+    direction === "down"
+      ? Math.min(maxScrollTop, current + step)
+      : Math.max(0, current - step);
   if (Math.abs(target - current) < 1) {
     return false;
   }
-  el.scrollTo({ top: target, behavior: 'smooth' });
+  el.scrollTo({ top: target, behavior: "smooth" });
   return true;
 }
 
 function pageDown(): boolean {
-  return scrollByPage('down');
+  return scrollByPage("down");
 }
 
 function pageUp(): boolean {
-  return scrollByPage('up');
+  return scrollByPage("up");
 }
 
 function getFirstVisibleParaIndex(): number {
@@ -756,8 +831,12 @@ function getFirstVisibleParaIndex(): number {
 // ── Debug 辅助 ───────────────────────────────────────────────────────
 const leftRatio = computed(() => props.tapZoneLeft ?? 0.3);
 const rightRatio = computed(() => props.tapZoneRight ?? 0.7);
-const centerRatio = computed(() => Math.max(0, rightRatio.value - leftRatio.value));
-const showAnyDebug = computed(() => !!props.layoutDebug || !!props.tapZoneDebug);
+const centerRatio = computed(() =>
+  Math.max(0, rightRatio.value - leftRatio.value),
+);
+const showAnyDebug = computed(
+  () => !!props.layoutDebug || !!props.tapZoneDebug,
+);
 
 // ── 章节边界条件 ─────────────────────────────────────────────────────
 const hasPrevChapterContent = computed(() => !!props.prevChapterContent);
@@ -775,7 +854,9 @@ const showCurrentChapterLoading = computed(
   () => !!props.currentChapterLoading && paragraphs.value.length === 0,
 );
 /** 无下一章且无预加载内容时显示结束画面 */
-const showEndScreen = computed(() => !props.hasNext && !showNextChapterSurface.value);
+const showEndScreen = computed(
+  () => !props.hasNext && !showNextChapterSurface.value,
+);
 
 defineExpose({
   scrollToRatio,
@@ -814,7 +895,9 @@ defineExpose({
         class="scroll-mode__body scroll-mode__body--prev"
         :class="{ 'scroll-mode__body--layout-debug': layoutDebug }"
       >
-        <p v-if="prevChapterTitle" class="reader-chapter-title">{{ prevChapterTitle }}</p>
+        <p v-if="prevChapterTitle" class="reader-chapter-title">
+          {{ prevChapterTitle }}
+        </p>
         <template v-if="hasPrevChapterContent">
           <p
             v-for="(para, i) in prevParagraphs"
@@ -825,7 +908,7 @@ defineExpose({
               marginBottom: `${paragraphSpacing}px`,
             }"
           >
-            <span class="scroll-mode__text">{{ para }}</span>
+            <span class="scroll-mode__text">{{ para.text }}</span>
           </p>
         </template>
         <div v-else class="scroll-mode__chapter-loading">
@@ -837,7 +920,7 @@ defineExpose({
       <div class="scroll-mode__chapter-sep">
         <div class="scroll-mode__chapter-sep-line" />
         <p class="scroll-mode__chapter-sep-title reader-chapter-title">
-          {{ chapterTitle || '当前章节' }}
+          {{ chapterTitle || "当前章节" }}
         </p>
       </div>
     </template>
@@ -848,27 +931,53 @@ defineExpose({
       class="scroll-mode__body"
       :class="{ 'scroll-mode__body--layout-debug': layoutDebug }"
     >
-      <p v-if="showCurrentChapterTitle" class="reader-chapter-title">{{ chapterTitle }}</p>
+      <p v-if="showCurrentChapterTitle" class="reader-chapter-title">
+        {{ chapterTitle }}
+      </p>
 
       <div
         v-if="showCurrentChapterLoading"
         class="scroll-mode__chapter-loading scroll-mode__chapter-loading--current"
       >
         <n-spin size="small" />
-        <span>{{ chapterTitle || '当前章节' }}加载中...</span>
+        <span>{{ chapterTitle || "当前章节" }}加载中...</span>
       </div>
       <template v-else>
         <p
           v-for="(para, i) in paragraphs"
-          :key="i"
+          :key="para.index"
           class="reader-para scroll-mode__para"
-          :class="{ 'tts-playing': ttsHighlightIndex === i }"
+          :class="{
+            'tts-playing': ttsHighlightIndex === i,
+            'scroll-mode__para--has-comment': !!getParagraphCommentSummary(
+              para.index,
+            ),
+          }"
           :style="{
             textIndent: `${textIndent}em`,
             marginBottom: `${paragraphSpacing}px`,
           }"
         >
-          <span class="scroll-mode__text" v-html="highlightParagraph(para)" />
+          <span
+            class="scroll-mode__text"
+            v-html="highlightParagraph(para.text)"
+          />
+          <button
+            v-if="getParagraphCommentSummary(para.index)"
+            class="reader-paragraph-comment scroll-mode__comment-button"
+            type="button"
+            :aria-label="`${getParagraphCommentSummary(para.index)?.count ?? 0} 条段评`"
+            @click.stop="onParagraphCommentClick(para.index)"
+          >
+            <span class="reader-paragraph-comment__icon" aria-hidden="true" />
+            <span class="reader-paragraph-comment__count">
+              {{
+                formatParagraphCommentCount(
+                  getParagraphCommentSummary(para.index)?.count ?? 0,
+                )
+              }}
+            </span>
+          </button>
         </p>
       </template>
     </div>
@@ -879,12 +988,16 @@ defineExpose({
       <div class="scroll-mode__chapter-sep">
         <div class="scroll-mode__chapter-sep-line" />
         <p class="scroll-mode__chapter-sep-title reader-chapter-title">
-          {{ nextChapterTitle || '下一章' }}
+          {{ nextChapterTitle || "下一章" }}
         </p>
       </div>
 
       <!-- 哨兵元素：进入视口时触发章节切换 -->
-      <div ref="nextChapterSentinelRef" class="scroll-mode__sentinel" aria-hidden="true" />
+      <div
+        ref="nextChapterSentinelRef"
+        class="scroll-mode__sentinel"
+        aria-hidden="true"
+      />
 
       <!-- 下一章正文 -->
       <div
@@ -902,7 +1015,7 @@ defineExpose({
               marginBottom: `${paragraphSpacing}px`,
             }"
           >
-            <span class="scroll-mode__text">{{ para }}</span>
+            <span class="scroll-mode__text">{{ para.text }}</span>
           </p>
         </template>
         <div v-else class="scroll-mode__chapter-loading">
@@ -1036,6 +1149,58 @@ defineExpose({
   display: inline;
 }
 
+.reader-paragraph-comment {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  width: 2.2em;
+  height: 1.45em;
+  margin: 0 0.16em 0 0.38em;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 0.35em;
+  background: color-mix(
+    in srgb,
+    var(--reader-bg-color, transparent) 82%,
+    transparent
+  );
+  color: var(--reader-text-color);
+  font: inherit;
+  font-size: 0.68em;
+  line-height: 1;
+  vertical-align: 0.05em;
+  opacity: 0.72;
+  cursor: pointer;
+}
+
+.reader-paragraph-comment::after {
+  content: "";
+  position: absolute;
+  right: 0.34em;
+  bottom: -0.25em;
+  width: 0.4em;
+  height: 0.4em;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  background: inherit;
+  transform: rotate(45deg);
+}
+
+.reader-paragraph-comment:hover,
+.reader-paragraph-comment:focus-visible {
+  opacity: 1;
+}
+
+.reader-paragraph-comment__count {
+  min-width: 1.2em;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .scroll-mode__para :deep(.reader-bookmark) {
   background-color: rgba(250, 204, 21, 0.4);
   border-radius: 2px;
@@ -1060,7 +1225,7 @@ defineExpose({
 }
 
 .scroll-mode__body--layout-debug .scroll-mode__para::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   right: 0;

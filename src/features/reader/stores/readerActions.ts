@@ -1,11 +1,12 @@
-import { defineStore } from 'pinia';
-import { shallowRef } from 'vue';
+import { defineStore } from "pinia";
+import { shallowRef } from "vue";
 import type {
   TemporaryChapterSourceOverride,
   WholeBookSwitchedPayload,
-} from '@/components/reader/types';
+} from "@/components/reader/types";
+import type { ParagraphCommentClickPayload } from "@/features/reader/services/readerParagraphComments";
 
-type ReaderTapZone = 'left' | 'center' | 'right';
+type ReaderTapZone = "left" | "center" | "right";
 type Asyncish = void | Promise<unknown>;
 
 export interface ReaderActionBindings {
@@ -14,6 +15,7 @@ export interface ReaderActionBindings {
   onTap: (zone: ReaderTapZone) => Asyncish;
   onPagedPageChange: (page: number) => Asyncish;
   onPagedProgress: (ratio: number) => Asyncish;
+  openParagraphComments?: (payload: ParagraphCommentClickPayload) => Asyncish;
   onScrollProgress: (ratio: number) => Asyncish;
   onComicProgress: (ratio: number) => Asyncish;
   gotoPrevChapter: () => Asyncish;
@@ -36,8 +38,12 @@ export interface ReaderActionBindings {
   emitRefreshToc: () => Asyncish;
   handleClearChapterCache: (index: number) => Asyncish;
   handleClearAllCache: () => Asyncish;
-  handleTemporaryChapterSourceSwitched: (payload: TemporaryChapterSourceOverride) => Asyncish;
-  handleWholeBookSourceSwitched: (payload: WholeBookSwitchedPayload) => Asyncish;
+  handleTemporaryChapterSourceSwitched: (
+    payload: TemporaryChapterSourceOverride,
+  ) => Asyncish;
+  handleWholeBookSourceSwitched: (
+    payload: WholeBookSwitchedPayload,
+  ) => Asyncish;
   onVideoProgress: (time: number, duration: number) => Asyncish;
   onVideoEnded: () => Asyncish;
 }
@@ -54,7 +60,7 @@ function call<TArgs extends unknown[]>(
   return action(...args);
 }
 
-export const useReaderActionsStore = defineStore('readerActions', () => {
+export const useReaderActionsStore = defineStore("readerActions", () => {
   const bindings = shallowRef<ReaderActionBindings | null>(null);
 
   function bind(nextBindings: ReaderActionBindings) {
@@ -83,6 +89,10 @@ export const useReaderActionsStore = defineStore('readerActions', () => {
 
   function onPagedProgress(ratio: number) {
     return call(bindings.value?.onPagedProgress, ratio);
+  }
+
+  function openParagraphComments(payload: ParagraphCommentClickPayload) {
+    return call(bindings.value?.openParagraphComments, payload);
   }
 
   function onScrollProgress(ratio: number) {
@@ -173,7 +183,9 @@ export const useReaderActionsStore = defineStore('readerActions', () => {
     return call(bindings.value?.handleClearAllCache);
   }
 
-  function handleTemporaryChapterSourceSwitched(payload: TemporaryChapterSourceOverride) {
+  function handleTemporaryChapterSourceSwitched(
+    payload: TemporaryChapterSourceOverride,
+  ) {
     return call(bindings.value?.handleTemporaryChapterSourceSwitched, payload);
   }
 
@@ -197,6 +209,7 @@ export const useReaderActionsStore = defineStore('readerActions', () => {
     onTap,
     onPagedPageChange,
     onPagedProgress,
+    openParagraphComments,
     onScrollProgress,
     onComicProgress,
     gotoPrevChapter,

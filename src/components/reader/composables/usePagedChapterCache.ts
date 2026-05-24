@@ -1,11 +1,16 @@
-import { nextTick, reactive, ref, watch, type Ref } from 'vue';
-import type { PaginationEngine, ReaderPagePadding, ReaderTypography } from '../types';
+import { nextTick, reactive, ref, watch, type Ref } from "vue";
+import type { ParagraphCommentSummary } from "@/features/reader/services/readerParagraphComments";
+import type {
+  PaginationEngine,
+  ReaderPagePadding,
+  ReaderTypography,
+} from "../types";
 import {
   usePagination,
   type ReadingAnchor,
   type PageMeta,
   type PaginationMeasurementData,
-} from './usePagination';
+} from "./usePagination";
 
 interface ChapterPageEntry {
   pages?: string[];
@@ -21,6 +26,11 @@ interface UsePagedChapterCacheOptions {
   activeHostRef: Ref<HTMLElement | null>;
   backgroundHostRef: Ref<HTMLElement | null>;
   loadChapterText: (index: number, forceNetwork?: boolean) => Promise<string>;
+  loadParagraphCommentSummaries?: (
+    index: number,
+    content: string,
+    forceNetwork?: boolean,
+  ) => Promise<ParagraphCommentSummary[]>;
   getChapterTitle: (index: number) => string;
   getTypography: () => ReaderTypography;
   getPadding: () => number | ReaderPagePadding;
@@ -29,13 +39,15 @@ interface UsePagedChapterCacheOptions {
 
 function escapeHtml(text: string): string {
   return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-async function waitForHost(hostRef: Ref<HTMLElement | null>): Promise<HTMLElement> {
+async function waitForHost(
+  hostRef: Ref<HTMLElement | null>,
+): Promise<HTMLElement> {
   await nextTick();
   for (let i = 0; i < 90; i++) {
     const host = hostRef.value;
@@ -44,7 +56,7 @@ async function waitForHost(hostRef: Ref<HTMLElement | null>): Promise<HTMLElemen
     }
     await new Promise((resolve) => requestAnimationFrame(resolve));
   }
-  throw new Error('分页容器未就绪');
+  throw new Error("分页容器未就绪");
 }
 
 export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
@@ -69,12 +81,12 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
     return pageEntries.get(index)?.pages ?? [];
   }
 
-  function getBoundaryPage(index: number, edge: 'first' | 'last'): string {
+  function getBoundaryPage(index: number, edge: "first" | "last"): string {
     const pages = getPages(index);
     if (!pages.length) {
-      return '';
+      return "";
     }
-    return edge === 'first' ? pages[0] : pages[pages.length - 1];
+    return edge === "first" ? pages[0] : pages[pages.length - 1];
   }
 
   async function paginateWithHost(
@@ -86,19 +98,28 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
   ): Promise<string[]> {
     const host = await waitForHost(hostRef);
     const text = await options.loadChapterText(index, forceNetwork);
+    const paragraphComments =
+      (await options.loadParagraphCommentSummaries?.(
+        index,
+        text,
+        forceNetwork,
+      )) ?? [];
     const paginator = usePagination();
     const title = options.getChapterTitle(index);
-    const prefixHtml = title ? `<p class="reader-chapter-title">${escapeHtml(title)}</p>` : '';
+    const prefixHtml = title
+      ? `<p class="reader-chapter-title">${escapeHtml(title)}</p>`
+      : "";
 
     const paginateJob = paginator.paginate(
       text,
       host,
       options.getTypography(),
       options.getPadding(),
-      'first',
+      "first",
       prefixHtml,
       anchor,
-      options.getPaginationEngine?.() ?? 'dom',
+      options.getPaginationEngine?.() ?? "dom",
+      paragraphComments,
     );
 
     // 记录最新的测量数据用于调试
@@ -118,8 +139,10 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     }
 
-    const initialPages = paginator.pages.value.length > 0 ? paginator.pages.value : ['<p></p>'];
-    const initialMetas = paginator.pageMetas.value.length > 0 ? paginator.pageMetas.value : [];
+    const initialPages =
+      paginator.pages.value.length > 0 ? paginator.pages.value : ["<p></p>"];
+    const initialMetas =
+      paginator.pageMetas.value.length > 0 ? paginator.pageMetas.value : [];
     setEntry(index, {
       pages: initialPages,
       pageMetas: initialMetas,
@@ -127,7 +150,8 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
     });
 
     const completePromise = paginateJob.then(() => {
-      const finalPages = paginator.pages.value.length > 0 ? paginator.pages.value : ['<p></p>'];
+      const finalPages =
+        paginator.pages.value.length > 0 ? paginator.pages.value : ["<p></p>"];
       const finalMetas = paginator.pageMetas.value;
       const resolvedPage = anchor ? paginator.currentPage.value : undefined;
       setEntry(index, {
@@ -177,7 +201,11 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
 
     const waitForComplete = optionsArg.waitForComplete ?? false;
 
-    if (entry.pages && !forceNetwork && (!waitForComplete || entry.pagesComplete === true)) {
+    if (
+      entry.pages &&
+      !forceNetwork &&
+      (!waitForComplete || entry.pagesComplete === true)
+    ) {
       return Promise.resolve(entry.pages);
     }
 
@@ -189,14 +217,18 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
       if (waitForComplete) {
         return entry.pagePromise.then(() => {
           const current = getEntry(index);
-          return current.completePromise ?? Promise.resolve(current.pages ?? []);
+          return (
+            current.completePromise ?? Promise.resolve(current.pages ?? [])
+          );
         });
       }
       return entry.pagePromise;
     }
 
     const hostRef =
-      optionsArg.background === true ? options.backgroundHostRef : options.activeHostRef;
+      optionsArg.background === true
+        ? options.backgroundHostRef
+        : options.activeHostRef;
     const promise = paginateWithHost(
       index,
       hostRef,
@@ -250,7 +282,10 @@ export function usePagedChapterCache(options: UsePagedChapterCacheOptions) {
   /**
    * 为指定章节的指定页构建阅读锚点。
    */
-  function buildAnchorForChapterPage(chapterIndex: number, pageIndex: number): ReadingAnchor {
+  function buildAnchorForChapterPage(
+    chapterIndex: number,
+    pageIndex: number,
+  ): ReadingAnchor {
     const metas = getPageMetas(chapterIndex);
     const total = getPages(chapterIndex).length;
     if (pageIndex < 0 || pageIndex >= metas.length || total <= 0) {

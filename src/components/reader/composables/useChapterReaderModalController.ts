@@ -1,15 +1,16 @@
-import { useMessage } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { computed, markRaw, ref, watch } from 'vue';
-import { useBackAwareDialog as useDialog } from '@/composables/useBackAwareDialog';
-import { useFrontendPlugins } from '@/composables/useFrontendPlugins';
-import { useSync } from '@/composables/useSync';
-import { createReaderPrefetchController } from '@/features/reader/services/readerCache';
-import { createReaderNavigationController } from '@/features/reader/services/readerNavigation';
+import { useMessage } from "naive-ui";
+import { storeToRefs } from "pinia";
+import { computed, markRaw, ref, watch } from "vue";
+import { useBackAwareDialog as useDialog } from "@/composables/useBackAwareDialog";
+import { useFrontendPlugins } from "@/composables/useFrontendPlugins";
+import { useSync } from "@/composables/useSync";
+import { createReaderPrefetchController } from "@/features/reader/services/readerCache";
+import { createReaderNavigationController } from "@/features/reader/services/readerNavigation";
 import {
   type ChapterGroup,
   type ChapterItem,
   useAppConfigStore,
+  useBookSourceStore,
   useBookshelfStore,
   useReaderActionsStore,
   useReaderSessionStore,
@@ -17,24 +18,24 @@ import {
   useReaderUiStore,
   useReaderViewStore,
   useScriptBridgeStore,
-} from '@/stores';
-import type { ReaderBookInfo, WholeBookSwitchedPayload } from '../types';
-import { useReaderChapterContext } from './useReaderChapterContext';
-import { useReaderChapterOpen } from './useReaderChapterOpen';
-import { useReaderContentState } from './useReaderContentState';
-import { useReaderLayoutDump } from './useReaderLayoutDump';
-import { useReaderModalHost } from './useReaderModalHost';
-import { useReaderModeBridge } from './useReaderModeBridge';
+} from "@/stores";
+import type { ReaderBookInfo, WholeBookSwitchedPayload } from "../types";
+import { useReaderChapterContext } from "./useReaderChapterContext";
+import { useReaderChapterOpen } from "./useReaderChapterOpen";
+import { useReaderContentState } from "./useReaderContentState";
+import { useReaderLayoutDump } from "./useReaderLayoutDump";
+import { useReaderModalHost } from "./useReaderModalHost";
+import { useReaderModeBridge } from "./useReaderModeBridge";
 import {
   type ReaderPositionMode,
   type ReaderPositionSnapshot,
   type ReaderProgressTarget,
   useReaderPosition,
-} from './useReaderPosition';
-import { useReaderProgressSync } from './useReaderProgressSync';
-import { useReaderSeamlessWindow } from './useReaderSeamlessWindow';
-import { useReaderSessionBridge } from './useReaderSessionBridge';
-import { useReaderTtsManager } from './useReaderTtsManager';
+} from "./useReaderPosition";
+import { useReaderProgressSync } from "./useReaderProgressSync";
+import { useReaderSeamlessWindow } from "./useReaderSeamlessWindow";
+import { useReaderSessionBridge } from "./useReaderSessionBridge";
+import { useReaderTtsManager } from "./useReaderTtsManager";
 
 declare global {
   interface Window {
@@ -60,7 +61,10 @@ export interface ChapterReaderModalProps {
   initialGroupIndex?: number;
   inlineGroupTabs?: boolean;
   /** 各集播放进度地图（key = chapter URL） */
-  episodeProgress?: Record<string, { time: number; duration: number; lastPlayedAt: number }>;
+  episodeProgress?: Record<
+    string,
+    { time: number; duration: number; lastPlayedAt: number }
+  >;
   /** 书架视频模式下保存单集播放进度的回调 */
   saveEpisodeProgress?: (
     shelfId: string,
@@ -71,14 +75,16 @@ export interface ChapterReaderModalProps {
 }
 
 export interface ChapterReaderModalEmit {
-  (e: 'update:show', val: boolean): void;
-  (e: 'update:currentIndex', val: number): void;
-  (e: 'refresh-toc'): void;
-  (e: 'added-to-shelf', shelfId: string): void;
-  (e: 'source-switched', payload: WholeBookSwitchedPayload): void;
+  (e: "update:show", val: boolean): void;
+  (e: "update:currentIndex", val: number): void;
+  (e: "refresh-toc"): void;
+  (e: "added-to-shelf", shelfId: string): void;
+  (e: "source-switched", payload: WholeBookSwitchedPayload): void;
 }
 
-type ReaderNavigationController = ReturnType<typeof createReaderNavigationController>;
+type ReaderNavigationController = ReturnType<
+  typeof createReaderNavigationController
+>;
 
 export function useChapterReaderModalController(
   props: Readonly<ChapterReaderModalProps>,
@@ -88,7 +94,12 @@ export function useChapterReaderModalController(
   const dialog = useDialog();
   const appConfigStore = useAppConfigStore();
   const { config } = storeToRefs(appConfigStore);
-  const { runChapterContent, appendDebugLog } = useScriptBridgeStore();
+  const {
+    runChapterContent,
+    runChapterParagraphCommentCounts,
+    appendDebugLog,
+  } = useScriptBridgeStore();
+  const bookSourceStore = useBookSourceStore();
   const sync = useSync();
   const {
     updateProgress: updateBookshelfProgress,
@@ -183,7 +194,7 @@ export function useChapterReaderModalController(
 
   function closeMenuLayerSettings() {
     const closeSettings = menuLayerRef.value?.closeSettings;
-    if (typeof closeSettings === 'function') {
+    if (typeof closeSettings === "function") {
       closeSettings();
     }
   }
@@ -237,7 +248,9 @@ export function useChapterReaderModalController(
     return readingChapterIndex.value;
   });
   const readingChapter = computed(() => getChapter(readingChapterIndex.value));
-  const readingChapterUrl = computed(() => readingChapter.value?.url ?? currentChapterUrl.value);
+  const readingChapterUrl = computed(
+    () => readingChapter.value?.url ?? currentChapterUrl.value,
+  );
 
   function buildReaderContentPayload(
     stage: Parameters<typeof runReaderContentPipeline>[0],
@@ -248,7 +261,7 @@ export function useChapterReaderModalController(
     return {
       stage,
       content: contentText,
-      sourceType: sourceType.value ?? 'novel',
+      sourceType: sourceType.value ?? "novel",
       fileName: fileName.value,
       chapterIndex: index,
       chapterName: chapter?.name ?? chapterName.value,
@@ -267,7 +280,7 @@ export function useChapterReaderModalController(
 
   watch(reopenChapterIndex, (idx) => {
     if (props.show && idx !== props.currentIndex) {
-      emit('update:currentIndex', idx);
+      emit("update:currentIndex", idx);
     }
   });
 
@@ -276,7 +289,7 @@ export function useChapterReaderModalController(
     (visible) => {
       if (!visible) {
         if (readingChapterIndex.value !== props.currentIndex) {
-          emit('update:currentIndex', readingChapterIndex.value);
+          emit("update:currentIndex", readingChapterIndex.value);
         }
         readingChapterOffset.value = 0;
       }
@@ -286,7 +299,7 @@ export function useChapterReaderModalController(
   watch(activeChapterIndex, (idx) => {
     readingChapterOffset.value = 0;
     const count = config.value.cache_prefetch_count;
-    if (count === 0 || sourceType.value === 'video' || !currentShelfId.value) {
+    if (count === 0 || sourceType.value === "video" || !currentShelfId.value) {
       return;
     }
     const effectiveCount = count < 0 ? chapters.value.length : count;
@@ -323,6 +336,8 @@ export function useChapterReaderModalController(
     markChapterRead,
     fetchRawChapterText,
     fetchProcessedChapterText,
+    ensureParagraphCommentSummaries,
+    activeParagraphCommentSummaries,
     pagedCache,
     activePagedPages,
     prevBoundaryPage,
@@ -345,6 +360,14 @@ export function useChapterReaderModalController(
     backgroundMeasureHostRef,
     settings,
     runChapterContent,
+    getSourceCapabilities: async (sourceFileName) => {
+      await bookSourceStore.ensureCapsLoaded();
+      return (
+        bookSourceStore.getCachedCapabilities(sourceFileName) ??
+        (await bookSourceStore.detectCapabilities(sourceFileName))
+      );
+    },
+    runChapterParagraphCommentCounts,
     getContent,
     saveContent,
     getCachedIndices,
@@ -365,16 +388,20 @@ export function useChapterReaderModalController(
 
       if (isPagedMode.value) {
         await openChapter(activeChapterIndex.value, {
-          position: 'resume',
-          pageIndex: currentPageIndex.value >= 0 ? currentPageIndex.value : undefined,
-          pageRatio: currentScrollRatio.value >= 0 ? currentScrollRatio.value : undefined,
+          position: "resume",
+          pageIndex:
+            currentPageIndex.value >= 0 ? currentPageIndex.value : undefined,
+          pageRatio:
+            currentScrollRatio.value >= 0
+              ? currentScrollRatio.value
+              : undefined,
         });
         return;
       }
 
       pendingRestorePageIndex.value = currentPageIndex.value;
       pendingRestoreScrollRatio.value = currentScrollRatio.value;
-      await openChapter(activeChapterIndex.value, { position: 'resume' });
+      await openChapter(activeChapterIndex.value, { position: "resume" });
     },
   );
 
@@ -458,10 +485,10 @@ export function useChapterReaderModalController(
     gotoNextChapter,
     gotoPrevChapter,
     warnLastPage: () => {
-      message.warning('已经到最后一页了');
+      message.warning("已经到最后一页了");
     },
     warnFirstPage: () => {
-      message.warning('已经到最前了');
+      message.warning("已经到最前了");
     },
     saveEpisodeProgress: props.saveEpisodeProgress,
   });
@@ -478,25 +505,26 @@ export function useChapterReaderModalController(
 
   const positionMode = computed<ReaderPositionMode>(() => {
     if (isVideoMode.value) {
-      return 'video';
+      return "video";
     }
     if (isComicMode.value) {
-      return 'comic';
+      return "comic";
     }
-    return isPagedMode.value ? 'paged' : 'scroll';
+    return isPagedMode.value ? "paged" : "scroll";
   });
 
-  const { readCurrentPosition, writeSnapshotToRefs, buildProgressPayload } = useReaderPosition({
-    mode: positionMode,
-    currentPageIndex,
-    pagedPageIndex,
-    currentScrollRatio,
-    pagedModeRef,
-    scrollModeRef,
-    comicModeRef,
-    getPlaybackTime,
-    getSettingsJson,
-  });
+  const { readCurrentPosition, writeSnapshotToRefs, buildProgressPayload } =
+    useReaderPosition({
+      mode: positionMode,
+      currentPageIndex,
+      pagedPageIndex,
+      currentScrollRatio,
+      pagedModeRef,
+      scrollModeRef,
+      comicModeRef,
+      getPlaybackTime,
+      getSettingsJson,
+    });
 
   function clampChapterIndex(index: number): number {
     if (!chapters.value.length) {
@@ -505,15 +533,22 @@ export function useChapterReaderModalController(
     return Math.min(Math.max(index, 0), chapters.value.length - 1);
   }
 
-  function resolveReadingProgressTarget(snapshot = readCurrentPosition()): ReaderProgressTarget {
-    const chapterIndex = clampChapterIndex(activeChapterIndex.value + snapshot.chapterOffset);
+  function resolveReadingProgressTarget(
+    snapshot = readCurrentPosition(),
+  ): ReaderProgressTarget {
+    const chapterIndex = clampChapterIndex(
+      activeChapterIndex.value + snapshot.chapterOffset,
+    );
     const chapter = getChapter(chapterIndex);
     const isActiveChapter = chapterIndex === activeChapterIndex.value;
     return {
       chapterIndex,
       chapterName:
-        chapter?.name ?? (isActiveChapter ? currentChapterName.value : chapterName.value),
-      chapterUrl: chapter?.url ?? (isActiveChapter ? currentChapterUrl.value : chapterUrl.value),
+        chapter?.name ??
+        (isActiveChapter ? currentChapterName.value : chapterName.value),
+      chapterUrl:
+        chapter?.url ??
+        (isActiveChapter ? currentChapterUrl.value : chapterUrl.value),
       position: snapshot,
     };
   }
@@ -570,50 +605,53 @@ export function useChapterReaderModalController(
     message,
   });
 
-  const { openChapter, openLinearChapter, openPagedChapter } = useReaderChapterOpen({
-    getShow: () => props.show,
-    getChapterCount: () => props.chapters.length,
-    getShelfDataReady: () => shelfDataReady,
-    getChapter,
-    isPagedMode,
-    isComicMode,
-    isScrollMode,
-    isVideoMode,
-    activeChapterIndex,
-    content,
-    error,
-    loading,
-    pagedLoading,
-    currentPageIndex,
-    currentScrollRatio,
-    pendingRestorePageIndex,
-    pendingRestoreScrollRatio,
-    pendingResumePlaybackTime,
-    openingChapter,
-    restoringPosition,
-    navDirection,
-    currentShelfId,
-    pagedCache,
-    scrollModeRef,
-    comicModeRef,
-    fetchProcessedChapterText,
-    setPagedPage,
-    markChapterRead,
-    updateReaderSession,
-    buildReaderSessionSnapshot,
-    getPositionMode: () => positionMode.value,
-    writePositionSnapshot: writeSnapshotToRefs,
-    buildProgressPayload,
-    updateProgress,
-    waitForLinearSeamlessWindowStable: (index) => waitForLinearSeamlessWindowStable(index),
-    reportLoadError: (loadError) => {
-      message.error(`加载正文失败: ${loadError}`, {
-        duration: 8000,
-        closable: true,
-      });
-    },
-    clearRepaginateWork: () => clearRepaginateWork(),
-  });
+  const { openChapter, openLinearChapter, openPagedChapter } =
+    useReaderChapterOpen({
+      getShow: () => props.show,
+      getChapterCount: () => props.chapters.length,
+      getShelfDataReady: () => shelfDataReady,
+      getChapter,
+      isPagedMode,
+      isComicMode,
+      isScrollMode,
+      isVideoMode,
+      activeChapterIndex,
+      content,
+      error,
+      loading,
+      pagedLoading,
+      currentPageIndex,
+      currentScrollRatio,
+      pendingRestorePageIndex,
+      pendingRestoreScrollRatio,
+      pendingResumePlaybackTime,
+      openingChapter,
+      restoringPosition,
+      navDirection,
+      currentShelfId,
+      pagedCache,
+      scrollModeRef,
+      comicModeRef,
+      fetchProcessedChapterText,
+      ensureParagraphCommentSummaries,
+      setPagedPage,
+      markChapterRead,
+      updateReaderSession,
+      buildReaderSessionSnapshot,
+      getPositionMode: () => positionMode.value,
+      writePositionSnapshot: writeSnapshotToRefs,
+      buildProgressPayload,
+      updateProgress,
+      waitForLinearSeamlessWindowStable: (index) =>
+        waitForLinearSeamlessWindowStable(index),
+      reportLoadError: (loadError) => {
+        message.error(`加载正文失败: ${loadError}`, {
+          duration: 8000,
+          closable: true,
+        });
+      },
+      clearRepaginateWork: () => clearRepaginateWork(),
+    });
 
   function retryCurrentChapter() {
     void openChapter(activeChapterIndex.value, { forceNetwork: true });
@@ -623,9 +661,9 @@ export function useChapterReaderModalController(
     currentShelfId,
     getFileName: () => fileName.value,
     message,
-    getBookUrl: () => bookInfo.value?.bookUrl ?? '',
-    getBookName: () => bookInfo.value?.name ?? '',
-    getSourceType: () => sourceType.value ?? 'novel',
+    getBookUrl: () => bookInfo.value?.bookUrl ?? "",
+    getBookName: () => bookInfo.value?.name ?? "",
+    getSourceType: () => sourceType.value ?? "novel",
     getChapters: () => chapters.value,
     getActiveChapterIndex: () => activeChapterIndex.value,
     markCached: (chapterIndex) => {
@@ -710,6 +748,7 @@ export function useChapterReaderModalController(
     comicModeRef,
     getChapter,
     fetchProcessedChapterText,
+    ensureParagraphCommentSummaries,
     saveDetailedProgress,
     openChapter,
     markChapterRead,
@@ -747,25 +786,26 @@ export function useChapterReaderModalController(
     () => isScrollMode.value && loading.value && !content.value,
   );
 
-  const { ttsProgressText, ttsScrollHighlightIdx, onTtsToggle } = useReaderTtsManager({
-    activeChapterIndex,
-    content,
-    isPagedMode,
-    isScrollMode,
-    isComicMode,
-    isVideoMode,
-    pagedPageIndex,
-    activePagedPages,
-    hasPrev,
-    hasNext,
-    pagedModeRef,
-    scrollModeRef,
-    blockingLoading,
-    showTtsBar,
-    setPagedPage,
-    fetchRawChapterText,
-    gotoNextChapter,
-  });
+  const { ttsProgressText, ttsScrollHighlightIdx, onTtsToggle } =
+    useReaderTtsManager({
+      activeChapterIndex,
+      content,
+      isPagedMode,
+      isScrollMode,
+      isComicMode,
+      isVideoMode,
+      pagedPageIndex,
+      activePagedPages,
+      hasPrev,
+      hasNext,
+      pagedModeRef,
+      scrollModeRef,
+      blockingLoading,
+      showTtsBar,
+      setPagedPage,
+      fetchRawChapterText,
+      gotoNextChapter,
+    });
 
   const host = useReaderModalHost({
     message,
@@ -787,10 +827,10 @@ export function useChapterReaderModalController(
     getChapters: () => props.chapters,
     getReadingChapterIndex: () => readingChapterIndex.value,
     getReadingChapterUrl: () => readingChapterUrl.value,
-    emitUpdateShow: (visible) => emit('update:show', visible),
-    emitAddedToShelf: (shelfId) => emit('added-to-shelf', shelfId),
-    emitRefreshToc: () => emit('refresh-toc'),
-    emitSourceSwitched: (payload) => emit('source-switched', payload),
+    emitUpdateShow: (visible) => emit("update:show", visible),
+    emitAddedToShelf: (shelfId) => emit("added-to-shelf", shelfId),
+    emitRefreshToc: () => emit("refresh-toc"),
+    emitSourceSwitched: (payload) => emit("source-switched", payload),
     closeMenuLayerSettings,
     localAddedShelfId,
     currentShelfId,
@@ -825,6 +865,7 @@ export function useChapterReaderModalController(
     currentChapterUrl,
     currentChapterOverride,
     activePagedPages,
+    paragraphCommentSummaries: activeParagraphCommentSummaries,
     prevBoundaryPage,
     nextBoundaryPage,
     blockingLoading,

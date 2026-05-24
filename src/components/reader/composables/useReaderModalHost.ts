@@ -11,6 +11,7 @@ import {
   type ComputedRef,
   type Ref,
 } from "vue";
+import type { ParagraphCommentSummary } from "@/features/reader/services/readerParagraphComments";
 import type { ChapterItem } from "@/stores";
 import type { CachedChapter } from "@/types";
 import { eventListenSync } from "@/composables/useEventBus";
@@ -149,6 +150,7 @@ interface UseReaderModalHostOptions {
   currentChapterUrl: ComputedRef<string>;
   currentChapterOverride: ComputedRef<TemporaryChapterSourceOverride | null>;
   activePagedPages: ComputedRef<string[]>;
+  paragraphCommentSummaries: ComputedRef<ParagraphCommentSummary[]>;
   prevBoundaryPage: ComputedRef<string>;
   nextBoundaryPage: ComputedRef<string>;
   blockingLoading: ComputedRef<boolean>;
@@ -298,6 +300,7 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
     isPagedMode: options.isPagedMode,
     legacyPagedMode: options.legacyPagedMode,
     activePagedPages: options.activePagedPages,
+    paragraphCommentSummaries: options.paragraphCommentSummaries,
     prevBoundaryPage: options.prevBoundaryPage,
     nextBoundaryPage: options.nextBoundaryPage,
     blockingLoading: options.blockingLoading,

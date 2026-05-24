@@ -10,6 +10,7 @@
  */
 import { defineStore } from 'pinia';
 import { readonly } from 'vue';
+import type { AppUpdateChannel } from '@/utils/appUpdate';
 import { useDynamicConfig } from '@/composables/useDynamicConfig';
 
 // ── 阅读器偏好设置 ───────────────────────────────────────────────────────
@@ -67,6 +68,13 @@ export interface DevToolsPreferences {
   vConsoleEnabled: boolean;
   /** 是否开启完全体模式（解除漫画/音乐限制） */
   fullModeEnabled: boolean;
+}
+
+// ── 应用更新检测偏好 ───────────────────────────────────────────────────
+
+export interface AppUpdatePreferences {
+  /** GitHub releases 检测渠道：正式版 / 开发版 */
+  channel: AppUpdateChannel;
 }
 
 // ── 搜索偏好 ──────────────────────────────────────────────────────────────
@@ -150,6 +158,14 @@ export const usePreferencesStore = defineStore('preferences', () => {
     },
   });
 
+  const appUpdateConfig = useDynamicConfig<AppUpdatePreferences>({
+    namespace: 'preferences.appUpdate',
+    version: 1,
+    defaults: () => ({
+      channel: 'stable',
+    }),
+  });
+
   const searchConfig = useDynamicConfig<SearchPreferences>({
     namespace: 'preferences.search',
     version: 1,
@@ -206,6 +222,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
     devToolsConfig.replace({ ...devToolsConfig.state, ...patch });
   }
 
+  function patchAppUpdate(patch: Partial<AppUpdatePreferences>) {
+    appUpdateConfig.replace({ ...appUpdateConfig.state, ...patch });
+  }
+
   // ── ready 状态（等待所有后端存储加载完成） ────────────────────────────
 
   const ready = Promise.all([
@@ -214,6 +234,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     searchConfig.ready,
     tocAutoUpdateConfig.ready,
     devToolsConfig.ready,
+    appUpdateConfig.ready,
   ]).then(() => undefined);
 
   return {
@@ -234,6 +255,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     // 开发者工具偏好
     devTools: readonly(devToolsConfig.state) as DevToolsPreferences,
     patchDevTools,
+    // 应用更新检测偏好
+    appUpdate: readonly(appUpdateConfig.state) as AppUpdatePreferences,
+    patchAppUpdate,
     // 就绪状态
     ready,
   };

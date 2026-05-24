@@ -185,6 +185,13 @@ const emit = defineEmits<{
           class="src-card__cap src-card__cap--dim"
           >正文</n-tag
         >
+        <n-tag
+          v-if="capabilities?.has('chapterParagraphCommentCounts')"
+          size="tiny"
+          :bordered="false"
+          class="src-card__cap src-card__cap--dim"
+          >段评</n-tag
+        >
       </template>
       <span v-else class="src-card__cap-loading">检测中…</span>
       <template v-if="src.tags.length > 1">

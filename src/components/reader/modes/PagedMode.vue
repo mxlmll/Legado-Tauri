@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import type { ParagraphCommentClickPayload } from "@/features/reader/services/readerParagraphComments";
 import type { PaginationMeasurementData } from "../composables/usePagination";
 import type { ReaderTapAction } from "../types";
 import LayoutDebugIndicator from "../LayoutDebugIndicator.vue";
@@ -34,10 +35,12 @@ const emit = defineEmits<{
   (e: "request-prev-chapter"): void;
   (e: "request-next-chapter"): void;
   (e: "progress", ratio: number): void;
+  (e: "paragraph-comment-click", payload: ParagraphCommentClickPayload): void;
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
 const isAnimating = ref(false);
+const simulationTransitionArmed = ref(false);
 const boundaryMsg = ref("");
 const pendingStaticPageHtml = ref<string | null>(null);
 
@@ -343,12 +346,32 @@ function bounceBack(direction: DragDir) {
   }
 
   dragDir.value = direction;
-  layerSnapTarget.value = 0;
+  if (props.mode === "simulation") {
+    layerSnapTarget.value = layerDragOffset.value;
+    simulationTransitionArmed.value = false;
+  } else {
+    layerSnapTarget.value = 0;
+  }
   activeAnimation = {
     action: null,
     commitOnFinish: false,
   };
   isAnimating.value = true;
+  if (props.mode === "simulation") {
+    void nextTick(async () => {
+      if (!isAnimating.value || activeAnimation.action !== null) {
+        return;
+      }
+      void containerRef.value?.offsetHeight;
+      simulationTransitionArmed.value = true;
+      await nextTick();
+      if (!isAnimating.value || activeAnimation.action !== null) {
+        return;
+      }
+      void containerRef.value?.offsetHeight;
+      layerSnapTarget.value = 0;
+    });
+  }
   clearAnimationTimer();
   animationTimer = window.setTimeout(
     () => finishAnimation(false),
@@ -388,6 +411,7 @@ async function runAction(action: FlipAction) {
   dragDir.value = action === "next" ? "left" : "right";
   layerDragOffset.value = 0;
   layerSnapTarget.value = 0;
+  simulationTransitionArmed.value = props.mode !== "simulation";
   activeAnimation = {
     action,
     commitOnFinish: true,
@@ -398,6 +422,14 @@ async function runAction(action: FlipAction) {
     return;
   }
   void containerRef.value?.offsetHeight;
+  if (props.mode === "simulation") {
+    simulationTransitionArmed.value = true;
+    await nextTick();
+    if (runId !== animationRunId || activeAnimation.action !== action) {
+      return;
+    }
+    void containerRef.value?.offsetHeight;
+  }
   layerSnapTarget.value =
     action === "next" ? -getContainerWidth() : getContainerWidth();
   clearAnimationTimer();
@@ -530,8 +562,13 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+const CURL_SCALE_START = 0.86;
+const CURL_SCALE_DELTA = 0.18;
+const CURL_EXIT_OVERSHOOT = 24;
+const SIMULATION_SHADOW_MAX_OPACITY = 0.34;
+
 function getCurlScale(progress: number) {
-  return 0.86 - clamp(progress, 0, 1) * 0.18;
+  return CURL_SCALE_START - clamp(progress, 0, 1) * CURL_SCALE_DELTA;
 }
 
 function getVisualEdgeX(foldX: number, foldW: number, progress: number) {
@@ -544,12 +581,69 @@ function getProgressByVisualEdge(edgeX: number, width: number) {
   }
 
   const target = clamp(edgeX / width, 0, 1);
-  const a = 0.18;
-  const b = -1.86;
+  const a = CURL_SCALE_DELTA;
+  const b = -(1 + CURL_SCALE_START);
   const c = 1 - target;
   const d = Math.max(0, b * b - 4 * a * c);
 
   return clamp((-b - Math.sqrt(d)) / (2 * a), 0, 1);
+}
+
+function getSimulationVisualState(
+  width: number,
+  progress: number,
+  direction: Exclude<DragDir, null>,
+) {
+  const clampedProgress = clamp(progress, 0, 1);
+  const visualProgress =
+    direction === "left" ? clampedProgress : 1 - clampedProgress;
+  const forwardVisualState = getForwardSimulationVisualState(
+    width,
+    visualProgress,
+  );
+
+  if (direction === "left") {
+    return forwardVisualState;
+  }
+
+  return {
+    ...forwardVisualState,
+    revealClipPath: forwardVisualState.currentClipPath,
+    currentClipPath: forwardVisualState.revealClipPath,
+  };
+}
+
+function getForwardSimulationVisualState(width: number, progress: number) {
+  const clampedProgress = clamp(progress, 0, 1);
+  const foldX = width * (1 - clampedProgress);
+  const foldW = width - foldX;
+  const curlScale = getCurlScale(clampedProgress);
+  const edgeX = getVisualEdgeX(foldX, foldW, clampedProgress);
+  const curlWidth = Math.max(0, foldX - edgeX);
+  const exitOffset = CURL_EXIT_OVERSHOOT * clampedProgress ** 3;
+  const curlLeft = edgeX - exitOffset;
+  const shadowLeft = foldX - 12 - exitOffset;
+  const shadowOpacity =
+    clampedProgress > 0
+      ? Math.min(
+          SIMULATION_SHADOW_MAX_OPACITY,
+          0.12 + clampedProgress * SIMULATION_SHADOW_MAX_OPACITY,
+        )
+      : 0;
+
+  return {
+    foldX,
+    foldW,
+    curlWidth,
+    curlLeft,
+    curlContentOffset: width * curlScale,
+    curlOpacity: clampedProgress > 0 ? 1 : 0,
+    shadowLeft,
+    shadowOpacity,
+    visualProgress: clampedProgress,
+    revealClipPath: `inset(0 0 0 ${foldX}px)`,
+    currentClipPath: `inset(0 ${foldW}px 0 0)`,
+  };
 }
 
 function updateSimulationPointer(event: MouseEvent | TouchEvent) {
@@ -596,14 +690,7 @@ function applySimulationDragStyles() {
   const direction = rawDragDir;
   const pointerX = rawPointerX;
   const progress = getSimulationProgressByPointer(pointerX, width, direction);
-  const foldX = width * (1 - progress);
-  const foldW = width - foldX;
-  const curlScale = getCurlScale(progress);
-  const edgeX = getVisualEdgeX(foldX, foldW, progress);
-  const curlWidth =
-    direction === "left"
-      ? Math.max(0, foldX - edgeX)
-      : Math.max(0, width - edgeX - foldW);
+  const visualState = getSimulationVisualState(width, progress, direction);
 
   const revealEl = simulationRevealEl.value;
   const currentEl = simulationCurrentEl.value;
@@ -614,34 +701,20 @@ function applySimulationDragStyles() {
     return;
   }
 
-  revealEl.style.clipPath =
-    direction === "left"
-      ? `inset(0 0 0 ${foldX}px)`
-      : `inset(0 ${Math.max(0, width - foldW)}px 0 0)`;
+  revealEl.style.clipPath = visualState.revealClipPath;
+  currentEl.style.clipPath = visualState.currentClipPath;
+  curlEl.style.left = `${visualState.curlLeft}px`;
+  curlEl.style.width = `${visualState.curlWidth}px`;
+  curlEl.style.opacity = `${visualState.curlOpacity}`;
+  curlContentEl.style.width = `${width}px`;
+  curlContentEl.style.opacity = "1";
+  curlContentEl.style.left = `${visualState.curlContentOffset}px`;
+  curlContentEl.style.right = "";
+  curlContentEl.style.transform = `scaleX(${-getCurlScale(visualState.visualProgress)})`;
+  curlContentEl.style.transformOrigin = "left center";
 
-  currentEl.style.clipPath =
-    direction === "left"
-      ? `inset(0 ${foldW}px 0 0)`
-      : `inset(0 0 0 ${foldW}px)`;
-
-  curlEl.style.left = `${direction === "left" ? edgeX : foldW}px`;
-  curlEl.style.width = `${curlWidth}px`;
-  curlEl.style.opacity = progress > 0 ? "1" : "0";
-
-  if (direction === "left") {
-    curlContentEl.style.left = `${width * curlScale + 8}px`;
-    curlContentEl.style.right = "";
-    curlContentEl.style.transform = `scaleX(${-curlScale})`;
-    curlContentEl.style.transformOrigin = "left center";
-  } else {
-    curlContentEl.style.right = `${width * curlScale + 8}px`;
-    curlContentEl.style.left = "";
-    curlContentEl.style.transform = `scaleX(${-curlScale})`;
-    curlContentEl.style.transformOrigin = "right center";
-  }
-
-  shadowEl.style.left = `${direction === "left" ? Math.max(0, foldX - 12) : Math.max(0, foldW)}px`;
-  shadowEl.style.opacity = `${Math.min(0.38, progress * 0.38)}`;
+  shadowEl.style.left = `${visualState.shadowLeft}px`;
+  shadowEl.style.opacity = `${visualState.shadowOpacity}`;
 }
 
 function scheduleSimulationFrame() {
@@ -725,54 +798,35 @@ const simulationState = computed(() => {
             direction,
           )
         : clamp(Math.abs(offset) / width, 0, 1);
-  const foldX = width * (1 - progress);
-  const foldW = width - foldX;
-  const curlScale = getCurlScale(progress);
-  const edgeX = getVisualEdgeX(foldX, foldW, progress);
-  const curlWidth =
-    direction === "left"
-      ? Math.max(0, foldX - edgeX)
-      : Math.max(0, width - edgeX - foldW);
+  const visualState = getSimulationVisualState(width, progress, direction);
+  const curlScale = getCurlScale(visualState.visualProgress);
 
   return {
     direction,
+    stageDirection: "left",
     revealHtml: direction === "left" ? nextPageHtml.value : prevPageHtml.value,
+    curlHtml: direction === "left" ? currentPageHtml.value : prevPageHtml.value,
     revealStyle: {
-      clipPath:
-        direction === "left"
-          ? `inset(0 0 0 ${foldX}px)`
-          : `inset(0 ${Math.max(0, width - foldW)}px 0 0)`,
+      clipPath: visualState.revealClipPath,
     },
     currentStyle: {
-      clipPath:
-        direction === "left"
-          ? `inset(0 ${foldW}px 0 0)`
-          : `inset(0 0 0 ${foldW}px)`,
+      clipPath: visualState.currentClipPath,
     },
     curlStyle: {
-      left: `${direction === "left" ? edgeX : foldW}px`,
-      width: `${curlWidth}px`,
-      opacity: progress > 0 ? "1" : "0",
+      left: `${visualState.curlLeft}px`,
+      width: `${visualState.curlWidth}px`,
+      opacity: `${visualState.curlOpacity}`,
     },
-    curlContentStyle:
-      direction === "left"
-        ? {
-            left: `${width * curlScale + 8}px`,
-            width: `${width}px`,
-            opacity: "1",
-            transform: `scaleX(${-curlScale})`,
-            transformOrigin: "left center",
-          }
-        : {
-            right: `${width * curlScale + 8}px`,
-            width: `${width}px`,
-            opacity: "1",
-            transform: `scaleX(${-curlScale})`,
-            transformOrigin: "right center",
-          },
+    curlContentStyle: {
+      left: `${visualState.curlContentOffset}px`,
+      width: `${width}px`,
+      opacity: "1",
+      transform: `scaleX(${-curlScale})`,
+      transformOrigin: "left center",
+    },
     shadowStyle: {
-      left: `${direction === "left" ? Math.max(0, foldX - 12) : Math.max(0, foldW)}px`,
-      opacity: `${Math.min(0.38, progress * 0.38)}`,
+      left: `${visualState.shadowLeft}px`,
+      opacity: `${visualState.shadowOpacity}`,
     },
   };
 });
@@ -798,6 +852,7 @@ function resetVisualState() {
   layerSnapTarget.value = 0;
   dragDir.value = null;
   simulationPointerX.value = null;
+  simulationTransitionArmed.value = false;
   // 清除直接 DOM 写入的拖拽样式
   clearSimulationDragStyles();
 }
@@ -949,6 +1004,12 @@ function handleTap(e: MouseEvent | TouchEvent) {
   if (!el || props.busy) {
     return;
   }
+  if (emitParagraphCommentClick(e.target)) {
+    if ("cancelable" in e && e.cancelable) {
+      e.preventDefault();
+    }
+    return;
+  }
   const selection = window.getSelection();
   if (selection && !selection.isCollapsed && selection.toString().trim()) {
     return;
@@ -968,6 +1029,42 @@ function handleTap(e: MouseEvent | TouchEvent) {
   }
 
   emit("tap", "center");
+}
+
+function emitParagraphCommentClick(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  const button = target.closest<HTMLElement>(".reader-paragraph-comment");
+  if (!button) {
+    return false;
+  }
+  const rangeKey = button.dataset.paragraphCommentKey;
+  const start = Number.parseInt(button.dataset.paragraphCommentStart ?? "", 10);
+  const end = Number.parseInt(button.dataset.paragraphCommentEnd ?? "", 10);
+  const count = Number.parseInt(button.dataset.paragraphCommentCount ?? "", 10);
+  const paragraphIndex = Number.parseInt(
+    button.dataset.paragraphCommentParagraphIndex ?? "",
+    10,
+  );
+  if (
+    !rangeKey ||
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    !Number.isFinite(count) ||
+    !Number.isFinite(paragraphIndex)
+  ) {
+    return true;
+  }
+  emit("paragraph-comment-click", {
+    key: rangeKey,
+    start,
+    end,
+    count,
+    ranges: [{ key: rangeKey, start, end, count }],
+    paragraphIndex,
+  });
+  return true;
 }
 
 function onPointerUp(e: MouseEvent | TouchEvent) {
@@ -1196,8 +1293,11 @@ defineExpose({
       <div
         class="paged-mode__simulation-stage"
         :class="[
-          `paged-mode__simulation-stage--${simulationState.direction}`,
-          { 'paged-mode__simulation-stage--snapping': isAnimating },
+          `paged-mode__simulation-stage--${simulationState.stageDirection}`,
+          {
+            'paged-mode__simulation-stage--snapping':
+              isAnimating && simulationTransitionArmed,
+          },
         ]"
       >
         <div
@@ -1229,7 +1329,7 @@ defineExpose({
             class="paged-mode__page paged-mode__simulation-curl-page"
             :class="{ 'paged-mode__page--layout-debug': layoutDebug }"
             :style="isAnimating ? simulationState.curlContentStyle : undefined"
-            v-html="currentPageHtml"
+            v-html="simulationState.curlHtml"
           />
           <div class="paged-mode__simulation-curl-gloss" />
         </div>
@@ -1311,7 +1411,7 @@ defineExpose({
 }
 
 .paged-mode--simulation {
-  /* 3D context 已移除：仿真翻页全用 clip-path + scaleX 实现，保留 perspective/preserve-3d 无调但有性能开销 */
+  isolation: isolate;
 }
 
 .paged-mode__gesture {
@@ -1390,9 +1490,12 @@ defineExpose({
 .paged-mode__simulation-curl {
   position: absolute;
   top: 0;
+  left: 0;
+  width: 0;
   height: 100%;
   z-index: 3;
   overflow: hidden;
+  opacity: 0;
   pointer-events: none;
   border-radius: 0 0 18px 0;
   will-change: left, width, opacity;
@@ -1411,6 +1514,8 @@ defineExpose({
 .paged-mode__simulation-curl-page {
   position: absolute;
   top: 0;
+  left: 0;
+  width: 100%;
   height: 100%;
   color: var(--reader-text-color, var(--color-text-primary));
   will-change: transform;
@@ -1442,9 +1547,11 @@ defineExpose({
 .paged-mode__simulation-shadow {
   position: absolute;
   top: 0;
+  left: 0;
   width: 12px;
   height: 100%;
   z-index: 2;
+  opacity: 0;
   pointer-events: none;
   will-change: left, opacity;
   background: linear-gradient(
@@ -1504,6 +1611,62 @@ defineExpose({
 
 .paged-mode__page :deep(.reader-para:last-child) {
   margin-bottom: 0 !important;
+}
+
+.paged-mode__page :deep(.reader-paragraph-comment) {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  width: 2.2em;
+  height: 1.45em;
+  margin: 0 0.16em 0 0.38em;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 0.35em;
+  background: color-mix(
+    in srgb,
+    var(--reader-bg-color, transparent) 82%,
+    transparent
+  );
+  color: var(--reader-text-color);
+  font: inherit;
+  font-size: 0.68em;
+  line-height: 1;
+  vertical-align: 0.05em;
+  opacity: 0.72;
+  cursor: pointer;
+}
+
+.paged-mode__page :deep(.reader-paragraph-comment::after) {
+  content: "";
+  position: absolute;
+  right: 0.34em;
+  bottom: -0.25em;
+  width: 0.4em;
+  height: 0.4em;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  background: inherit;
+  transform: rotate(45deg);
+}
+
+.paged-mode__page :deep(.reader-paragraph-comment:hover),
+.paged-mode__page :deep(.reader-paragraph-comment:focus-visible) {
+  opacity: 1;
+}
+
+.paged-mode__page :deep(.reader-paragraph-comment__count) {
+  min-width: 1.2em;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paged-mode__page :deep(.reader-paragraph-comment-row) {
+  display: block;
 }
 
 /* TTS 当前行高亮：借用主题选区色，自动适配明暗主题 */
