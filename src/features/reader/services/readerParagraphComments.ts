@@ -131,7 +131,17 @@ function toPositiveCount(value: unknown): number {
 export function parseParagraphCommentRangeKey(
   key: string,
 ): ParagraphCommentRange | null {
-  const match = /^(\d+)\+(\d+)$/.exec(key.trim());
+  const normalizedKey = key.trim();
+  const single = /^(\d+)$/.exec(normalizedKey);
+  if (single) {
+    const index = Number(single[1]);
+    if (!Number.isSafeInteger(index)) {
+      return null;
+    }
+    return { key: `${index}+${index}`, start: index, end: index };
+  }
+
+  const match = /^(\d+)\+(\d+)$/.exec(normalizedKey);
   if (!match) {
     return null;
   }
@@ -181,10 +191,20 @@ function collectRangeCounts(
           : typeof record.rangeKey === "string"
             ? record.rangeKey
             : undefined;
-      const start = toFiniteNumber(
+      const startValue = toFiniteNumber(
         record.start ?? record.startLine ?? record.from,
       );
-      const end = toFiniteNumber(record.end ?? record.endLine ?? record.to);
+      const endValue = toFiniteNumber(
+        record.end ?? record.endLine ?? record.to,
+      );
+      const singleIndex = toFiniteNumber(
+        record.index ??
+          record.paragraphIndex ??
+          record.paragraph ??
+          record.line,
+      );
+      const start = startValue ?? endValue ?? singleIndex;
+      const end = endValue ?? startValue ?? singleIndex;
       const resolvedKey =
         key ??
         (start !== null && end !== null

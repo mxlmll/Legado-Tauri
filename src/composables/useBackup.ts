@@ -39,6 +39,14 @@ export interface BackupCreateResult {
   categories: BackupCategoryStat[];
 }
 
+export interface BackupCreateDataResult {
+  fileName: string;
+  mime: string;
+  base64: string;
+  byteSize: number;
+  categories: BackupCategoryStat[];
+}
+
 export interface BackupPeekReport {
   manifest: BackupManifest;
   unknownCategories: string[];
@@ -85,10 +93,31 @@ export async function createBackup(
   );
 }
 
+export async function createBackupData(
+  defaultName: string,
+  categories: BackupCategoryId[],
+): Promise<BackupCreateDataResult> {
+  return await invokeWithTimeout<BackupCreateDataResult>(
+    "backup_create_data",
+    { defaultName, categories },
+    10 * 60_000,
+  );
+}
+
 export async function peekBackup(zipPath: string): Promise<BackupPeekReport> {
   return await invokeWithTimeout<BackupPeekReport>(
     "backup_peek",
     { zipPath },
+    60_000,
+  );
+}
+
+export async function peekBackupData(
+  base64: string,
+): Promise<BackupPeekReport> {
+  return await invokeWithTimeout<BackupPeekReport>(
+    "backup_peek_data",
+    { base64 },
     60_000,
   );
 }
@@ -100,6 +129,17 @@ export async function restoreBackup(
   return await invokeWithTimeout<BackupRestoreResult>(
     "backup_restore",
     { zipPath, categories },
+    10 * 60_000,
+  );
+}
+
+export async function restoreBackupData(
+  base64: string,
+  categories: BackupCategoryId[],
+): Promise<BackupRestoreResult> {
+  return await invokeWithTimeout<BackupRestoreResult>(
+    "backup_restore_data",
+    { base64, categories },
     10 * 60_000,
   );
 }

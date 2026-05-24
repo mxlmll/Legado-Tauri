@@ -5,6 +5,7 @@ import { ref, computed, defineAsyncComponent, watch, reactive, onMounted, onUnmo
 import type { NavItem } from '@/types';
 import packageJson from '../package.json';
 import tauriConfig from '../src-tauri/tauri.conf.json';
+import AppUpdateDialog from './components/AppUpdateDialog.vue';
 import GlobalFeedbackMirror from './components/GlobalFeedbackMirror.vue';
 import BottomNav from './components/layout/BottomNav.vue';
 import LogWindowPanel from './components/layout/LogWindowPanel.vue';
@@ -527,6 +528,8 @@ const latestLogMessage = computed(() => shellStatusStore.latestLog?.message ?? '
           <WsConnectDialog v-if="!hasNativeTransport" />
           <!-- 全局 legado:// 书源安装确认 -->
           <LegadoDeepLinkDialog />
+          <!-- 启动后应用更新提示与下载进度 -->
+          <AppUpdateDialog />
           <!-- 书源超限启动警告 -->
           <BookSourceLimitWarningDialog
             :show="showBookSourceLimitWarning"

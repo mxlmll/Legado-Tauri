@@ -1,28 +1,38 @@
 <script setup lang="ts">
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { ChevronLeft, ArrowUp } from 'lucide-vue-next';
-import { useMessage } from 'naive-ui';
-import { ref, computed, watch, onMounted, type CSSProperties } from 'vue';
-import type { CachedChapter, BookDetail, ChapterItem, ChapterGroup } from '@/types';
-import { useBookshelfStore, useScriptBridgeStore, groupChapters } from '@/stores';
-import type { ReaderBookInfo } from '../reader/types';
-import { isMobile } from '../../composables/useEnv';
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { ChevronLeft, ArrowUp } from "lucide-vue-next";
+import { useMessage } from "naive-ui";
+import { ref, computed, watch, onMounted, type CSSProperties } from "vue";
+import type {
+  CachedChapter,
+  BookDetail,
+  ChapterItem,
+  ChapterGroup,
+} from "@/types";
+import {
+  useBookshelfStore,
+  useScriptBridgeStore,
+  groupChapters,
+} from "@/stores";
+import type { ReaderBookInfo } from "../reader/types";
+import { isMobile } from "../../composables/useEnv";
 import {
   ensureFrontendNamespaceLoaded,
   getFrontendStorageItem,
   legacyLocalStorageEntries,
   legacyLocalStorageRemove,
   setFrontendStorageItem,
-} from '../../composables/useFrontendStorage';
-import { useOverlay } from '../../composables/useOverlay';
+} from "../../composables/useFrontendStorage";
+import { useOverlay } from "../../composables/useOverlay";
 import {
   getBookMetaBadges,
   getLatestChapterText,
   getNormalizedLastChapter,
-} from '../../utils/bookMeta';
-import { getCoverImageUrl } from '../../utils/coverImage';
-import AppButton from '../base/AppButton.vue';
-import BookCoverImg from '../BookCoverImg.vue';
+} from "../../utils/bookMeta";
+import { getChapterPriceLabel, isVipChapter } from "../../utils/chapter";
+import { getCoverImageUrl } from "../../utils/coverImage";
+import AppButton from "../base/AppButton.vue";
+import BookCoverImg from "../BookCoverImg.vue";
 
 const props = defineProps<{
   show: boolean;
@@ -34,9 +44,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:show', val: boolean): void;
+  (e: "update:show", val: boolean): void;
   (
-    e: 'read-chapter',
+    e: "read-chapter",
     payload: {
       chapterUrl: string;
       chapterName: string;
@@ -54,11 +64,13 @@ const emit = defineEmits<{
 }>();
 
 const message = useMessage();
-const { runBookInfo, runChapterList, runChapterContent } = useScriptBridgeStore();
-const { addToShelf, saveChapters, saveContent, isOnShelf, ensureLoaded } = useBookshelfStore();
+const { runBookInfo, runChapterList, runChapterContent } =
+  useScriptBridgeStore();
+const { addToShelf, saveChapters, saveContent, isOnShelf, ensureLoaded } =
+  useBookshelfStore();
 
 const loading = ref(false);
-const error = ref('');
+const error = ref("");
 const detail = ref<BookDetail | null>(null);
 const chapters = ref<ChapterItem[]>([]);
 const addingToShelf = ref(false);
@@ -69,7 +81,7 @@ const chapterGroups = ref<ChapterGroup[]>([]);
 /** 当前选中的线路标签索引 */
 const activeGroupIndex = ref(0);
 /** 列表排序：asc 正序，desc 倒序 */
-const sortOrder = ref<'asc' | 'desc'>('asc');
+const sortOrder = ref<"asc" | "desc">("asc");
 
 /** 是否需要显示分组标签页 */
 const hasGroups = computed(() => chapterGroups.value.length > 1);
@@ -84,7 +96,7 @@ const displayChapters = computed(() => {
   } else {
     list = chapters.value;
   }
-  if (sortOrder.value === 'desc') {
+  if (sortOrder.value === "desc") {
     return [...list].toReversed();
   }
   return list;
@@ -95,27 +107,41 @@ function storageKey(suffix: string) {
   return `bd-video-${props.bookUrl}-${suffix}`;
 }
 
-const STORAGE_NAMESPACE = 'explore.book-detail';
+const STORAGE_NAMESPACE = "explore.book-detail";
 
 /** 保存标签和排序状态 */
 function saveTabState() {
-  setFrontendStorageItem(STORAGE_NAMESPACE, storageKey('group'), String(activeGroupIndex.value));
-  setFrontendStorageItem(STORAGE_NAMESPACE, storageKey('sort'), sortOrder.value);
+  setFrontendStorageItem(
+    STORAGE_NAMESPACE,
+    storageKey("group"),
+    String(activeGroupIndex.value),
+  );
+  setFrontendStorageItem(
+    STORAGE_NAMESPACE,
+    storageKey("sort"),
+    sortOrder.value,
+  );
 }
 
 /** 恢复标签和排序状态 */
 function restoreTabState() {
   try {
-    const savedGroup = getFrontendStorageItem(STORAGE_NAMESPACE, storageKey('group'));
+    const savedGroup = getFrontendStorageItem(
+      STORAGE_NAMESPACE,
+      storageKey("group"),
+    );
     if (savedGroup !== null) {
       const idx = Number(savedGroup);
       if (idx >= 0 && idx < chapterGroups.value.length) {
         activeGroupIndex.value = idx;
       }
     }
-    const savedSort = getFrontendStorageItem(STORAGE_NAMESPACE, storageKey('sort'));
-    if (savedSort === 'desc') {
-      sortOrder.value = 'desc';
+    const savedSort = getFrontendStorageItem(
+      STORAGE_NAMESPACE,
+      storageKey("sort"),
+    );
+    if (savedSort === "desc") {
+      sortOrder.value = "desc";
     }
   } catch {
     /* ignore */
@@ -142,33 +168,41 @@ function onGroupChange(index: number) {
 }
 
 function toggleSortOrder() {
-  sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+  sortOrder.value = sortOrder.value === "asc" ? "desc" : "asc";
   saveTabState();
 }
 
 /** 移动端全宽，桌面端固定宽度 */
-const drawerWidth = computed(() => (isMobile.value ? '100vw' : 480));
-const drawerTitle = computed(() => (isMobile.value ? '' : (detail.value?.name ?? '书籍详情')));
-const drawerHeaderStyle = computed(() => (isMobile.value ? { display: 'none' } : undefined));
+const drawerWidth = computed(() => (isMobile.value ? "100vw" : 480));
+const drawerTitle = computed(() =>
+  isMobile.value ? "" : (detail.value?.name ?? "书籍详情"),
+);
+const drawerHeaderStyle = computed(() =>
+  isMobile.value ? { display: "none" } : undefined,
+);
 const drawerBodyContentStyle = computed((): CSSProperties | undefined =>
   isMobile.value
     ? {
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        padding: '0',
-        height: '100%',
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        padding: "0",
+        height: "100%",
       }
     : {
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        padding: '14px',
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        padding: "14px",
       },
 );
-const mobileHeaderTitle = computed(() => detail.value?.name?.trim() || '书籍详情');
+const mobileHeaderTitle = computed(
+  () => detail.value?.name?.trim() || "书籍详情",
+);
 const mobileHeaderSubtitle = computed(() => `来自 ${props.sourceName}`);
-const detailBadges = computed(() => getBookMetaBadges(detail.value, props.sourceType));
+const detailBadges = computed(() =>
+  getBookMetaBadges(detail.value, props.sourceType),
+);
 const detailLatestChapter = computed(() => getLatestChapterText(detail.value));
 const detailMetaRows = computed(() => {
   const d = detail.value;
@@ -177,25 +211,40 @@ const detailMetaRows = computed(() => {
   }
   const rows: { label: string; value: string }[] = [];
   if (detailLatestChapter.value) {
-    rows.push({ label: '最新章节', value: detailLatestChapter.value });
+    rows.push({ label: "最新章节", value: detailLatestChapter.value });
   }
   if (d.wordCount?.trim()) {
-    rows.push({ label: '字数', value: d.wordCount.trim() });
+    rows.push({ label: "字数", value: d.wordCount.trim() });
   }
-  if (typeof d.chapterCount === 'number' && Number.isFinite(d.chapterCount) && d.chapterCount > 0) {
-    rows.push({ label: '章节总数', value: `${Math.floor(d.chapterCount)} 章` });
+  if (
+    typeof d.chapterCount === "number" &&
+    Number.isFinite(d.chapterCount) &&
+    d.chapterCount > 0
+  ) {
+    rows.push({ label: "章节总数", value: `${Math.floor(d.chapterCount)} 章` });
   }
   if (d.updateTime?.trim()) {
-    rows.push({ label: '更新时间', value: d.updateTime.trim() });
+    rows.push({ label: "更新时间", value: d.updateTime.trim() });
   }
   return rows;
 });
 
-function closeDrawer() {
-  emit('update:show', false);
+function doCloseDrawer() {
+  emit("update:show", false);
 }
 
-useOverlay(() => props.show, closeDrawer);
+const { triggerClose: closeDrawer } = useOverlay(
+  () => props.show,
+  doCloseDrawer,
+);
+
+function updateDrawerShow(value: boolean) {
+  if (value) {
+    emit("update:show", true);
+    return;
+  }
+  closeDrawer();
+}
 
 watch(
   () => props.show,
@@ -204,12 +253,12 @@ watch(
       return;
     }
     loading.value = true;
-    error.value = '';
+    error.value = "";
     detail.value = null;
     chapters.value = [];
     chapterGroups.value = [];
     activeGroupIndex.value = 0;
-    sortOrder.value = 'asc';
+    sortOrder.value = "asc";
     onShelf.value = false;
     try {
       await ensureLoaded();
@@ -244,10 +293,12 @@ function onClickChapter(ch: ChapterItem, indexInDisplay: number) {
     ? (chapterGroups.value[activeGroupIndex.value]?.chapters ?? [])
     : chapters.value;
   const realIndex =
-    sortOrder.value === 'desc' ? currentList.length - 1 - indexInDisplay : indexInDisplay;
+    sortOrder.value === "desc"
+      ? currentList.length - 1 - indexInDisplay
+      : indexInDisplay;
   const bookInfo: ReaderBookInfo = {
-    name: d?.name ?? '',
-    author: d?.author ?? '',
+    name: d?.name ?? "",
+    author: d?.author ?? "",
     coverUrl: d?.coverUrl,
     intro: d?.intro,
     kind: d?.kind,
@@ -263,12 +314,12 @@ function onClickChapter(ch: ChapterItem, indexInDisplay: number) {
     status: d?.status,
     totalChapters: currentList.length,
   };
-  emit('read-chapter', {
+  emit("read-chapter", {
     chapterUrl: ch.url,
     chapterName: ch.name,
     index: realIndex,
     bookInfo,
-    sourceType: props.sourceType ?? 'novel',
+    sourceType: props.sourceType ?? "novel",
     tocUrl: detail.value?.tocUrl ?? props.bookUrl,
     chapterGroups: hasGroups.value ? chapterGroups.value : undefined,
     activeGroupIndex: hasGroups.value ? activeGroupIndex.value : undefined,
@@ -291,7 +342,7 @@ async function handleAddToShelf() {
         kind: d.kind,
         bookUrl: props.bookUrl,
         lastChapter: getNormalizedLastChapter(d),
-        sourceType: props.sourceType ?? 'novel',
+        sourceType: props.sourceType ?? "novel",
       },
       props.fileName,
       props.sourceName,
@@ -303,13 +354,19 @@ async function handleAddToShelf() {
         name: ch.name,
         url: ch.url,
         group: ch.group,
+        vip: ch.vip ?? ch.isVip,
+        price: ch.price,
+        currency: ch.currency,
       }));
       await saveChapters(result.id, cached);
     }
     onShelf.value = true;
-    message.success('已加入书架'); // 后台预缓存第一章正文（非阻塞，忽略错误）
-    if (chapters.value.length > 0 && props.sourceType !== 'comic') {
+    message.success("已加入书架"); // 后台预缓存第一章正文（非阻塞，忽略错误）
+    if (chapters.value.length > 0 && props.sourceType !== "comic") {
       const firstCh = chapters.value[0];
+      if (isVipChapter(firstCh)) {
+        return;
+      }
       const shelfId = result.id;
       (async () => {
         try {
@@ -317,7 +374,7 @@ async function handleAddToShelf() {
           await saveContent(
             shelfId,
             0,
-            typeof content === 'string' ? content : JSON.stringify(content),
+            typeof content === "string" ? content : JSON.stringify(content),
           );
         } catch {
           // 预缓存失败不影响主流程
@@ -325,7 +382,9 @@ async function handleAddToShelf() {
       })();
     }
   } catch (e: unknown) {
-    message.error(`加入书架失败: ${e instanceof Error ? e.message : String(e)}`);
+    message.error(
+      `加入书架失败: ${e instanceof Error ? e.message : String(e)}`,
+    );
   } finally {
     addingToShelf.value = false;
   }
@@ -338,7 +397,7 @@ async function handleAddToShelf() {
     :width="drawerWidth"
     placement="right"
     to="body"
-    @update:show="emit('update:show', $event)"
+    @update:show="updateDrawerShow"
     :auto-focus="false"
   >
     <n-drawer-content
@@ -372,7 +431,12 @@ async function handleAddToShelf() {
         <n-spin :show="loading" class="bd-spin-wrap">
           <div class="bd-scroll" :class="{ 'bd-scroll--mobile': isMobile }">
             <!-- 错误 -->
-            <n-alert v-if="error" type="error" :title="error" style="margin-bottom: 16px" />
+            <n-alert
+              v-if="error"
+              type="error"
+              :title="error"
+              style="margin-bottom: 16px"
+            />
 
             <!-- 详情头部 -->
             <div v-if="detail && isMobile" class="bd-header bd-header--mobile">
@@ -396,14 +460,23 @@ async function handleAddToShelf() {
                   </n-tag>
                 </div>
                 <div v-if="detailMetaRows.length" class="bd-header__meta-grid">
-                  <div v-for="row in detailMetaRows" :key="row.label" class="bd-header__meta-cell">
+                  <div
+                    v-for="row in detailMetaRows"
+                    :key="row.label"
+                    class="bd-header__meta-cell"
+                  >
                     <span class="bd-header__meta-label">{{ row.label }}</span>
-                    <span class="bd-header__meta-value" :title="row.value">{{ row.value }}</span>
+                    <span class="bd-header__meta-value" :title="row.value">{{
+                      row.value
+                    }}</span>
                   </div>
                 </div>
-                <a class="bd-header__url" :title="bookUrl" @click.prevent="openUrl(bookUrl)">{{
-                  bookUrl
-                }}</a>
+                <a
+                  class="bd-header__url"
+                  :title="bookUrl"
+                  @click.prevent="openUrl(bookUrl)"
+                  >{{ bookUrl }}</a
+                >
               </div>
               <p
                 v-if="detail.intro"
@@ -434,17 +507,26 @@ async function handleAddToShelf() {
                   </n-tag>
                 </div>
                 <div v-if="detailMetaRows.length" class="bd-header__meta-grid">
-                  <div v-for="row in detailMetaRows" :key="row.label" class="bd-header__meta-cell">
+                  <div
+                    v-for="row in detailMetaRows"
+                    :key="row.label"
+                    class="bd-header__meta-cell"
+                  >
                     <span class="bd-header__meta-label">{{ row.label }}</span>
-                    <span class="bd-header__meta-value" :title="row.value">{{ row.value }}</span>
+                    <span class="bd-header__meta-value" :title="row.value">{{
+                      row.value
+                    }}</span>
                   </div>
                 </div>
                 <p v-if="detail.intro" class="bd-header__intro app-scrollbar">
                   {{ detail.intro }}
                 </p>
-                <a class="bd-header__url" :title="bookUrl" @click.prevent="openUrl(bookUrl)">{{
-                  bookUrl
-                }}</a>
+                <a
+                  class="bd-header__url"
+                  :title="bookUrl"
+                  @click.prevent="openUrl(bookUrl)"
+                  >{{ bookUrl }}</a
+                >
               </div>
             </div>
 
@@ -456,7 +538,10 @@ async function handleAddToShelf() {
                   size="lg"
                   block
                   :disabled="!displayChapters.length"
-                  @click="displayChapters.length && onClickChapter(displayChapters[0], 0)"
+                  @click="
+                    displayChapters.length &&
+                    onClickChapter(displayChapters[0], 0)
+                  "
                 >
                   开始阅读
                 </AppButton>
@@ -469,7 +554,7 @@ async function handleAddToShelf() {
                   :disabled="onShelf"
                   @click="handleAddToShelf"
                 >
-                  {{ onShelf ? '已在书架' : '加入书架' }}
+                  {{ onShelf ? "已在书架" : "加入书架" }}
                 </AppButton>
               </div>
             </div>
@@ -479,15 +564,21 @@ async function handleAddToShelf() {
               <!-- 标题行：章节列表 + 排序按钮 -->
               <div class="bd-chapters__header">
                 <div class="bd-chapters__title">
-                  {{ hasGroups ? '选集' : '章节列表' }}
+                  {{ hasGroups ? "选集" : "章节列表" }}
                   ({{ displayChapters.length }})
                 </div>
-                <n-button text size="tiny" class="bd-chapters__sort-btn" @click="toggleSortOrder">
-                  {{ sortOrder === 'asc' ? '正序' : '倒序' }}
+                <n-button
+                  text
+                  size="tiny"
+                  class="bd-chapters__sort-btn"
+                  @click="toggleSortOrder"
+                >
+                  {{ sortOrder === "asc" ? "正序" : "倒序" }}
                   <ArrowUp
                     :size="12"
                     :style="{
-                      transform: sortOrder === 'desc' ? 'rotate(180deg)' : 'none',
+                      transform:
+                        sortOrder === 'desc' ? 'rotate(180deg)' : 'none',
                       transition: 'transform 0.2s',
                     }"
                   />
@@ -523,9 +614,16 @@ async function handleAddToShelf() {
                   @click="onClickChapter(ch, i)"
                 >
                   <span class="bd-chapter-item__index">{{
-                    sortOrder === 'asc' ? i + 1 : displayChapters.length - i
+                    sortOrder === "asc" ? i + 1 : displayChapters.length - i
                   }}</span>
                   <span class="bd-chapter-item__name">{{ ch.name }}</span>
+                  <span v-if="isVipChapter(ch)" class="bd-chapter-item__vip">
+                    VIP{{
+                      getChapterPriceLabel(ch)
+                        ? ` ${getChapterPriceLabel(ch)}`
+                        : ""
+                    }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -587,7 +685,8 @@ async function handleAddToShelf() {
   align-items: center;
   gap: 10px;
   min-height: 60px;
-  padding: max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 16px) 14px 8px 8px;
+  padding: max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 16px)
+    14px 8px 8px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface-raised);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
@@ -852,6 +951,16 @@ async function handleAddToShelf() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.bd-chapter-item__vip {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: #d97706;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.28);
 }
 
 @media (pointer: coarse), (max-width: 640px) {

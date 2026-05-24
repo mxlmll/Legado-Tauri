@@ -16,6 +16,7 @@ const props = defineProps<{
   tocRefreshingBookIds: Set<string>;
   editMode?: boolean;
   selectedBookIds?: Set<string>;
+  shelfOrder?: number;
 }>();
 
 const emit = defineEmits<{
@@ -115,33 +116,37 @@ const {
       @touchend="onTouchEnd"
       @mousedown="onMouseDown"
     >
-      <n-spin :show="loading" style="flex: 1">
-        <div v-if="!loading && !books.length" class="bs-empty">
-          <div class="bs-empty__icon">
-            <BookOpen :size="56" :stroke-width="1" />
-          </div>
-          <h3 class="bs-empty__title">书架空空如也</h3>
-          <p class="bs-empty__desc">去发现页搜索书籍，加入书架开始阅读吧</p>
-        </div>
+      <n-spin :show="loading" class="bs-spin" style="flex: 1">
+        <slot name="before-grid" />
 
-        <div v-else class="bs-grid">
-          <ShelfBookCard
-            v-for="book in filteredBooks"
-            :key="book.id"
-            :book="book"
-            :privacy-mode-enabled="privacyModeEnabled"
-            :loading="
-              openingBookId === book.id || tocRefreshingBookIds.has(book.id)
-            "
-            :loading-blocks-interaction="openingBookId === book.id"
-            :loading-label="
-              tocRefreshingBookIds.has(book.id) ? '检查更新中' : '加载中'
-            "
-            :edit-mode="editMode"
-            :selected="selectedBookIds?.has(book.id)"
-            @select="emit('select', $event)"
-            @contextmenu="(_, e: MouseEvent) => emit('contextmenu', book, e)"
-          />
+        <div class="bs-shelf-module" :style="{ order: shelfOrder ?? 0 }">
+          <div v-if="!loading && !books.length" class="bs-empty">
+            <div class="bs-empty__icon">
+              <BookOpen :size="56" :stroke-width="1" />
+            </div>
+            <h3 class="bs-empty__title">书架空空如也</h3>
+            <p class="bs-empty__desc">去发现页搜索书籍，加入书架开始阅读吧</p>
+          </div>
+
+          <div v-else class="bs-grid">
+            <ShelfBookCard
+              v-for="book in filteredBooks"
+              :key="book.id"
+              :book="book"
+              :privacy-mode-enabled="privacyModeEnabled"
+              :loading="
+                openingBookId === book.id || tocRefreshingBookIds.has(book.id)
+              "
+              :loading-blocks-interaction="openingBookId === book.id"
+              :loading-label="
+                tocRefreshingBookIds.has(book.id) ? '检查更新中' : '加载中'
+              "
+              :edit-mode="editMode"
+              :selected="selectedBookIds?.has(book.id)"
+              @select="emit('select', $event)"
+              @contextmenu="(_, e: MouseEvent) => emit('contextmenu', book, e)"
+            />
+          </div>
         </div>
       </n-spin>
     </div>
@@ -247,6 +252,25 @@ const {
   flex: 1;
   overflow-y: auto;
   padding: 0 24px 16px;
+}
+
+.bs-spin {
+  display: flex;
+  min-height: 100%;
+}
+
+.bs-spin :deep(.n-spin-container),
+.bs-spin :deep(.n-spin-content) {
+  min-height: 100%;
+}
+
+.bs-spin :deep(.n-spin-content) {
+  display: flex;
+  flex-direction: column;
+}
+
+.bs-shelf-module {
+  min-width: 0;
 }
 
 .bs-grid {

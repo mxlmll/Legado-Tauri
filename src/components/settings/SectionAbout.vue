@@ -1,10 +1,11 @@
-/** * SectionAbout — 设置页“关于”面板，展示应用版本、运行环境、桥接能力与 WebView 诊断信息。 */
+/** * SectionAbout — 设置页“关于”面板，展示应用版本、运行环境、桥接能力与
+WebView 诊断信息。 */
 
 <script setup lang="ts">
-import { Download, ExternalLink, RefreshCw } from 'lucide-vue-next';
-import { useMessage } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { computed, onMounted, ref } from 'vue';
+import { Download, ExternalLink, RefreshCw } from "lucide-vue-next";
+import { useMessage } from "naive-ui";
+import { storeToRefs } from "pinia";
+import { computed, onMounted, ref } from "vue";
 import {
   hasNativeTransport,
   isHarmonyNative,
@@ -12,9 +13,13 @@ import {
   isMobile,
   envLabel,
   platform,
-} from '@/composables/useEnv';
-import { getCustomWsUrl, getTransportType, isTransportAvailable } from '@/composables/useTransport';
-import { usePreferencesStore } from '@/stores/preferences';
+} from "@/composables/useEnv";
+import {
+  getCustomWsUrl,
+  getTransportType,
+  isTransportAvailable,
+} from "@/composables/useTransport";
+import { usePreferencesStore } from "@/stores/preferences";
 import {
   checkAppUpdate,
   formatAppUpdateAssetSize,
@@ -24,81 +29,81 @@ import {
   resolveAppUpdatePlatform,
   type AppUpdateChannel,
   type AppUpdateCheckResult,
-} from '@/utils/appUpdate';
-import packageJson from '../../../package.json';
-import tauriConfig from '../../../src-tauri/tauri.conf.json';
-import SettingItem from './SettingItem.vue';
-import SettingSection from './SettingSection.vue';
+} from "@/utils/appUpdate";
+import packageJson from "../../../package.json";
+import tauriConfig from "../../../src-tauri/tauri.conf.json";
+import SettingItem from "./SettingItem.vue";
+import SettingSection from "./SettingSection.vue";
 
 const message = useMessage();
 const prefStore = usePreferencesStore();
 const { devTools, appUpdate } = storeToRefs(prefStore);
 
-type TransportMode = 'tauri' | 'harmony' | 'websocket' | 'none';
-type TagType = 'default' | 'info' | 'success' | 'warning' | 'error';
+type TransportMode = "tauri" | "harmony" | "websocket" | "none";
+type TagType = "default" | "info" | "success" | "warning" | "error";
 
 const transportMode = ref<TransportMode>(getTransportType());
 const transportReady = ref(hasNativeTransport);
 
-const rawUserAgent = ref('读取中');
+const rawUserAgent = ref("读取中");
 const updateChecking = ref(false);
 const updateResult = ref<AppUpdateCheckResult | null>(null);
-const updateError = ref('');
+const updateError = ref("");
 
 const updateChannelOptions = [
-  { label: '正式', value: 'stable' },
-  { label: '开发', value: 'development' },
+  { label: "正式", value: "stable" },
+  { label: "开发", value: "development" },
 ] satisfies { label: string; value: AppUpdateChannel }[];
 
 const contributors = [
-  'Mg',
-  '丽拓朝夕',
-  '喵公子',
-  '聚.散',
-  '杯呗is me',
+  "Mg",
+  "丽拓朝夕",
+  "喵公子",
+  "聚.散",
+  "杯呗is me",
   "I'm yours",
-  '凉子',
-  '目目',
+  "凉子",
+  "目目",
 ];
 
 const runtimeModeLabel = computed(() => {
   switch (transportMode.value) {
-    case 'tauri':
-      return 'Tauri IPC';
-    case 'harmony':
-      return 'Harmony 桥接';
-    case 'websocket':
-      return 'WebSocket';
+    case "tauri":
+      return "Tauri IPC";
+    case "harmony":
+      return "Harmony 桥接";
+    case "websocket":
+      return "WebSocket";
     default:
-      return '未连接';
+      return "未连接";
   }
 });
 
 const runtimeModeDesc = computed(() => {
   switch (transportMode.value) {
-    case 'tauri':
-      return '当前工作在桌面原生壳内，前端通过 Tauri IPC 直连 Rust 命令。';
-    case 'harmony':
-      return '当前工作在 Harmony 原生壳内，前端通过原生桥接访问宿主能力。';
-    case 'websocket':
-      return '当前工作在 Web / WS 模式，前端通过 WebSocket 与后端服务通信。';
+    case "tauri":
+      return "当前工作在桌面原生壳内，前端通过 Tauri IPC 直连 Rust 命令。";
+    case "harmony":
+      return "当前工作在 Harmony 原生壳内，前端通过原生桥接访问宿主能力。";
+    case "websocket":
+      return "当前工作在 Web / WS 模式，前端通过 WebSocket 与后端服务通信。";
     default:
-      return '当前未检测到可用宿主传输，仅能进行静态界面预览。';
+      return "当前未检测到可用宿主传输，仅能进行静态界面预览。";
   }
 });
 
 const runtimeTagType = computed(() => {
   if (!transportReady.value) {
-    return 'warning';
+    return "warning";
   }
-  return transportMode.value === 'websocket' ? 'info' : 'success';
+  return transportMode.value === "websocket" ? "info" : "success";
 });
 
 const wsEndpoint = computed(() => {
-  if (transportMode.value !== 'websocket') {
-    return '未使用';
+  if (transportMode.value !== "websocket") {
+    return "未使用";
   }
-  return getCustomWsUrl() || '同源 WebSocket 自动探测';
+  return getCustomWsUrl() || "同源 WebSocket 自动探测";
 });
 
 const detectWebViewVersion = (ua: string) => {
@@ -112,7 +117,9 @@ const detectWebViewVersion = (ua: string) => {
     return `Edge WebView2 ${edge[1]}`;
   }
 
-  const webview = ua.match(/Version\/([^\s]+).*Chrome\/([^\s]+).*Mobile Safari/i);
+  const webview = ua.match(
+    /Version\/([^\s]+).*Chrome\/([^\s]+).*Mobile Safari/i,
+  );
   if (webview) {
     return `Android WebView / Chromium ${webview[2]}`;
   }
@@ -127,85 +134,93 @@ const detectWebViewVersion = (ua: string) => {
     return `WebKit / Safari ${safari[1]}`;
   }
 
-  return '未能从 UA 识别';
+  return "未能从 UA 识别";
 };
 
 const webViewVersion = computed(() => detectWebViewVersion(rawUserAgent.value));
 
 const environmentCards = computed(() => [
   {
-    label: '运行环境',
+    label: "运行环境",
     value: envLabel,
     desc: runtimeModeDesc.value,
   },
   {
-    label: '通信模式',
+    label: "通信模式",
     value: runtimeModeLabel.value,
-    desc: transportReady.value ? '当前传输层已可用。' : '当前传输层不可用。',
+    desc: transportReady.value ? "当前传输层已可用。" : "当前传输层不可用。",
   },
   {
-    label: '操作系统',
-    value: platform.value || '未知',
-    desc: isMobile.value ? '当前为移动端布局。' : '当前为桌面端布局。',
+    label: "操作系统",
+    value: platform.value || "未知",
+    desc: isMobile.value ? "当前为移动端布局。" : "当前为桌面端布局。",
   },
   {
-    label: 'WebView / 内核',
+    label: "WebView / 内核",
     value: webViewVersion.value,
-    desc: '由当前页面原始 UA 解析，完整字段见下方诊断信息。',
+    desc: "由当前页面原始 UA 解析，完整字段见下方诊断信息。",
   },
 ]);
 
 const uaRows = computed(() => [
   {
-    label: '系统原始 UA',
+    label: "系统原始 UA",
     value: rawUserAgent.value,
-    desc: '本软件当前运行环境上报的原始 User-Agent，可用于查看系统 WebView 或浏览器内核版本。',
+    desc: "本软件当前运行环境上报的原始 User-Agent，可用于查看系统 WebView 或浏览器内核版本。",
   },
 ]);
 
-const updatePlatformInfo = computed(() => resolveAppUpdatePlatform(platform.value));
+const updatePlatformInfo = computed(() =>
+  resolveAppUpdatePlatform(platform.value),
+);
 
-const updateReleasePageUrl = computed(() => getAppUpdateReleasePageUrl(appUpdate.value.channel));
+const updateReleasePageUrl = computed(() =>
+  getAppUpdateReleasePageUrl(appUpdate.value.channel),
+);
 
-const updateChannelLabel = computed(() => getAppUpdateChannelLabel(appUpdate.value.channel));
+const updateChannelLabel = computed(() =>
+  getAppUpdateChannelLabel(appUpdate.value.channel),
+);
 
 const updateResultChannelLabel = computed(() =>
-  getAppUpdateChannelLabel(updateResult.value?.channel ?? appUpdate.value.channel),
+  getAppUpdateChannelLabel(
+    updateResult.value?.channel ?? appUpdate.value.channel,
+  ),
 );
 
 const updateStatusLabel = computed(() => {
   if (updateChecking.value) {
-    return '检查中';
+    return "检查中";
   }
   if (updateError.value) {
-    return '检查失败';
+    return "检查失败";
   }
   if (!updateResult.value) {
-    return '尚未检查';
+    return "尚未检查";
   }
   if (updateResult.value.hasUpdate) {
-    return '发现新版本';
+    return "发现新版本";
   }
   if (updateResult.value.unavailableReason) {
-    return '无本平台包';
+    return "无本平台包";
   }
-  return '已是最新';
+  return "已是最新";
 });
 
 const updateStatusTagType = computed<TagType>(() => {
   if (updateError.value) {
-    return 'error';
+    return "error";
   }
   if (updateChecking.value) {
-    return 'info';
+    return "info";
   }
   if (updateResult.value?.hasUpdate) {
-    return 'success';
+    return "success";
   }
   if (updateResult.value?.unavailableReason) {
-    return 'warning';
+    return "warning";
   }
-  return 'default';
+  return "default";
 });
 
 const updateSummaryTitle = computed(() => {
@@ -219,14 +234,14 @@ const updateSummaryTitle = computed(() => {
     return `${updateResult.value.latestDisplayVersion || updateResult.value.latestVersion} 可用`;
   }
   if (updateResult.value.unavailableReason) {
-    return '未找到当前平台安装包';
+    return "未找到当前平台安装包";
   }
   return `当前核心版本 ${updateResult.value.currentVersion}`;
 });
 
 const updateSummaryDesc = computed(() => {
   if (updateError.value) {
-    return '请稍后重试，或打开对应发布页手动查看。';
+    return "请稍后重试，或打开对应发布页手动查看。";
   }
   if (!updateResult.value) {
     return `当前平台识别为 ${updatePlatformInfo.value.label}，检查时会匹配该平台最近可用的发布产物。`;
@@ -240,23 +255,32 @@ const updateSummaryDesc = computed(() => {
   return `当前核心版本不低于 ${updateResultChannelLabel.value} 渠道最新可用版本。`;
 });
 
-const updatePublishedAt = computed(() => formatReleaseTime(updateResult.value?.releasePublishedAt));
+const updatePublishedAt = computed(() =>
+  formatReleaseTime(updateResult.value?.releasePublishedAt),
+);
 
 const updateAssetSize = computed(() =>
-  updateResult.value?.asset ? formatAppUpdateAssetSize(updateResult.value.asset.size) : '',
+  updateResult.value?.asset
+    ? formatAppUpdateAssetSize(updateResult.value.asset.size)
+    : "",
 );
+
+const updateCanDownload = computed(() => {
+  const resultPlatform = updateResult.value?.platform;
+  return resultPlatform === "windows" || resultPlatform === "android";
+});
 
 function formatReleaseTime(value?: string) {
   if (!value) {
-    return '未知';
+    return "未知";
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return new Intl.DateTimeFormat('zh-CN', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(date);
 }
 
@@ -266,12 +290,12 @@ function handleUpdateChannel(value: string) {
   }
   prefStore.patchAppUpdate({ channel: value });
   updateResult.value = null;
-  updateError.value = '';
+  updateError.value = "";
 }
 
 async function handleCheckUpdate() {
   updateChecking.value = true;
-  updateError.value = '';
+  updateError.value = "";
   try {
     const result = await checkAppUpdate({
       channel: appUpdate.value.channel,
@@ -280,11 +304,11 @@ async function handleCheckUpdate() {
     });
     updateResult.value = result;
     if (result.hasUpdate) {
-      message.success('发现可用更新');
+      message.success("发现可用更新");
     } else if (result.unavailableReason) {
       message.warning(result.unavailableReason);
     } else {
-      message.info('当前已是最新核心版本');
+      message.info("当前已是最新核心版本");
     }
   } catch (error: unknown) {
     const text = error instanceof Error ? error.message : String(error);
@@ -300,10 +324,10 @@ async function openUrl(url: string) {
     return;
   }
   try {
-    const { openUrl: tauriOpenUrl } = await import('@tauri-apps/plugin-opener');
+    const { openUrl: tauriOpenUrl } = await import("@tauri-apps/plugin-opener");
     await tauriOpenUrl(url);
   } catch {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 }
 
@@ -312,19 +336,23 @@ async function openUpdateReleasePage() {
 }
 
 async function openUpdateDownload() {
-  if (!updateResult.value?.asset) {
+  if (!updateResult.value?.asset || !updateCanDownload.value) {
     return;
   }
-  await openUrl(updateResult.value.asset.url);
+  window.dispatchEvent(
+    new CustomEvent("legado:show-app-update", {
+      detail: updateResult.value,
+    }),
+  );
 }
 
 function collectUserAgentInfo() {
-  if (typeof navigator === 'undefined') {
-    rawUserAgent.value = '当前环境没有 navigator';
+  if (typeof navigator === "undefined") {
+    rawUserAgent.value = "当前环境没有 navigator";
     return;
   }
 
-  rawUserAgent.value = navigator.userAgent || '空';
+  rawUserAgent.value = navigator.userAgent || "空";
 }
 
 onMounted(async () => {
@@ -346,8 +374,12 @@ onMounted(async () => {
         </p>
       </div>
       <div class="about-hero__chips">
-        <n-tag size="small" :bordered="false">前端 {{ packageJson.version }}</n-tag>
-        <n-tag size="small" :bordered="false" type="info">桌面壳 {{ tauriConfig.version }}</n-tag>
+        <n-tag size="small" :bordered="false"
+          >前端 {{ packageJson.version }}</n-tag
+        >
+        <n-tag size="small" :bordered="false" type="info"
+          >桌面壳 {{ tauriConfig.version }}</n-tag
+        >
         <n-tag size="small" :bordered="false" :type="runtimeTagType as any">
           {{ runtimeModeLabel }}
         </n-tag>
@@ -355,7 +387,11 @@ onMounted(async () => {
     </div>
 
     <div class="about-runtime-grid">
-      <div v-for="item in environmentCards" :key="item.label" class="about-card">
+      <div
+        v-for="item in environmentCards"
+        :key="item.label"
+        class="about-card"
+      >
         <span class="about-label">{{ item.label }}</span>
         <strong class="about-card__value">{{ item.value }}</strong>
         <p class="about-card__desc">{{ item.desc }}</p>
@@ -365,7 +401,11 @@ onMounted(async () => {
     <div class="about-panel about-panel--update">
       <div class="about-panel__head">
         <h4 class="about-panel__title">版本更新</h4>
-        <n-tag size="small" :type="updateStatusTagType as any" :bordered="false">
+        <n-tag
+          size="small"
+          :type="updateStatusTagType as any"
+          :bordered="false"
+        >
           {{ updateStatusLabel }}
         </n-tag>
       </div>
@@ -420,7 +460,9 @@ onMounted(async () => {
       <div v-if="updateResult" class="about-update-meta">
         <div>
           <span>最新版本</span>
-          <strong>{{ updateResult.latestDisplayVersion || updateResult.latestVersion }}</strong>
+          <strong>{{
+            updateResult.latestDisplayVersion || updateResult.latestVersion
+          }}</strong>
         </div>
         <div>
           <span>发布时间</span>
@@ -428,7 +470,7 @@ onMounted(async () => {
         </div>
         <div>
           <span>发布标签</span>
-          <strong>{{ updateResult.releaseTag || '未知' }}</strong>
+          <strong>{{ updateResult.releaseTag || "未知" }}</strong>
         </div>
         <div>
           <span>匹配平台</span>
@@ -441,16 +483,26 @@ onMounted(async () => {
           <span>安装包</span>
           <strong>{{ updateResult.asset.name }}</strong>
           <small>{{ updateAssetSize }}</small>
-          <small v-if="updateResult.asset.digest" class="about-update-asset__digest">
+          <small
+            v-if="updateResult.asset.digest"
+            class="about-update-asset__digest"
+          >
             {{ updateResult.asset.digest }}
           </small>
         </div>
-        <n-button size="small" type="primary" secondary @click="openUpdateDownload">
+        <n-button
+          v-if="updateCanDownload"
+          size="small"
+          type="primary"
+          secondary
+          @click="openUpdateDownload"
+        >
           <template #icon>
             <n-icon><Download /></n-icon>
           </template>
-          下载
+          下载并安装
         </n-button>
+        <n-tag v-else size="small" :bordered="false" type="info">仅提示</n-tag>
       </div>
     </div>
 
@@ -479,14 +531,22 @@ onMounted(async () => {
         <div class="about-badges">
           <div class="about-badge-row">
             <span class="about-badge-row__label">Tauri 原生壳</span>
-            <n-tag size="small" :type="isTauri ? 'success' : 'default'" :bordered="false">
-              {{ isTauri ? '可用' : '未启用' }}
+            <n-tag
+              size="small"
+              :type="isTauri ? 'success' : 'default'"
+              :bordered="false"
+            >
+              {{ isTauri ? "可用" : "未启用" }}
             </n-tag>
           </div>
           <div class="about-badge-row">
             <span class="about-badge-row__label">Harmony 原生桥接</span>
-            <n-tag size="small" :type="isHarmonyNative ? 'success' : 'default'" :bordered="false">
-              {{ isHarmonyNative ? '可用' : '未启用' }}
+            <n-tag
+              size="small"
+              :type="isHarmonyNative ? 'success' : 'default'"
+              :bordered="false"
+            >
+              {{ isHarmonyNative ? "可用" : "未启用" }}
             </n-tag>
           </div>
           <div class="about-badge-row">
@@ -496,7 +556,7 @@ onMounted(async () => {
               :type="hasNativeTransport ? 'success' : 'default'"
               :bordered="false"
             >
-              {{ hasNativeTransport ? '直连宿主' : '浏览器环境' }}
+              {{ hasNativeTransport ? "直连宿主" : "浏览器环境" }}
             </n-tag>
           </div>
           <div class="about-badge-row">
@@ -516,7 +576,7 @@ onMounted(async () => {
               :type="devTools.fullModeEnabled ? 'success' : 'default'"
               :bordered="false"
             >
-              {{ devTools.fullModeEnabled ? '已激活' : '未激活' }}
+              {{ devTools.fullModeEnabled ? "已激活" : "未激活" }}
             </n-tag>
           </div>
         </div>
@@ -528,7 +588,11 @@ onMounted(async () => {
           <span class="about-panel__hint">排名不分先后</span>
         </div>
         <div class="about-contributors">
-          <span v-for="name in contributors" :key="name" class="about-contributor">
+          <span
+            v-for="name in contributors"
+            :key="name"
+            class="about-contributor"
+          >
             {{ name }}
           </span>
         </div>
@@ -660,7 +724,8 @@ onMounted(async () => {
   justify-content: space-between;
   gap: var(--space-3);
   padding-bottom: 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
 .about-badge-row:last-child {
@@ -784,7 +849,8 @@ onMounted(async () => {
   grid-template-columns: minmax(140px, 0.28fr) minmax(0, 1fr);
   gap: var(--space-3);
   padding-bottom: 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
 .about-ua-row:last-child {
@@ -807,8 +873,8 @@ onMounted(async () => {
   background: color-mix(in srgb, var(--color-border) 22%, transparent);
   color: var(--color-text);
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   font-size: var(--fs-12);
   line-height: 1.55;
   overflow-wrap: anywhere;

@@ -17,6 +17,7 @@ export interface OpenChapterOptions {
   pageRatio?: number;
   forceNetwork?: boolean;
   anchor?: ReadingAnchor;
+  vipPurchaseRetried?: boolean;
 }
 
 interface ComicModeApi {
@@ -91,7 +92,12 @@ interface UseReaderChapterOpenOptions {
     payload: ReaderProgressPayload,
   ) => Promise<unknown>;
   waitForLinearSeamlessWindowStable: (index: number) => Promise<void>;
+  requestVipChapterPurchase?: (
+    index: number,
+    loadError: unknown,
+  ) => Promise<boolean>;
   reportLoadError: (message: string) => void;
+  clearChapterRuntimeCache: (index: number) => void;
   clearRepaginateWork: () => void;
 }
 
@@ -356,6 +362,31 @@ export function useReaderChapterOpen(options: UseReaderChapterOpenOptions) {
     });
   }
 
+  async function retryAfterVipPurchase(
+    index: number,
+    cause: unknown,
+    openOptions: OpenChapterOptions,
+    reopen: (index: number, nextOptions: OpenChapterOptions) => Promise<void>,
+    shouldContinue: () => boolean,
+  ): Promise<boolean> {
+    if (openOptions.vipPurchaseRetried || !options.requestVipChapterPurchase) {
+      return false;
+    }
+    const purchased = await options
+      .requestVipChapterPurchase(index, cause)
+      .catch(() => false);
+    if (!purchased || !shouldContinue()) {
+      return false;
+    }
+    options.clearChapterRuntimeCache(index);
+    await reopen(index, {
+      ...openOptions,
+      forceNetwork: true,
+      vipPurchaseRetried: true,
+    });
+    return true;
+  }
+
   async function openPagedChapter(
     index: number,
     openOptions: OpenChapterOptions = {},
@@ -464,6 +495,17 @@ export function useReaderChapterOpen(options: UseReaderChapterOpenOptions) {
       if (token !== openChapterToken) {
         return;
       }
+      if (
+        await retryAfterVipPurchase(
+          index,
+          cause,
+          openOptions,
+          openPagedChapter,
+          () => token === openChapterToken,
+        )
+      ) {
+        return;
+      }
       options.error.value =
         cause instanceof Error ? cause.message : String(cause);
       options.reportLoadError(options.error.value);
@@ -553,6 +595,17 @@ export function useReaderChapterOpen(options: UseReaderChapterOpenOptions) {
       );
     } catch (cause) {
       if (token !== openChapterToken) {
+        return;
+      }
+      if (
+        await retryAfterVipPurchase(
+          index,
+          cause,
+          openOptions,
+          openLinearChapter,
+          () => token === openChapterToken,
+        )
+      ) {
         return;
       }
       options.error.value =

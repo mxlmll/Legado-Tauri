@@ -1,14 +1,15 @@
-import { computed, readonly, ref } from 'vue';
-import { eventListen } from './useEventBus';
+import { computed, readonly, ref } from "vue";
+import { useDynamicConfig } from "./useDynamicConfig";
+import { eventListen } from "./useEventBus";
 import {
   useFrontendPlugins,
   type FrontendTtsEngineRecord,
   type TtsSpeakContext,
   type TtsVoiceDefinition,
-} from './useFrontendPlugins';
-import { invokeWithTimeout } from './useInvoke';
+} from "./useFrontendPlugins";
+import { invokeWithTimeout } from "./useInvoke";
 
-const SYSTEM_ENGINE_ID = 'system';
+const SYSTEM_ENGINE_ID = "system";
 const QUEUE_LOAD_AHEAD = 6;
 const TTS_PRELOAD_AHEAD = 2;
 export const TTS_MAX_PARAGRAPH_CHARS = 300;
@@ -17,7 +18,8 @@ const SYSTEM_TTS_READY_TIMEOUT_MS = 30_000;
 const SYSTEM_TTS_SPEAK_TIMEOUT_MS = 35_000;
 const POLL_INTERVAL_MS = 180;
 const READY_POLL_INTERVAL_MS = 300;
-const SETTINGS_KEY = 'legado.tts.settings';
+const SETTINGS_KEY = "legado.tts.settings";
+const SETTINGS_NAMESPACE = "reader.tts";
 
 export interface TtsOptions {
   engineId?: string;
@@ -47,7 +49,7 @@ export interface TtsEngineRecord {
   name: string;
   description: string;
   category: string;
-  source: 'system' | 'plugin';
+  source: "system" | "plugin";
   pluginId?: string;
   fileName?: string;
 }
@@ -103,17 +105,17 @@ interface SystemTtsSpeakPayload {
   rate: number;
   pitch: number;
   volume: number;
-  queueMode: 'flush' | 'add';
+  queueMode: "flush" | "add";
 }
 
 const frontendPlugins = useFrontendPlugins();
 
 const systemEngine: TtsEngineRecord = {
   id: SYSTEM_ENGINE_ID,
-  name: '系统 TTS',
-  description: '使用操作系统原生朗读引擎',
-  category: '内置',
-  source: 'system',
+  name: "系统 TTS",
+  description: "使用操作系统原生朗读引擎",
+  category: "内置",
+  source: "system",
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -123,30 +125,59 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function readPersistedSettings(): PersistedTtsSettings {
-  try {
-    const raw = window.localStorage?.getItem(SETTINGS_KEY);
-    return raw ? (JSON.parse(raw) as PersistedTtsSettings) : {};
-  } catch {
-    return {};
-  }
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function writePersistedSettings(values: PersistedTtsSettings): void {
-  try {
-    window.localStorage?.setItem(SETTINGS_KEY, JSON.stringify(values));
-  } catch {
-    // ignore storage failures
+function normalizePersistedSettings(
+  value: unknown,
+): PersistedTtsSettings | null {
+  if (!value || typeof value !== "object") {
+    return null;
   }
+  const record = value as PersistedTtsSettings;
+  return {
+    engineId: readNonEmptyString(record.engineId) ?? SYSTEM_ENGINE_ID,
+    voiceId: readNonEmptyString(record.voiceId) ?? "",
+    playbackRate: clamp(Number(record.playbackRate ?? 1), 0.5, 2),
+    volume: clamp(Number(record.volume ?? 1), 0, 1),
+    pitch: clamp(Number(record.pitch ?? 1), 0.5, 2),
+  };
 }
 
-function normalizePluginEngine(record: FrontendTtsEngineRecord): TtsEngineRecord {
+const ttsSettingsStore = useDynamicConfig<PersistedTtsSettings>({
+  namespace: SETTINGS_NAMESPACE,
+  version: 1,
+  defaults: () => ({
+    engineId: SYSTEM_ENGINE_ID,
+    voiceId: "",
+    playbackRate: 1,
+    volume: 1,
+    pitch: 1,
+  }),
+  migrate: ({ readLegacy }) => {
+    const raw = readLegacy(SETTINGS_KEY);
+    if (!raw) {
+      return null;
+    }
+    try {
+      return normalizePersistedSettings(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  },
+  legacyKeys: [SETTINGS_KEY],
+});
+
+function normalizePluginEngine(
+  record: FrontendTtsEngineRecord,
+): TtsEngineRecord {
   return {
     id: record.id,
     name: record.name,
     description: record.description,
     category: record.category,
-    source: 'plugin',
+    source: "plugin",
     pluginId: record.pluginId,
     fileName: record.fileName,
   };
@@ -168,7 +199,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
     }
     const timer = window.setTimeout(resolve, ms);
     signal?.addEventListener(
-      'abort',
+      "abort",
       () => {
         window.clearTimeout(timer);
         resolve();
@@ -196,7 +227,7 @@ function splitLongParagraph(paragraph: string): string[] {
       index > Math.floor(TTS_MAX_PARAGRAPH_CHARS * 0.55);
       index--
     ) {
-      if (/[。！？…；.!?;,，、]/.test(remaining[index] ?? '')) {
+      if (/[。！？…；.!?;,，、]/.test(remaining[index] ?? "")) {
         cutAt = index + 1;
         break;
       }
@@ -225,7 +256,7 @@ export function splitIntoSegments(text: string): string[] {
 }
 
 function getBrowserSpeechVoices(): TtsVoice[] {
-  if (!('speechSynthesis' in window)) {
+  if (!("speechSynthesis" in window)) {
     return [];
   }
   return window.speechSynthesis.getVoices().map((voice) => ({
@@ -237,11 +268,14 @@ function getBrowserSpeechVoices(): TtsVoice[] {
 
 async function waitForBrowserVoices(): Promise<TtsVoice[]> {
   const voices = getBrowserSpeechVoices();
-  if (voices.length > 0 || !('speechSynthesis' in window)) {
+  if (voices.length > 0 || !("speechSynthesis" in window)) {
     return voices;
   }
   return new Promise((resolve) => {
-    const timer = window.setTimeout(() => resolve(getBrowserSpeechVoices()), 800);
+    const timer = window.setTimeout(
+      () => resolve(getBrowserSpeechVoices()),
+      800,
+    );
     window.speechSynthesis.onvoiceschanged = () => {
       window.clearTimeout(timer);
       resolve(getBrowserSpeechVoices());
@@ -250,11 +284,11 @@ async function waitForBrowserVoices(): Promise<TtsVoice[]> {
 }
 
 async function stopSystemSpeech(): Promise<void> {
-  if ('speechSynthesis' in window) {
+  if ("speechSynthesis" in window) {
     window.speechSynthesis.cancel();
   }
   try {
-    await invokeWithTimeout<void>('tts_stop', undefined, COMMAND_TIMEOUT_MS);
+    await invokeWithTimeout<void>("tts_stop", undefined, COMMAND_TIMEOUT_MS);
   } catch {
     // Browser/Web fallback may not have the native command available.
   }
@@ -265,7 +299,7 @@ async function waitForSystemTtsReady(signal: AbortSignal): Promise<void> {
 
   while (!signal.aborted) {
     const state = await invokeWithTimeout<SystemTtsInitializedState>(
-      'tts_is_initialized',
+      "tts_is_initialized",
       undefined,
       COMMAND_TIMEOUT_MS,
     );
@@ -273,14 +307,17 @@ async function waitForSystemTtsReady(signal: AbortSignal): Promise<void> {
       return;
     }
     if (Date.now() - startedAt >= SYSTEM_TTS_READY_TIMEOUT_MS) {
-      throw new Error('系统 TTS 初始化超时，请确认系统语音引擎已安装并启用');
+      throw new Error("系统 TTS 初始化超时，请确认系统语音引擎已安装并启用");
     }
     await delay(READY_POLL_INTERVAL_MS, signal);
   }
-  throw new Error('系统 TTS 初始化已取消');
+  throw new Error("系统 TTS 初始化已取消");
 }
 
-function waitForSystemSpeechDone(signal: AbortSignal, text: string): Promise<void> {
+function waitForSystemSpeechDone(
+  signal: AbortSignal,
+  text: string,
+): Promise<void> {
   const startedAt = Date.now();
   const estimatedMs = clamp(text.length * 180, 1_000, 45_000);
 
@@ -295,7 +332,7 @@ function waitForSystemSpeechDone(signal: AbortSignal, text: string): Promise<voi
         window.clearTimeout(pollTimer);
         pollTimer = null;
       }
-      signal.removeEventListener('abort', finish);
+      signal.removeEventListener("abort", finish);
       for (const unlisten of unlisteners.splice(0)) {
         unlisten();
       }
@@ -324,9 +361,12 @@ function waitForSystemSpeechDone(signal: AbortSignal, text: string): Promise<voi
       handler: (payload: SystemTtsEventPayload) => void,
     ) {
       try {
-        const unlisten = await eventListen<SystemTtsEventPayload>(eventName, (event) => {
-          handler(event.payload ?? {});
-        });
+        const unlisten = await eventListen<SystemTtsEventPayload>(
+          eventName,
+          (event) => {
+            handler(event.payload ?? {});
+          },
+        );
         if (resolved) {
           unlisten();
         } else {
@@ -345,7 +385,7 @@ function waitForSystemSpeechDone(signal: AbortSignal, text: string): Promise<voi
 
       try {
         const state = await invokeWithTimeout<SystemTtsSpeakingState>(
-          'tts_is_speaking',
+          "tts_is_speaking",
           undefined,
           COMMAND_TIMEOUT_MS,
         );
@@ -367,11 +407,11 @@ function waitForSystemSpeechDone(signal: AbortSignal, text: string): Promise<voi
       pollTimer = window.setTimeout(pollSpeakingState, POLL_INTERVAL_MS);
     }
 
-    signal.addEventListener('abort', finish, { once: true });
-    void registerSpeechEvent('tts://speech:finish', finish);
-    void registerSpeechEvent('tts://speech:cancel', finish);
-    void registerSpeechEvent('tts://speech:error', (payload) => {
-      fail(payload.error ?? '系统 TTS 朗读失败');
+    signal.addEventListener("abort", finish, { once: true });
+    void registerSpeechEvent("tts://speech:finish", finish);
+    void registerSpeechEvent("tts://speech:cancel", finish);
+    void registerSpeechEvent("tts://speech:error", (payload) => {
+      fail(payload.error ?? "系统 TTS 朗读失败");
     });
     pollTimer = window.setTimeout(pollSpeakingState, POLL_INTERVAL_MS);
   });
@@ -379,14 +419,14 @@ function waitForSystemSpeechDone(signal: AbortSignal, text: string): Promise<voi
 
 async function speakWithBrowserSpeech(
   text: string,
-  options: Required<Pick<TtsOptions, 'rate' | 'volume' | 'pitch'>> & {
+  options: Required<Pick<TtsOptions, "rate" | "volume" | "pitch">> & {
     voiceId?: string;
     language?: string;
   },
   signal: AbortSignal,
 ): Promise<void> {
-  if (!('speechSynthesis' in window)) {
-    throw new Error('当前环境没有可用的系统朗读引擎');
+  if (!("speechSynthesis" in window)) {
+    throw new Error("当前环境没有可用的系统朗读引擎");
   }
 
   await waitForBrowserVoices();
@@ -398,7 +438,8 @@ async function speakWithBrowserSpeech(
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
     const voice = voices.find(
-      (item) => item.voiceURI === options.voiceId || item.name === options.voiceId,
+      (item) =>
+        item.voiceURI === options.voiceId || item.name === options.voiceId,
     );
     if (voice) {
       utterance.voice = voice;
@@ -423,7 +464,7 @@ async function speakWithBrowserSpeech(
       reject(new Error(`浏览器朗读失败: ${event.error}`));
     };
     signal.addEventListener(
-      'abort',
+      "abort",
       () => {
         cleanup();
         window.speechSynthesis.cancel();
@@ -436,7 +477,10 @@ async function speakWithBrowserSpeech(
   });
 }
 
-async function speakWithSystemEngine(text: string, context: TtsSpeakContext): Promise<void> {
+async function speakWithSystemEngine(
+  text: string,
+  context: TtsSpeakContext,
+): Promise<void> {
   const payload: SystemTtsSpeakPayload = {
     text,
     language: context.language,
@@ -444,17 +488,21 @@ async function speakWithSystemEngine(text: string, context: TtsSpeakContext): Pr
     rate: context.rate,
     pitch: context.pitch,
     volume: context.volume,
-    queueMode: 'flush',
+    queueMode: "flush",
   };
 
   const waitController = new AbortController();
   const abortWait = () => waitController.abort();
-  context.signal.addEventListener('abort', abortWait, { once: true });
+  context.signal.addEventListener("abort", abortWait, { once: true });
 
   try {
     await waitForSystemTtsReady(context.signal);
     const done = waitForSystemSpeechDone(waitController.signal, text);
-    await invokeWithTimeout('tts_speak', { payload }, SYSTEM_TTS_SPEAK_TIMEOUT_MS);
+    await invokeWithTimeout(
+      "tts_speak",
+      { payload },
+      SYSTEM_TTS_SPEAK_TIMEOUT_MS,
+    );
     await done;
   } catch (error) {
     waitController.abort();
@@ -465,7 +513,7 @@ async function speakWithSystemEngine(text: string, context: TtsSpeakContext): Pr
       throw error;
     });
   } finally {
-    context.signal.removeEventListener('abort', abortWait);
+    context.signal.removeEventListener("abort", abortWait);
   }
 }
 
@@ -477,22 +525,45 @@ function normalizePluginVoices(value: TtsVoiceDefinition[]): TtsVoice[] {
   }));
 }
 
-const persisted = readPersistedSettings();
-
 const isPlaying = ref(false);
 const isLoading = ref(false);
 const hasSession = ref(false);
-const playbackRate = ref(clamp(persisted.playbackRate ?? 1, 0.5, 2));
-const volume = ref(clamp(persisted.volume ?? 1, 0, 1));
-const pitch = ref(clamp(persisted.pitch ?? 1, 0.5, 2));
+const playbackRate = computed({
+  get: () => clamp(ttsSettingsStore.state.playbackRate ?? 1, 0.5, 2),
+  set: (value: number) => {
+    ttsSettingsStore.state.playbackRate = clamp(value, 0.5, 2);
+  },
+});
+const volume = computed({
+  get: () => clamp(ttsSettingsStore.state.volume ?? 1, 0, 1),
+  set: (value: number) => {
+    ttsSettingsStore.state.volume = clamp(value, 0, 1);
+  },
+});
+const pitch = computed({
+  get: () => clamp(ttsSettingsStore.state.pitch ?? 1, 0.5, 2),
+  set: (value: number) => {
+    ttsSettingsStore.state.pitch = clamp(value, 0.5, 2);
+  },
+});
 const error = ref<string | null>(null);
 const currentGlobalIdx = ref(-1);
 const currentSegmentIndex = ref(0);
 const totalSegmentsKnown = ref(0);
 const totalFinalized = ref(false);
-const currentSegmentText = ref('');
-const selectedEngineId = ref(nonEmpty(persisted.engineId) ?? SYSTEM_ENGINE_ID);
-const selectedVoiceId = ref(nonEmpty(persisted.voiceId) ?? '');
+const currentSegmentText = ref("");
+const selectedEngineId = computed({
+  get: () => nonEmpty(ttsSettingsStore.state.engineId) ?? SYSTEM_ENGINE_ID,
+  set: (engineId: string) => {
+    ttsSettingsStore.state.engineId = nonEmpty(engineId) ?? SYSTEM_ENGINE_ID;
+  },
+});
+const selectedVoiceId = computed({
+  get: () => nonEmpty(ttsSettingsStore.state.voiceId) ?? "",
+  set: (voiceId: string) => {
+    ttsSettingsStore.state.voiceId = nonEmpty(voiceId) ?? "";
+  },
+});
 const availableVoices = ref<TtsVoice[]>([]);
 const voicesLoading = ref(false);
 
@@ -502,7 +573,9 @@ const availableEngines = computed<TtsEngineRecord[]>(() => [
 ]);
 const selectedEngine = computed(
   () =>
-    availableEngines.value.find((engine) => engine.id === selectedEngineId.value) ?? systemEngine,
+    availableEngines.value.find(
+      (engine) => engine.id === selectedEngineId.value,
+    ) ?? systemEngine,
 );
 const currentSegmentOrdinal = computed(() =>
   totalSegmentsKnown.value > 0
@@ -529,7 +602,7 @@ const ttsPreloadEntries = new Map<number, TtsPreloadEntry>();
 const ttsPreloadUnsupportedEngineIds = new Set<string>();
 
 function saveCurrentSettings(): void {
-  writePersistedSettings({
+  void ttsSettingsStore.replace({
     engineId: selectedEngineId.value,
     voiceId: selectedVoiceId.value,
     playbackRate: playbackRate.value,
@@ -591,7 +664,9 @@ function maybeLoadMore(): void {
   }
 }
 
-async function ensurePlayableItem(generation: number): Promise<QueueItem | null> {
+async function ensurePlayableItem(
+  generation: number,
+): Promise<QueueItem | null> {
   for (;;) {
     if (generation !== playGeneration || !hasSession.value) {
       return null;
@@ -623,14 +698,17 @@ function buildSpeakContext(
   signal: AbortSignal,
   preloaded?: unknown,
 ): TtsSpeakContext {
-  const voice = availableVoices.value.find((item) => item.id === selectedVoiceId.value);
+  const voice = availableVoices.value.find(
+    (item) => item.id === selectedVoiceId.value,
+  );
   const context: TtsSpeakContext = {
     text,
     voiceId:
       nonEmpty(selectedVoiceId.value) ??
       nonEmpty(activeOptions?.voiceId) ??
       nonEmpty(activeOptions?.voice),
-    language: nonEmpty(activeOptions?.language) ?? nonEmpty(voice?.language) ?? 'zh-CN',
+    language:
+      nonEmpty(activeOptions?.language) ?? nonEmpty(voice?.language) ?? "zh-CN",
     rate: playbackRate.value,
     pitch: pitch.value,
     volume: volume.value,
@@ -643,15 +721,18 @@ function buildSpeakContext(
 }
 
 function buildTtsPreloadKey(item: QueueItem): string {
-  const voice = availableVoices.value.find((candidate) => candidate.id === selectedVoiceId.value);
+  const voice = availableVoices.value.find(
+    (candidate) => candidate.id === selectedVoiceId.value,
+  );
   return JSON.stringify({
     engineId: selectedEngine.value.id,
     voiceId:
       nonEmpty(selectedVoiceId.value) ??
       nonEmpty(activeOptions?.voiceId) ??
       nonEmpty(activeOptions?.voice) ??
-      '',
-    language: nonEmpty(activeOptions?.language) ?? nonEmpty(voice?.language) ?? 'zh-CN',
+      "",
+    language:
+      nonEmpty(activeOptions?.language) ?? nonEmpty(voice?.language) ?? "zh-CN",
     rate: playbackRate.value,
     pitch: pitch.value,
     text: item.text,
@@ -680,7 +761,9 @@ function abortPendingTtsPreloads(): void {
 
 function pruneTtsPreloadCache(): void {
   const activeWindow = new Set(
-    items.slice(playIndex, playIndex + TTS_PRELOAD_AHEAD + 1).map((item) => item.globalIdx),
+    items
+      .slice(playIndex, playIndex + TTS_PRELOAD_AHEAD + 1)
+      .map((item) => item.globalIdx),
   );
   for (const [globalIdx, entry] of ttsPreloadEntries) {
     if (!activeWindow.has(globalIdx)) {
@@ -690,9 +773,15 @@ function pruneTtsPreloadCache(): void {
   }
 }
 
-function ensureTtsPreloadEntry(item: QueueItem, generation: number): TtsPreloadEntry | null {
+function ensureTtsPreloadEntry(
+  item: QueueItem,
+  generation: number,
+): TtsPreloadEntry | null {
   const engineId = selectedEngine.value.id;
-  if (engineId === SYSTEM_ENGINE_ID || ttsPreloadUnsupportedEngineIds.has(engineId)) {
+  if (
+    engineId === SYSTEM_ENGINE_ID ||
+    ttsPreloadUnsupportedEngineIds.has(engineId)
+  ) {
     return null;
   }
 
@@ -726,7 +815,11 @@ function ensureTtsPreloadEntry(item: QueueItem, generation: number): TtsPreloadE
         }
         return undefined;
       }
-      if (controller.signal.aborted || generation !== playGeneration || !hasSession.value) {
+      if (
+        controller.signal.aborted ||
+        generation !== playGeneration ||
+        !hasSession.value
+      ) {
         return undefined;
       }
       entry.loaded = true;
@@ -739,7 +832,10 @@ function ensureTtsPreloadEntry(item: QueueItem, generation: number): TtsPreloadE
   return entry;
 }
 
-async function getPreparedTtsValue(item: QueueItem, generation: number): Promise<TtsPreparedValue> {
+async function getPreparedTtsValue(
+  item: QueueItem,
+  generation: number,
+): Promise<TtsPreparedValue> {
   const entry = ensureTtsPreloadEntry(item, generation);
   if (!entry) {
     return { loaded: false };
@@ -796,13 +892,17 @@ function finishAll(): void {
   isPlaying.value = false;
   hasSession.value = false;
   currentGlobalIdx.value = -1;
-  currentSegmentText.value = '';
+  currentSegmentText.value = "";
   activeOptions?.onAllDone?.();
 }
 
 async function playLoop(generation: number): Promise<void> {
   for (;;) {
-    if (generation !== playGeneration || !hasSession.value || !isPlaying.value) {
+    if (
+      generation !== playGeneration ||
+      !hasSession.value ||
+      !isPlaying.value
+    ) {
       return;
     }
     const item = await ensurePlayableItem(generation);
@@ -814,7 +914,9 @@ async function playLoop(generation: number): Promise<void> {
     }
 
     currentGlobalIdx.value = item.globalIdx;
-    playIndex = items.findIndex((candidate) => candidate.globalIdx === item.globalIdx);
+    playIndex = items.findIndex(
+      (candidate) => candidate.globalIdx === item.globalIdx,
+    );
     if (playIndex < 0) {
       playIndex = item.globalIdx;
     }
@@ -849,7 +951,11 @@ async function playLoop(generation: number): Promise<void> {
       isLoading.value = false;
     }
 
-    if (controller.signal.aborted || generation !== playGeneration || !isPlaying.value) {
+    if (
+      controller.signal.aborted ||
+      generation !== playGeneration ||
+      !isPlaying.value
+    ) {
       return;
     }
     playIndex += 1;
@@ -879,9 +985,13 @@ function restartPlaybackIfNeeded(wasPlaying: boolean): void {
 async function refreshEngines(): Promise<void> {
   await frontendPlugins.ensureInitialized();
   ttsPreloadUnsupportedEngineIds.clear();
-  if (!availableEngines.value.some((engine) => engine.id === selectedEngineId.value)) {
+  if (
+    !availableEngines.value.some(
+      (engine) => engine.id === selectedEngineId.value,
+    )
+  ) {
     selectedEngineId.value = SYSTEM_ENGINE_ID;
-    selectedVoiceId.value = '';
+    selectedVoiceId.value = "";
     saveCurrentSettings();
   }
 }
@@ -893,7 +1003,7 @@ async function loadVoices(): Promise<void> {
     if (selectedEngine.value.id === SYSTEM_ENGINE_ID) {
       try {
         const voices = await invokeWithTimeout<TtsVoice[]>(
-          'tts_get_voices',
+          "tts_get_voices",
           { language: undefined },
           COMMAND_TIMEOUT_MS,
         );
@@ -911,7 +1021,7 @@ async function loadVoices(): Promise<void> {
       selectedVoiceId.value &&
       !availableVoices.value.some((voice) => voice.id === selectedVoiceId.value)
     ) {
-      selectedVoiceId.value = '';
+      selectedVoiceId.value = "";
       saveCurrentSettings();
     }
   } catch (err) {
@@ -932,13 +1042,13 @@ function startReading(options: TtsStartOptions): void {
   if (nextVoiceId) {
     selectedVoiceId.value = nextVoiceId;
   }
-  if (typeof options.rate === 'number') {
+  if (typeof options.rate === "number") {
     playbackRate.value = clamp(options.rate, 0.5, 2);
   }
-  if (typeof options.volume === 'number') {
+  if (typeof options.volume === "number") {
     volume.value = clamp(options.volume, 0, 1);
   }
-  if (typeof options.pitch === 'number') {
+  if (typeof options.pitch === "number") {
     pitch.value = clamp(options.pitch, 0.5, 2);
   }
   saveCurrentSettings();
@@ -988,7 +1098,7 @@ function stop(): void {
   currentSegmentIndex.value = 0;
   totalSegmentsKnown.value = 0;
   totalFinalized.value = false;
-  currentSegmentText.value = '';
+  currentSegmentText.value = "";
   activeOptions = null;
   loadingMore = false;
   endReached = false;
@@ -1007,7 +1117,9 @@ function nextSegment(): void {
   playGeneration += 1;
   interruptCurrentSpeech();
   abortPendingTtsPreloads();
-  playIndex = endReached ? Math.min(playIndex + 1, Math.max(items.length - 1, 0)) : playIndex + 1;
+  playIndex = endReached
+    ? Math.min(playIndex + 1, Math.max(items.length - 1, 0))
+    : playIndex + 1;
   pruneTtsPreloadCache();
   restartPlaybackIfNeeded(wasPlaying);
 }
@@ -1067,7 +1179,9 @@ function setPitch(nextPitch: number): void {
 
 async function setEngineId(engineId: string): Promise<void> {
   await refreshEngines();
-  const nextEngineId = availableEngines.value.some((engine) => engine.id === engineId)
+  const nextEngineId = availableEngines.value.some(
+    (engine) => engine.id === engineId,
+  )
     ? engineId
     : SYSTEM_ENGINE_ID;
   if (selectedEngineId.value === nextEngineId) {
@@ -1080,7 +1194,7 @@ async function setEngineId(engineId: string): Promise<void> {
   interruptCurrentSpeech();
   clearTtsPreloadCache();
   selectedEngineId.value = nextEngineId;
-  selectedVoiceId.value = '';
+  selectedVoiceId.value = "";
   saveCurrentSettings();
   await loadVoices();
   restartPlaybackIfNeeded(wasPlaying);
@@ -1099,16 +1213,17 @@ async function previewVoice(voiceId = selectedVoiceId.value): Promise<void> {
   if (selectedEngine.value.id === SYSTEM_ENGINE_ID) {
     try {
       await invokeWithTimeout(
-        'tts_preview_voice',
-        { voiceId, text: '这是一段系统朗读试听。' },
+        "tts_preview_voice",
+        { voiceId, text: "这是一段系统朗读试听。" },
         COMMAND_TIMEOUT_MS,
       );
     } catch {
       await speakWithBrowserSpeech(
-        '这是一段系统朗读试听。',
+        "这是一段系统朗读试听。",
         {
           voiceId,
-          language: availableVoices.value.find((voice) => voice.id === voiceId)?.language,
+          language: availableVoices.value.find((voice) => voice.id === voiceId)
+            ?.language,
           rate: playbackRate.value,
           volume: volume.value,
           pitch: pitch.value,

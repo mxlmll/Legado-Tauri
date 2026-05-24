@@ -2,20 +2,20 @@
   阅读器菜单层，承载顶部栏、底部栏、目录、TTS 控制和换源入口。
 -->
 <script setup lang="ts">
-import { Bookmark } from "lucide-vue-next";
-import { storeToRefs } from "pinia";
-import { computed, nextTick, ref } from "vue";
-import ReaderSourceSwitchBridge from "@/features/reader/components/ReaderSourceSwitchBridge.vue";
+import { Bookmark } from 'lucide-vue-next';
+import { storeToRefs } from 'pinia';
+import { computed, nextTick, ref } from 'vue';
+import ReaderSourceSwitchBridge from '@/features/reader/components/ReaderSourceSwitchBridge.vue';
 import {
   useReaderActionsStore,
   useReaderSessionStore,
   useReaderUiStore,
   useReaderViewStore,
-} from "@/stores";
-import ReaderBottomBar from "../reader/ReaderBottomBar.vue";
-import ReaderTocPanel from "../reader/ReaderTocPanel.vue";
-import ReaderTopBar from "../reader/ReaderTopBar.vue";
-import TtsControlBar from "../reader/TtsControlBar.vue";
+} from '@/stores';
+import ReaderBottomBar from '../reader/ReaderBottomBar.vue';
+import ReaderTocPanel from '../reader/ReaderTocPanel.vue';
+import ReaderTopBar from '../reader/ReaderTopBar.vue';
+import TtsControlBar from '../reader/TtsControlBar.vue';
 
 const readerActionsStore = useReaderActionsStore();
 const readerUiStore = useReaderUiStore();
@@ -51,6 +51,10 @@ const {
 } = storeToRefs(readerViewStore);
 const bottomBarRef = ref<InstanceType<typeof ReaderBottomBar> | null>(null);
 const showTopBar = computed(() => showMenu.value && !settingsVisible.value);
+const readerBookName = computed(() => bookInfo.value?.name ?? '');
+const readerSourceName = computed(
+  () => currentChapterOverride.value?.sourceName ?? bookInfo.value?.sourceName ?? '',
+);
 
 function closeSettings() {
   bottomBarRef.value?.closeSettings();
@@ -83,18 +87,16 @@ defineExpose({ closeSettings });
 <template>
   <!-- 菜单遮罩 -->
   <Transition name="reader-fade">
-    <div
-      v-if="showMenu"
-      class="reader-modal__overlay"
-      @click="onOverlayClick"
-    />
+    <div v-if="showMenu" class="reader-modal__overlay" @click="onOverlayClick" />
   </Transition>
 
   <!-- 顶部工具栏 -->
   <Transition name="reader-slide-top">
     <ReaderTopBar
       v-if="showTopBar"
+      :book-name="readerBookName"
       :chapter-name="currentChapterName"
+      :source-name="readerSourceName"
       :current-index="readingChapterIndex"
       :total-chapters="chapters.length"
       :chapter-url="currentChapterUrl"
@@ -111,16 +113,6 @@ defineExpose({ closeSettings });
     />
   </Transition>
 
-  <!-- 临时书源芯片 -->
-  <Transition name="reader-fade">
-    <div
-      v-if="showMenu && !settingsVisible && currentChapterOverride"
-      class="reader-modal__temp-source-chip"
-    >
-      本章临时源：{{ currentChapterOverride.sourceName }}
-    </div>
-  </Transition>
-
   <!-- 加入书架按钮 -->
   <Transition name="reader-fade">
     <button
@@ -130,7 +122,7 @@ defineExpose({ closeSettings });
       @click="readerActionsStore.handleAddToShelf"
     >
       <Bookmark :size="16" aria-hidden="true" />
-      {{ addingToShelf ? "加入中…" : "加入书架" }}
+      {{ addingToShelf ? '加入中…' : '加入书架' }}
     </button>
   </Transition>
 
@@ -189,9 +181,7 @@ defineExpose({ closeSettings });
     :current-chapter-url="currentChapterUrl"
     :current-shelf-id="currentShelfId"
     @update:show="showSourceSwitchDialog = $event"
-    @chapter-temp-switched="
-      readerActionsStore.handleTemporaryChapterSourceSwitched
-    "
+    @chapter-temp-switched="readerActionsStore.handleTemporaryChapterSourceSwitched"
     @whole-book-switched="readerActionsStore.handleWholeBookSourceSwitched"
   />
 </template>
@@ -267,20 +257,5 @@ defineExpose({ closeSettings });
 .reader-modal__shelf-btn:not(:disabled):hover {
   opacity: 0.88;
   transform: translateX(-50%) scale(1.03);
-}
-
-.reader-modal__temp-source-chip {
-  position: absolute;
-  top: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 60px);
-  right: 16px;
-  z-index: 12;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(12, 83, 65, 0.9);
-  color: #f4fffb;
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
-  backdrop-filter: blur(10px);
 }
 </style>

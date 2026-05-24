@@ -382,6 +382,9 @@ export function useReaderModalHost(options: UseReaderModalHostOptions) {
           name: chapter.name,
           url: chapter.url,
           group: chapter.group,
+          vip: chapter.vip ?? chapter.isVip,
+          price: chapter.price,
+          currency: chapter.currency,
         }));
         await options.saveChapters(result.id, cached).catch(() => {});
       }

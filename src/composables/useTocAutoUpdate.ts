@@ -6,21 +6,31 @@
  * 最近检测时间以 bookId 为 key 持久化在前端存储中。
  */
 
-import type { ShelfBook } from '@/composables/useBookshelf';
-import { LOCAL_TXT_FILE_NAME, useBookshelfStore } from '@/stores/bookshelf';
-import { usePreferencesStore } from '@/stores/preferences';
-import { useScriptBridgeStore } from '@/stores/scriptBridge';
-import { useDynamicConfig } from './useDynamicConfig';
+import type { ShelfBook } from "@/composables/useBookshelf";
+import { LOCAL_TXT_FILE_NAME, useBookshelfStore } from "@/stores/bookshelf";
+import { usePreferencesStore } from "@/stores/preferences";
+import { useScriptBridgeStore } from "@/stores/scriptBridge";
+import { useDynamicConfig } from "./useDynamicConfig";
 
 interface RefreshAllTocOptions {
   /** 手动刷新时跳过自动更新开关和间隔限制。 */
   force?: boolean;
 }
 
+interface RawChapterItem {
+  name: string;
+  url: string;
+  group?: string;
+  vip?: boolean;
+  isVip?: boolean;
+  price?: unknown;
+  currency?: string;
+}
+
 // ── 最近检测时间持久化（bookId → timestamp ms） ───────────────────────────
 
 const lastCheckConfig = useDynamicConfig<Record<string, number>>({
-  namespace: 'toc.lastCheckTimes',
+  namespace: "toc.lastCheckTimes",
   version: 1,
   defaults: () => ({}),
 });
@@ -46,17 +56,21 @@ async function refreshBookToc(
 ): Promise<number> {
   bookshelfStore.beginTocRefresh(book.id);
   try {
-    const info = await scriptBridgeStore.runBookInfo(book.fileName, book.bookUrl);
+    const info = await scriptBridgeStore.runBookInfo(
+      book.fileName,
+      book.bookUrl,
+    );
     const tocUrl = (info as { tocUrl?: string }).tocUrl ?? book.bookUrl;
     const raw = await scriptBridgeStore.runChapterList(book.fileName, tocUrl);
-    const fetched = (raw as Array<{ name: string; url: string; group?: string }>).map(
-      (chapter, index) => ({
-        index,
-        name: chapter.name,
-        url: chapter.url,
-        group: chapter.group,
-      }),
-    );
+    const fetched = (raw as RawChapterItem[]).map((chapter, index) => ({
+      index,
+      name: chapter.name,
+      url: chapter.url,
+      group: chapter.group,
+      vip: chapter.vip ?? chapter.isVip,
+      price: chapter.price,
+      currency: chapter.currency,
+    }));
 
     const cached = await bookshelfStore.getChapters(book.id);
     const oldUrls = new Set(cached.map((c) => c.url));
@@ -87,13 +101,17 @@ export function useTocAutoUpdate() {
   const bookshelfStore = useBookshelfStore();
   const scriptBridgeStore = useScriptBridgeStore();
 
-  function isAutoUpdateEnabled(trigger: 'onBookOpen' | 'onAppStart' | 'onShelfView'): boolean {
+  function isAutoUpdateEnabled(
+    trigger: "onBookOpen" | "onAppStart" | "onShelfView",
+  ): boolean {
     const cfg = preferencesStore.tocAutoUpdate;
     return cfg.enabled && cfg[trigger];
   }
 
   function canRefreshBook(book: ShelfBook): boolean {
-    return !!book.fileName && !!book.bookUrl && book.fileName !== LOCAL_TXT_FILE_NAME;
+    return (
+      !!book.fileName && !!book.bookUrl && book.fileName !== LOCAL_TXT_FILE_NAME
+    );
   }
 
   /** 检查某本书是否需要更新（根据最小间隔时间限制） */
@@ -109,7 +127,7 @@ export function useTocAutoUpdate() {
    * @returns 新增章节数（-1 = 跳过或失败，0 = 已是最新）
    */
   async function refreshOnBookOpen(book: ShelfBook): Promise<number> {
-    if (!isAutoUpdateEnabled('onBookOpen') || !canRefreshBook(book)) {
+    if (!isAutoUpdateEnabled("onBookOpen") || !canRefreshBook(book)) {
       return -1;
     }
     if (!isRefreshDue(book.id)) {
@@ -123,12 +141,12 @@ export function useTocAutoUpdate() {
    * 仅在设置 enabled + onAppStart 开启，且单本书距离上次超过最小间隔时才执行。
    */
   async function refreshAllOnAppStart(): Promise<void> {
-    if (!isAutoUpdateEnabled('onAppStart')) {
+    if (!isAutoUpdateEnabled("onAppStart")) {
       return;
     }
 
     for (const book of [...bookshelfStore.books]) {
-      if (!isAutoUpdateEnabled('onAppStart')) {
+      if (!isAutoUpdateEnabled("onAppStart")) {
         break;
       }
       if (!canRefreshBook(book)) {
@@ -146,7 +164,9 @@ export function useTocAutoUpdate() {
    * 仅在设置 enabled + onShelfView 开启，且单本书距离上次超过最小间隔时才执行。
    * @returns 刷新结果摘要 { success: 成功数, failed: 失败数, updated: 新增章节总数 }
    */
-  async function refreshAllOnShelfView(options: RefreshAllTocOptions = {}): Promise<{
+  async function refreshAllOnShelfView(
+    options: RefreshAllTocOptions = {},
+  ): Promise<{
     success: number;
     failed: number;
     updated: number;
@@ -154,7 +174,7 @@ export function useTocAutoUpdate() {
     const force = options.force === true;
     const result = { success: 0, failed: 0, updated: 0 };
 
-    if (!force && !isAutoUpdateEnabled('onShelfView')) {
+    if (!force && !isAutoUpdateEnabled("onShelfView")) {
       return result;
     }
 
@@ -163,14 +183,18 @@ export function useTocAutoUpdate() {
         continue;
       }
       if (!force) {
-        if (!isAutoUpdateEnabled('onShelfView')) {
+        if (!isAutoUpdateEnabled("onShelfView")) {
           break;
         }
         if (!isRefreshDue(book.id)) {
           continue;
         }
       }
-      const count = await refreshBookToc(book, bookshelfStore, scriptBridgeStore);
+      const count = await refreshBookToc(
+        book,
+        bookshelfStore,
+        scriptBridgeStore,
+      );
       if (count >= 0) {
         result.success++;
         result.updated += count;

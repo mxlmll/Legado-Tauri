@@ -17,9 +17,12 @@ export type {
   PluginDialogOptions,
   PluginDialogState,
   PluginDynamicText,
+  PluginSettingImageItem,
   PluginSettingField,
   PluginSettingsContext,
   PluginSettingValue,
+  ReaderBackgroundDefinitionInput,
+  ReaderBackgroundDefinitionsResolver,
   ResolvedPluginSettingField,
   ReaderAppearancePatch,
   ReaderContentHookStage,
@@ -29,4 +32,4 @@ export type {
   ReaderPluginSlot,
   ReaderSessionSnapshot,
   ReaderTextSelectionContext,
-} from './pluginTypes';
+} from "./pluginTypes";

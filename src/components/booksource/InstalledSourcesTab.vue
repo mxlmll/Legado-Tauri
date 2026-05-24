@@ -270,12 +270,20 @@ const externalDirs = computed(() => {
 
 const showDirManager = ref(false);
 
-useOverlay(
+const { triggerClose: closeDirManager } = useOverlay(
   () => showDirManager.value,
   () => {
     showDirManager.value = false;
   },
 );
+
+function updateDirManagerShow(value: boolean) {
+  if (value) {
+    showDirManager.value = true;
+    return;
+  }
+  closeDirManager();
+}
 
 // ---- 导入在线书源 ----
 const showUrlInputModal = ref(false);
@@ -290,12 +298,13 @@ const { triggerClose: closeUrlInputModal } = useOverlay(
   },
 );
 
-useOverlay(
-  () => showInstallDialog.value,
-  () => {
-    showInstallDialog.value = false;
-  },
-);
+function updateUrlInputModalShow(value: boolean) {
+  if (value) {
+    showUrlInputModal.value = true;
+    return;
+  }
+  closeUrlInputModal();
+}
 
 function importFromUrl() {
   urlInputValue.value = "";
@@ -777,10 +786,10 @@ defineExpose({
     <div class="bv-toolbar">
       <n-input
         v-model:value="searchQuery"
+        class="bv-search-input"
         placeholder="搜索书源名称或 URL..."
         clearable
         size="small"
-        style="width: 220px; max-width: 100%"
       >
         <template #prefix>
           <Search :size="13" />
@@ -788,13 +797,14 @@ defineExpose({
       </n-input>
       <!-- 统计 -->
       <span class="bv-stat">
-        共 {{ filtered.length }} 个书源， 已启用
+        共 {{ filtered.length }} 个书源，已启用
         {{ filtered.filter((s) => s.enabled).length }} 个<template
           v-if="sourceDirs.length > 1"
           >，{{ sourceDirs.length }} 个目录</template
         >
       </span>
       <n-button
+        class="bv-batch-toggle"
         size="small"
         :type="batchMode ? 'primary' : 'default'"
         quaternary
@@ -892,11 +902,12 @@ defineExpose({
 
   <!-- 外部目录管理弹窗 -->
   <n-modal
-    v-model:show="showDirManager"
+    :show="showDirManager"
     preset="card"
     title="书源目录管理"
     style="width: 560px; max-width: 95vw"
     :mask-closable="true"
+    @update:show="updateDirManagerShow"
   >
     <div class="dir-mgr">
       <div class="dir-mgr__item dir-mgr__item--builtin">
@@ -960,11 +971,12 @@ defineExpose({
 
   <!-- 导入在线书源：URL 输入弹窗 -->
   <n-modal
-    v-model:show="showUrlInputModal"
+    :show="showUrlInputModal"
     preset="dialog"
     title="导入在线书源"
     positive-text="安装"
     negative-text="取消"
+    @update:show="updateUrlInputModalShow"
     @positive-click="confirmUrlInput"
     @negative-click="closeUrlInputModal"
   >
@@ -995,6 +1007,11 @@ defineExpose({
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 8px;
+}
+
+.bv-search-input {
+  width: 220px;
+  max-width: 100%;
 }
 
 /* ---- 统计 ---- */
@@ -1131,8 +1148,20 @@ defineExpose({
     gap: 6px;
   }
 
+  .bv-search-input {
+    order: 1;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .bv-batch-toggle {
+    order: 2;
+    flex-shrink: 0;
+  }
+
   .bv-stat {
-    width: 100%;
+    order: 3;
+    flex: 0 0 100%;
     white-space: normal;
     line-height: 1.4;
   }

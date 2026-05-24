@@ -1,5 +1,5 @@
-import type { ReaderBookInfo } from '@/components/reader/types';
-import type { CachedChapter, ChapterItem, ShelfBook } from '@/stores';
+import type { ReaderBookInfo } from "@/components/reader/types";
+import type { CachedChapter, ChapterItem, ShelfBook } from "@/stores";
 
 export function shelfBookToReaderBookInfo(book: ShelfBook): ReaderBookInfo {
   return {
@@ -18,19 +18,29 @@ export function shelfBookToReaderBookInfo(book: ShelfBook): ReaderBookInfo {
   };
 }
 
-export function cachedChaptersToChapterItems(chapters: CachedChapter[]): ChapterItem[] {
+export function cachedChaptersToChapterItems(
+  chapters: CachedChapter[],
+): ChapterItem[] {
   return chapters.map((chapter) => ({
     name: chapter.name,
     url: chapter.url,
     group: chapter.group,
+    vip: chapter.vip,
+    price: chapter.price,
+    currency: chapter.currency,
   }));
 }
 
-export function chapterItemsToCachedChapters(chapters: ChapterItem[]): CachedChapter[] {
+export function chapterItemsToCachedChapters(
+  chapters: ChapterItem[],
+): CachedChapter[] {
   return chapters.map((chapter, index) => ({
     index,
     name: chapter.name,
     url: chapter.url,
     group: chapter.group,
+    vip: chapter.vip,
+    price: chapter.price,
+    currency: chapter.currency,
   }));
 }

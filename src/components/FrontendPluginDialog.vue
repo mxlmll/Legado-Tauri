@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { useMessage } from 'naive-ui';
-import { computed, reactive, watch } from 'vue';
-import { useFrontendPlugins, type PluginSettingValue } from '@/composables/useFrontendPlugins';
-import { useOverlay } from '@/composables/useOverlay';
+import { useMessage } from "naive-ui";
+import { computed, reactive, watch } from "vue";
+import PluginImageListField from "@/components/extensions/PluginImageListField.vue";
+import {
+  useFrontendPlugins,
+  type PluginSettingValue,
+} from "@/composables/useFrontendPlugins";
+import { useOverlay } from "@/composables/useOverlay";
 
 const message = useMessage();
 const { pluginDialog, resolvePluginDialog } = useFrontendPlugins();
@@ -13,7 +17,7 @@ const draftValues = reactive<Record<string, PluginSettingValue>>({});
 useOverlay(() => visible.value, closeDialog);
 
 function cloneValue<T>(value: T): T {
-  if (typeof structuredClone === 'function') {
+  if (typeof structuredClone === "function") {
     return structuredClone(value);
   }
   return JSON.parse(JSON.stringify(value)) as T;
@@ -35,12 +39,12 @@ watch(
 
 function getString(key: string): string {
   const value = draftValues[key];
-  return typeof value === 'string' ? value : '';
+  return typeof value === "string" ? value : "";
 }
 
 function getNumber(key: string): number {
   const value = draftValues[key];
-  return typeof value === 'number' ? value : 0;
+  return typeof value === "number" ? value : 0;
 }
 
 function getBoolean(key: string): boolean {
@@ -49,12 +53,16 @@ function getBoolean(key: string): boolean {
 
 function getScalar(key: string): string | number | null {
   const value = draftValues[key];
-  return typeof value === 'string' || typeof value === 'number' ? value : null;
+  return typeof value === "string" || typeof value === "number" ? value : null;
 }
 
 function getStringList(key: string): string {
   const value = draftValues[key];
-  return Array.isArray(value) ? value.join('\n') : '';
+  return Array.isArray(value) ? value.join("\n") : "";
+}
+
+function getValue(key: string): PluginSettingValue | undefined {
+  return draftValues[key];
 }
 
 function updateValue(key: string | undefined, value: PluginSettingValue): void {
@@ -76,7 +84,7 @@ function validate(): boolean {
     const empty =
       value === undefined ||
       value === null ||
-      value === '' ||
+      value === "" ||
       (Array.isArray(value) && value.length === 0);
     if (empty) {
       message.warning(`${field.label || field.key} 不能为空`);
@@ -109,7 +117,10 @@ function handleVisibleChange(next: boolean): void {
     :show="visible"
     :mask-closable="true"
     preset="card"
-    :style="{ width: `${pluginDialog?.width ?? 560}px`, maxWidth: 'calc(100vw - 32px)' }"
+    :style="{
+      width: `${pluginDialog?.width ?? 560}px`,
+      maxWidth: 'calc(100vw - 32px)',
+    }"
     @update:show="handleVisibleChange"
   >
     <template v-if="pluginDialog">
@@ -134,7 +145,7 @@ function handleVisibleChange(next: boolean): void {
               :title="field.label || '说明'"
               :bordered="false"
             >
-              {{ field.description || field.placeholder || '' }}
+              {{ field.description || field.placeholder || "" }}
             </n-alert>
 
             <n-form-item
@@ -169,14 +180,18 @@ function handleVisibleChange(next: boolean): void {
                 :step="field.step"
                 :disabled="field.disabled"
                 style="width: 100%"
-                @update:value="(value: number | null) => updateValue(field.key, value ?? 0)"
+                @update:value="
+                  (value: number | null) => updateValue(field.key, value ?? 0)
+                "
               />
 
               <n-switch
                 v-else-if="field.type === 'switch'"
                 :value="getBoolean(field.key || '')"
                 :disabled="field.disabled"
-                @update:value="(value: boolean) => updateValue(field.key, value)"
+                @update:value="
+                  (value: boolean) => updateValue(field.key, value)
+                "
               />
 
               <n-select
@@ -185,7 +200,8 @@ function handleVisibleChange(next: boolean): void {
                 :options="field.options ?? []"
                 :disabled="field.disabled"
                 @update:value="
-                  (value: string | number | null) => updateValue(field.key, value ?? '')
+                  (value: string | number | null) =>
+                    updateValue(field.key, value ?? '')
                 "
               />
 
@@ -193,7 +209,9 @@ function handleVisibleChange(next: boolean): void {
                 v-else-if="field.type === 'radio'"
                 :value="getScalar(field.key || '')"
                 :disabled="field.disabled"
-                @update:value="(value: string | number) => updateValue(field.key, value)"
+                @update:value="
+                  (value: string | number) => updateValue(field.key, value)
+                "
               >
                 <n-space vertical>
                   <n-radio
@@ -241,13 +259,26 @@ function handleVisibleChange(next: boolean): void {
                     )
                 "
               />
+
+              <PluginImageListField
+                v-else-if="field.type === 'image-list'"
+                :value="getValue(field.key || '')"
+                :placeholder="field.placeholder"
+                :disabled="field.disabled"
+                :max="field.max"
+                @update:value="(value) => updateValue(field.key, value)"
+              />
             </n-form-item>
           </template>
         </div>
 
         <div class="plugin-dialog__footer">
-          <n-button quaternary @click="closeDialog">{{ pluginDialog.cancelText }}</n-button>
-          <n-button type="primary" @click="submitDialog">{{ pluginDialog.submitText }}</n-button>
+          <n-button quaternary @click="closeDialog">{{
+            pluginDialog.cancelText
+          }}</n-button>
+          <n-button type="primary" @click="submitDialog">{{
+            pluginDialog.submitText
+          }}</n-button>
         </div>
       </div>
     </template>

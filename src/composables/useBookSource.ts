@@ -779,13 +779,16 @@ async function bookInfo(bookUrl) {
 }
 
 // ── 章节目录 ──────────────────────────────────────────────────
-// 返回 ChapterInfo[]
+// 返回 ChapterInfo[]；VIP 章节可额外返回 vip/price/currency
 async function toc(tocUrl) {
   const resp = await legado.http.get(tocUrl)
   const json = JSON.parse(resp)
   return (json.data?.chapters ?? []).map(ch => ({
     name: ch.title,
     url:  \`\${BASE_URL}/chapter/\${ch.id}\`,
+    vip:  !!ch.vip,
+    price: ch.price,
+    currency: ch.currency,
   }))
 }
 
@@ -796,6 +799,18 @@ async function content(chapterUrl) {
   const json = JSON.parse(resp)
   return json.data?.content ?? ''
 }
+
+// ── VIP 章节购买（可选） ──────────────────────────────────────
+// 仅在用户确认购买 VIP 章节后调用；免费书源可删除此函数
+// async function purchaseChapter(chapterUrl, chapter) {
+//   const resp = await legado.http.post(
+//     \`\${BASE_URL}/api/chapter/buy\`,
+//     JSON.stringify({ chapterId: chapter?.id ?? chapterUrl }),
+//     { 'Content-Type': 'application/json' }
+//   )
+//   const json = JSON.parse(resp)
+//   return { ok: !!json.success, message: json.message }
+// }
 
 // ── 发现页（可选） ────────────────────────────────────────────
 // 返回 ExploreItem[]，不需要时可删除此函数

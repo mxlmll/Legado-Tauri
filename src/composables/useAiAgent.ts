@@ -21,25 +21,25 @@
  *   - 每次 save_source 工具调用后自动触发 addDraftSnapshot 创建版本快照
  */
 
-import { createOpenAI } from '@ai-sdk/openai';
-import { streamText, tool, stepCountIs, type ModelMessage } from 'ai';
-import { reactive } from 'vue';
-import { z } from 'zod';
-import { useAiSessionsStore } from '@/stores';
+import { createOpenAI } from "@ai-sdk/openai";
+import { streamText, tool, stepCountIs, type ModelMessage } from "ai";
+import { reactive } from "vue";
+import { z } from "zod";
+import { useAiSessionsStore } from "@/stores";
 import {
   listBookSources,
   readBookSource,
   evalBookSource,
   type BookSourceMeta,
-} from './useBookSource';
+} from "./useBookSource";
 import {
   ensureFrontendNamespaceLoaded,
   getFrontendStorageItem,
   legacyLocalStorageGet,
   legacyLocalStorageRemove,
   setFrontendStorageItem,
-} from './useFrontendStorage';
-import { invokeWithTimeout } from './useInvoke';
+} from "./useFrontendStorage";
+import { invokeWithTimeout } from "./useInvoke";
 
 // ── 配置类型 ──────────────────────────────────────────────────────────────
 
@@ -58,23 +58,23 @@ export interface AiConfig {
    * - `responses` → /v1/responses（OpenAI 原生 Responses API，仅适用于官方 OpenAI）
    * 默认 chat
    */
-  apiMode: 'chat' | 'responses';
+  apiMode: "chat" | "responses";
   /** 采样温度，可选，留空表示使用模型默认値 */
   temperature?: number;
   /** 单次调用最大输出 Token，可选，留空表示不限制 */
   maxTokens?: number;
 }
 
-const CONFIG_NAMESPACE = 'ai.agent';
-const CONFIG_STORAGE_KEY = 'config';
+const CONFIG_NAMESPACE = "ai.agent";
+const CONFIG_STORAGE_KEY = "config";
 
 function defaultAiConfig(): AiConfig {
   return {
-    apiUrl: 'https://api.openai.com/v1',
-    apiKey: '',
-    model: 'gpt-4o',
+    apiUrl: "https://api.openai.com/v1",
+    apiKey: "",
+    model: "gpt-4o",
     maxSteps: 30,
-    apiMode: 'chat',
+    apiMode: "chat",
   };
 }
 
@@ -85,11 +85,11 @@ function parseAiConfig(raw: string | null): AiConfig {
   try {
     const parsed = JSON.parse(raw) as Partial<AiConfig>;
     return {
-      apiUrl: parsed.apiUrl ?? 'https://api.openai.com/v1',
-      apiKey: parsed.apiKey ?? '',
-      model: parsed.model ?? 'gpt-4o',
+      apiUrl: parsed.apiUrl ?? "https://api.openai.com/v1",
+      apiKey: parsed.apiKey ?? "",
+      model: parsed.model ?? "gpt-4o",
       maxSteps: parsed.maxSteps ?? 30,
-      apiMode: parsed.apiMode ?? 'chat',
+      apiMode: parsed.apiMode ?? "chat",
       temperature: parsed.temperature,
       maxTokens: parsed.maxTokens,
     };
@@ -99,20 +99,26 @@ function parseAiConfig(raw: string | null): AiConfig {
 }
 
 export function loadAiConfig(): AiConfig {
-  return parseAiConfig(getFrontendStorageItem(CONFIG_NAMESPACE, CONFIG_STORAGE_KEY));
+  return parseAiConfig(
+    getFrontendStorageItem(CONFIG_NAMESPACE, CONFIG_STORAGE_KEY),
+  );
 }
 
 export function saveAiConfig(cfg: AiConfig): void {
-  setFrontendStorageItem(CONFIG_NAMESPACE, CONFIG_STORAGE_KEY, JSON.stringify(cfg));
+  setFrontendStorageItem(
+    CONFIG_NAMESPACE,
+    CONFIG_STORAGE_KEY,
+    JSON.stringify(cfg),
+  );
 }
 
 export async function ensureAiConfigLoaded(): Promise<AiConfig> {
   await ensureFrontendNamespaceLoaded(CONFIG_NAMESPACE, () => {
-    const legacy = legacyLocalStorageGet('legado_ai_agent_config');
+    const legacy = legacyLocalStorageGet("legado_ai_agent_config");
     if (!legacy) {
       return null;
     }
-    legacyLocalStorageRemove('legado_ai_agent_config');
+    legacyLocalStorageRemove("legado_ai_agent_config");
     return { [CONFIG_STORAGE_KEY]: legacy };
   });
   return loadAiConfig();
@@ -121,11 +127,11 @@ export async function ensureAiConfigLoaded(): Promise<AiConfig> {
 // ── 活动日志类型 ───────────────────────────────────────────────────────────
 
 export type ActivityType =
-  | 'thinking' // AI 正在推理（流式文本）
-  | 'tool_call' // AI 发起工具调用（含参数，完成后显示返回值）
-  | 'message' // AI 最终回复
-  | 'error' // 错误
-  | 'info'; // 系统信息
+  | "thinking" // AI 正在推理（流式文本）
+  | "tool_call" // AI 发起工具调用（含参数，完成后显示返回值）
+  | "message" // AI 最终回复
+  | "error" // 错误
+  | "info"; // 系统信息
 
 export interface AgentActivity {
   id: number;
@@ -143,7 +149,7 @@ export interface AgentActivity {
 
 // ── 测试结果类型 ──────────────────────────────────────────────────────────
 
-export type TestStatus = 'pending' | 'ok' | 'error';
+export type TestStatus = "pending" | "ok" | "error";
 
 export interface TestResult {
   name: string;
@@ -185,6 +191,7 @@ var BASE = 'https://主站域名';
 function search(keyword, page) {}        // 返回 BookItem[]
 function bookInfo(bookUrl) {}            // 返回 BookItem（含 tocUrl）
 function chapterList(tocUrl) {}          // 返回 ChapterInfo[]（必须正序）
+function purchaseChapter(chapterUrl, chapter) {} // 可选：购买 VIP 章节
 function chapterContent(chapterUrl) {}   // 小说→文本 漫画→JSON图片数组 视频→URL
 function explore(page, category) {}     // 可选
 \`\`\`
@@ -226,7 +233,7 @@ var h   = await legado.md5(str);
 
 \`\`\`
 BookItem:   { name, author, bookUrl, coverUrl, kind, lastChapter?, latestChapter?, latestChapterUrl?, wordCount?, chapterCount?, updateTime?, status?, tocUrl? }
-ChapterInfo:{ name, url, group? }   // group 仅视频多线路需要
+ChapterInfo:{ name, url, group?, vip?, price?, currency? }   // group 仅视频多线路需要；vip=true 表示付费章
 \`\`\`
 
 搜索、发现、详情页都可以返回这些 BookItem 元数据；只提取当前页面或接口已直接提供的数据，不要为了补齐字数、章节数、状态、更新时间而在列表页逐本请求详情页。
@@ -260,7 +267,8 @@ ChapterInfo:{ name, url, group? }   // group 仅视频多线路需要
 function buildTools(sessionId?: string) {
   return {
     list_sources: tool({
-      description: '列出所有已安装书源，返回书源名称、文件名、URL。用于了解已有书源结构以作参考。',
+      description:
+        "列出所有已安装书源，返回书源名称、文件名、URL。用于了解已有书源结构以作参考。",
       inputSchema: z.object({}),
       execute: async (_input: Record<string, never>) => {
         const sources: BookSourceMeta[] = await listBookSources();
@@ -275,9 +283,10 @@ function buildTools(sessionId?: string) {
     }),
 
     read_source: tool({
-      description: '读取指定书源的完整 JS 代码，用于参考已有书源的 ES5 实现方式。',
+      description:
+        "读取指定书源的完整 JS 代码，用于参考已有书源的 ES5 实现方式。",
       inputSchema: z.object({
-        fileName: z.string().describe('书源文件名（含 .js 后缀）'),
+        fileName: z.string().describe("书源文件名（含 .js 后缀）"),
       }),
       execute: async ({ fileName }: { fileName: string }) => {
         return await readBookSource(fileName);
@@ -288,12 +297,22 @@ function buildTools(sessionId?: string) {
       description:
         '保存（新建或覆盖）书源 JS 文件。每次修改完代码后必须调用此工具保存，后续测试才能看到最新代码。fileName 只含文件名（如 "笔趣阁.js"），不含路径。',
       inputSchema: z.object({
-        fileName: z.string().describe('书源文件名（含 .js 后缀）'),
-        content: z.string().describe('完整的书源 JS 代码（必须是 ES5 写法）'),
+        fileName: z.string().describe("书源文件名（含 .js 后缀）"),
+        content: z.string().describe("完整的书源 JS 代码（必须是 ES5 写法）"),
       }),
-      execute: async ({ fileName, content }: { fileName: string; content: string }) => {
+      execute: async ({
+        fileName,
+        content,
+      }: {
+        fileName: string;
+        content: string;
+      }) => {
         // 保存到草稿目录，不出现在已安装书源列表中
-        await invokeWithTimeout('booksource_save_draft', { fileName, content }, 10_000);
+        await invokeWithTimeout(
+          "booksource_save_draft",
+          { fileName, content },
+          10_000,
+        );
         // 自动创建草稿版本快照
         if (sessionId) {
           useAiSessionsStore().addDraftSnapshot(sessionId, fileName, content, [
@@ -306,25 +325,37 @@ function buildTools(sessionId?: string) {
 
     eval_in_source: tool({
       description:
-        '在指定书源文件作用域中执行任意 JS 代码（ES5 写法），返回执行结果字符串。' +
-        '可调用 legado.http.get/post、fetch 等 API 探测目标网站结构。' +
+        "在指定书源文件作用域中执行任意 JS 代码（ES5 写法），返回执行结果字符串。" +
+        "可调用 legado.http.get/post、fetch 等 API 探测目标网站结构。" +
         '示例代码：var html = await legado.http.get("https://example.com"); return html.slice(0,3000);',
       inputSchema: z.object({
-        fileName: z.string().describe('书源文件名（含 .js 后缀）。也可用任意已存在的书源文件名。'),
-        code: z.string().describe('要执行的 JS 代码（可用 async/await，可用 legado.* API）'),
+        fileName: z
+          .string()
+          .describe(
+            "书源文件名（含 .js 后缀）。也可用任意已存在的书源文件名。",
+          ),
+        code: z
+          .string()
+          .describe("要执行的 JS 代码（可用 async/await，可用 legado.* API）"),
       }),
-      execute: async ({ fileName, code }: { fileName: string; code: string }) => {
+      execute: async ({
+        fileName,
+        code,
+      }: {
+        fileName: string;
+        code: string;
+      }) => {
         return await evalBookSource(fileName, code);
       },
     }),
 
     test_search: tool({
       description:
-        '调用已保存书源的 search(keyword, page) 函数，返回搜索结果。必须先 save_source 保存最新代码。',
+        "调用已保存书源的 search(keyword, page) 函数，返回搜索结果。必须先 save_source 保存最新代码。",
       inputSchema: z.object({
-        fileName: z.string().describe('书源文件名（含 .js 后缀）'),
-        keyword: z.string().describe('搜索关键词'),
-        page: z.number().optional().describe('页码（默认 1）'),
+        fileName: z.string().describe("书源文件名（含 .js 后缀）"),
+        keyword: z.string().describe("搜索关键词"),
+        page: z.number().optional().describe("页码（默认 1）"),
       }),
       execute: async ({
         fileName,
@@ -336,7 +367,7 @@ function buildTools(sessionId?: string) {
         page?: number;
       }) => {
         return await invokeWithTimeout<unknown>(
-          'booksource_search',
+          "booksource_search",
           { fileName, keyword, page },
           35000,
         );
@@ -345,14 +376,20 @@ function buildTools(sessionId?: string) {
 
     test_book_info: tool({
       description:
-        '调用书源的 bookInfo(bookUrl) 函数，返回书籍详情（name/author/coverUrl/intro/tocUrl 等）。',
+        "调用书源的 bookInfo(bookUrl) 函数，返回书籍详情（name/author/coverUrl/intro/tocUrl 等）。",
       inputSchema: z.object({
-        fileName: z.string().describe('书源文件名'),
-        bookUrl: z.string().describe('书籍详情页 URL（来自搜索结果）'),
+        fileName: z.string().describe("书源文件名"),
+        bookUrl: z.string().describe("书籍详情页 URL（来自搜索结果）"),
       }),
-      execute: async ({ fileName, bookUrl }: { fileName: string; bookUrl: string }) => {
+      execute: async ({
+        fileName,
+        bookUrl,
+      }: {
+        fileName: string;
+        bookUrl: string;
+      }) => {
         return await invokeWithTimeout<unknown>(
-          'booksource_book_info',
+          "booksource_book_info",
           { fileName, bookUrl },
           35000,
         );
@@ -360,14 +397,21 @@ function buildTools(sessionId?: string) {
     }),
 
     test_chapter_list: tool({
-      description: '调用书源的 chapterList(tocUrl) 函数，返回章节目录数组（正序）。',
+      description:
+        "调用书源的 chapterList(tocUrl) 函数，返回章节目录数组（正序）。",
       inputSchema: z.object({
-        fileName: z.string().describe('书源文件名'),
-        bookUrl: z.string().describe('书籍/目录入口 URL'),
+        fileName: z.string().describe("书源文件名"),
+        bookUrl: z.string().describe("书籍/目录入口 URL"),
       }),
-      execute: async ({ fileName, bookUrl }: { fileName: string; bookUrl: string }) => {
+      execute: async ({
+        fileName,
+        bookUrl,
+      }: {
+        fileName: string;
+        bookUrl: string;
+      }) => {
         return await invokeWithTimeout<unknown>(
-          'booksource_chapter_list',
+          "booksource_chapter_list",
           { fileName, bookUrl, taskId: null },
           60000,
         );
@@ -376,15 +420,54 @@ function buildTools(sessionId?: string) {
 
     test_chapter_content: tool({
       description:
-        '调用书源的 chapterContent(chapterUrl) 函数，返回章节正文（小说→文本，漫画→图片 URL 数组 JSON，视频→播放地址）。',
+        "调用书源的 chapterContent(chapterUrl) 函数，返回章节正文（小说→文本，漫画→图片 URL 数组 JSON，视频→播放地址）。",
       inputSchema: z.object({
-        fileName: z.string().describe('书源文件名'),
-        chapterUrl: z.string().describe('章节 URL（来自章节列表）'),
+        fileName: z.string().describe("书源文件名"),
+        chapterUrl: z.string().describe("章节 URL（来自章节列表）"),
       }),
-      execute: async ({ fileName, chapterUrl }: { fileName: string; chapterUrl: string }) => {
+      execute: async ({
+        fileName,
+        chapterUrl,
+      }: {
+        fileName: string;
+        chapterUrl: string;
+      }) => {
         return await invokeWithTimeout<unknown>(
-          'booksource_chapter_content',
+          "booksource_chapter_content",
           { fileName, chapterUrl },
+          35000,
+        );
+      },
+    }),
+
+    test_purchase_chapter: tool({
+      description:
+        "调用书源的 purchaseChapter(chapterUrl, chapter) 函数，用于测试 VIP 章节购买流程。只有用户明确要求时使用。",
+      inputSchema: z.object({
+        fileName: z.string().describe("书源文件名"),
+        chapterUrl: z.string().describe("VIP 章节 URL"),
+        chapterName: z.string().optional().describe("章节名"),
+      }),
+      execute: async ({
+        fileName,
+        chapterUrl,
+        chapterName,
+      }: {
+        fileName: string;
+        chapterUrl: string;
+        chapterName?: string;
+      }) => {
+        return await invokeWithTimeout<unknown>(
+          "booksource_purchase_chapter",
+          {
+            fileName,
+            chapterUrl,
+            chapter: {
+              name: chapterName ?? chapterUrl,
+              url: chapterUrl,
+              vip: true,
+            },
+          },
           35000,
         );
       },
@@ -399,8 +482,8 @@ let _activityCounter = 0;
 const state = reactive({
   activities: [] as AgentActivity[],
   isRunning: false,
-  currentFileName: '',
-  currentSourceCode: '',
+  currentFileName: "",
+  currentSourceCode: "",
   testResults: [] as TestResult[],
   /** 当前正在流式输出的思考条目 id（-1 表示无） */
   activeThinkingId: -1,
@@ -463,33 +546,33 @@ function safeJsonStringify(value: unknown): string {
  */
 function formatError(err: unknown): string {
   if (!err) {
-    return '未知错误';
+    return "未知错误";
   }
-  if (typeof err === 'string') {
-    return err || '未知错误';
+  if (typeof err === "string") {
+    return err || "未知错误";
   }
 
   const parts: string[] = [];
 
-  if (typeof err === 'object') {
+  if (typeof err === "object") {
     const e = err as Record<string, unknown>;
     // 常规 message
-    if (typeof e['message'] === 'string' && e['message']) {
-      parts.push(e['message']);
+    if (typeof e["message"] === "string" && e["message"]) {
+      parts.push(e["message"]);
     }
     // AI SDK 标准字段
-    if (typeof e['statusCode'] === 'number') {
-      parts.push(`HTTP ${e['statusCode']}`);
+    if (typeof e["statusCode"] === "number") {
+      parts.push(`HTTP ${e["statusCode"]}`);
     }
-    if (typeof e['responseBody'] === 'string' && e['responseBody']) {
-      const body = e['responseBody'].slice(0, 500);
+    if (typeof e["responseBody"] === "string" && e["responseBody"]) {
+      const body = e["responseBody"].slice(0, 500);
       parts.push(`响应体: ${body}`);
     }
     // cause 链
-    if (e['cause'] instanceof Error) {
-      parts.push(`cause: ${e['cause'].message}`);
-    } else if (typeof e['cause'] === 'string' && e['cause']) {
-      parts.push(`cause: ${e['cause']}`);
+    if (e["cause"] instanceof Error) {
+      parts.push(`cause: ${e["cause"].message}`);
+    } else if (typeof e["cause"] === "string" && e["cause"]) {
+      parts.push(`cause: ${e["cause"]}`);
     }
     // 最后兑当：如果什么都没得到，直接 JSON 序列化
     if (parts.length === 0) {
@@ -502,14 +585,14 @@ function formatError(err: unknown): string {
     }
   }
 
-  return parts.join('\n') || '未知错误';
+  return parts.join("\n") || "未知错误";
 }
 
 const TEST_TOOL_NAMES: Record<string, string> = {
-  test_search: '搜索',
-  test_book_info: '书籍详情',
-  test_chapter_list: '章节目录',
-  test_chapter_content: '章节正文',
+  test_search: "搜索",
+  test_book_info: "书籍详情",
+  test_chapter_list: "章节目录",
+  test_chapter_content: "章节正文",
 };
 
 // ── 主 Agent 函数 ─────────────────────────────────────────────────────────
@@ -530,7 +613,7 @@ export async function runAiAgent(
   options: RunAiAgentOptions = {},
 ): Promise<void> {
   if (state.isRunning) {
-    throw new Error('Agent 正在运行中，请先停止');
+    throw new Error("Agent 正在运行中，请先停止");
   }
 
   const { sessionId, continueConversation = false } = options;
@@ -542,7 +625,9 @@ export async function runAiAgent(
   // 继续对话时：从会话恢复现有状态；全新任务时：清空
   let prevMessages: ModelMessage[] = [];
   if (sessionId) {
-    const session = useAiSessionsStore().sessions.find((s) => s.id === sessionId);
+    const session = useAiSessionsStore().sessions.find(
+      (s) => s.id === sessionId,
+    );
     if (session) {
       if (continueConversation) {
         state.activities = [...session.activities];
@@ -559,32 +644,40 @@ export async function runAiAgent(
     } else {
       state.activities = [];
       state.testResults = [];
-      state.currentFileName = '';
-      state.currentSourceCode = '';
+      state.currentFileName = "";
+      state.currentSourceCode = "";
     }
   } else {
     state.activities = [];
     state.testResults = [];
-    state.currentFileName = '';
-    state.currentSourceCode = '';
+    state.currentFileName = "";
+    state.currentSourceCode = "";
   }
 
-  addActivity('info', continueConversation ? `继续对话：${userPrompt}` : `开始任务：${userPrompt}`);
+  addActivity(
+    "info",
+    continueConversation
+      ? `继续对话：${userPrompt}`
+      : `开始任务：${userPrompt}`,
+  );
 
   // 构建发送给模型的消息列表（历史 + 本次用户指令）
-  const inputMessages: ModelMessage[] = [...prevMessages, { role: 'user', content: userPrompt }];
+  const inputMessages: ModelMessage[] = [
+    ...prevMessages,
+    { role: "user", content: userPrompt },
+  ];
 
   try {
     const openaiProvider = createOpenAI({
-      apiKey: config.apiKey || 'placeholder',
-      baseURL: config.apiUrl.replace(/\/$/, ''),
+      apiKey: config.apiKey || "placeholder",
+      baseURL: config.apiUrl.replace(/\/$/, ""),
     });
 
     // 根据 apiMode 选择请求路径：
     //   chat     → openaiProvider.chat(model)  → POST /v1/chat/completions
     //   responses → openaiProvider(model)         → POST /v1/responses
     const llmModel =
-      (config.apiMode ?? 'chat') === 'responses'
+      (config.apiMode ?? "chat") === "responses"
         ? openaiProvider(config.model)
         : openaiProvider.chat(config.model);
 
@@ -602,7 +695,9 @@ export async function runAiAgent(
       ...(config.temperature !== null && config.temperature !== undefined
         ? { temperature: config.temperature }
         : {}),
-      ...(config.maxTokens !== null && config.maxTokens !== undefined && config.maxTokens > 0
+      ...(config.maxTokens !== null &&
+      config.maxTokens !== undefined &&
+      config.maxTokens > 0
         ? { maxTokens: config.maxTokens }
         : {}),
     });
@@ -612,40 +707,46 @@ export async function runAiAgent(
         break;
       }
 
-      if (part.type === 'start-step') {
+      if (part.type === "start-step") {
         // 新推理步骤开始，创建思考条目
-        state.activeThinkingId = addActivity('thinking', '');
-      } else if (part.type === 'text-delta') {
+        state.activeThinkingId = addActivity("thinking", "");
+      } else if (part.type === "text-delta") {
         // 流式文字 delta（AI SDK v6：属性名为 text，非 textDelta）
         if (state.activeThinkingId !== -1) {
-          const existing = state.activities.find((a) => a.id === state.activeThinkingId);
+          const existing = state.activities.find(
+            (a) => a.id === state.activeThinkingId,
+          );
           updateActivity(state.activeThinkingId, {
-            content: (existing?.content ?? '') + part.text,
+            content: (existing?.content ?? "") + part.text,
           });
         } else {
-          state.activeThinkingId = addActivity('thinking', part.text);
+          state.activeThinkingId = addActivity("thinking", part.text);
         }
-      } else if (part.type === 'finish-step') {
+      } else if (part.type === "finish-step") {
         // 步骤结束，清除空思考条目
         if (state.activeThinkingId !== -1) {
-          const existing = state.activities.find((a) => a.id === state.activeThinkingId);
+          const existing = state.activities.find(
+            (a) => a.id === state.activeThinkingId,
+          );
           if (!existing?.content?.trim()) {
-            const idx = state.activities.findIndex((a) => a.id === state.activeThinkingId);
+            const idx = state.activities.findIndex(
+              (a) => a.id === state.activeThinkingId,
+            );
             if (idx !== -1) {
               state.activities.splice(idx, 1);
             }
           }
           state.activeThinkingId = -1;
         }
-      } else if (part.type === 'tool-call') {
+      } else if (part.type === "tool-call") {
         // 工具调用（AI SDK v6：input 是参数，非 args）
         const argsStr = safeJsonStringify(part.input);
-        const actId = addActivity('tool_call', '', {
+        const actId = addActivity("tool_call", "", {
           toolName: part.toolName,
           args: argsStr,
         });
         toolCallActivityMap.set(part.toolCallId, actId);
-      } else if (part.type === 'tool-result') {
+      } else if (part.type === "tool-result") {
         // 工具结果（AI SDK v6：output 是结果，非 result）
         const resultStr = safeJsonStringify(part.output);
 
@@ -656,7 +757,7 @@ export async function runAiAgent(
         }
 
         // save_source → 更新代码预览
-        if (part.toolName === 'save_source') {
+        if (part.toolName === "save_source") {
           const inp = part.input as { fileName?: string; content?: string };
           if (inp.fileName) {
             state.currentFileName = inp.fileName;
@@ -667,36 +768,41 @@ export async function runAiAgent(
         }
 
         // 测试工具 → 记录测试结果
-        const testName = TEST_TOOL_NAMES[part.toolName ?? ''];
+        const testName = TEST_TOOL_NAMES[part.toolName ?? ""];
         if (testName) {
           const out = part.output;
-          const isError = out !== null && typeof out === 'object' && 'error' in out;
-          upsertTestResult(testName, isError ? 'error' : 'ok', resultStr.slice(0, 3000));
+          const isError =
+            out !== null && typeof out === "object" && "error" in out;
+          upsertTestResult(
+            testName,
+            isError ? "error" : "ok",
+            resultStr.slice(0, 3000),
+          );
         }
-      } else if (part.type === 'error') {
+      } else if (part.type === "error") {
         hadStreamError = true;
-        addActivity('error', formatError(part.error));
+        addActivity("error", formatError(part.error));
       }
     }
 
     // 获取最终文字回复（多步后通常是总结性内容）
-    let finalText = '';
+    let finalText = "";
     try {
       finalText = await result.text;
       if (finalText?.trim()) {
-        addActivity('message', finalText);
+        addActivity("message", finalText);
       }
     } catch {
       // 忽略（aborted 等情况）
     }
 
     addActivity(
-      'info',
+      "info",
       hadStreamError
-        ? '任务因错误终止'
+        ? "任务因错误终止"
         : state.currentFileName
           ? `书源 "${state.currentFileName}" 创建/更新完成`
-          : '任务完成',
+          : "任务完成",
     );
 
     // 持久化会话：保存活动日志、测试结果，并追加本轮对话历史
@@ -704,19 +810,29 @@ export async function runAiAgent(
       let newHistory: ModelMessage[] = inputMessages;
       try {
         const response = await result.response;
-        if (response && 'messages' in response && Array.isArray(response.messages)) {
+        if (
+          response &&
+          "messages" in response &&
+          Array.isArray(response.messages)
+        ) {
           // AI SDK 返回本轮模型生成的消息（含工具调用），追加到对话历史
           newHistory = [...inputMessages, ...response.messages];
         } else {
           // 降级：只追加 AI 文字回复
           if (finalText?.trim()) {
-            newHistory = [...inputMessages, { role: 'assistant', content: finalText }];
+            newHistory = [
+              ...inputMessages,
+              { role: "assistant", content: finalText },
+            ];
           }
         }
       } catch {
         // 降级处理
         if (finalText?.trim()) {
-          newHistory = [...inputMessages, { role: 'assistant', content: finalText }];
+          newHistory = [
+            ...inputMessages,
+            { role: "assistant", content: finalText },
+          ];
         }
       }
       useAiSessionsStore().updateSession(sessionId, {
@@ -725,14 +841,14 @@ export async function runAiAgent(
         currentFileName: state.currentFileName,
         currentSourceCode: state.currentSourceCode,
         conversationHistory: newHistory,
-        status: hadStreamError ? 'tested_fail' : 'idle',
+        status: hadStreamError ? "tested_fail" : "idle",
       });
     }
   } catch (e: unknown) {
     if (!_abortController?.signal.aborted) {
-      addActivity('error', `Agent 运行出错：${formatError(e)}`);
+      addActivity("error", `Agent 运行出错：${formatError(e)}`);
     } else {
-      addActivity('info', '已停止');
+      addActivity("info", "已停止");
     }
     // 即使出错也持久化已有的活动日志
     if (sessionId) {
@@ -757,8 +873,8 @@ export function stopAiAgent(): void {
 export function clearAgentState(): void {
   state.activities = [];
   state.testResults = [];
-  state.currentFileName = '';
-  state.currentSourceCode = '';
+  state.currentFileName = "";
+  state.currentSourceCode = "";
   state.activeThinkingId = -1;
 }
 

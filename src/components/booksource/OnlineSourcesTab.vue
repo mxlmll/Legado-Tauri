@@ -100,6 +100,14 @@ const { triggerClose: closeRepoModal } = useOverlay(
   },
 );
 
+function updateRepoModalShow(value: boolean) {
+  if (value) {
+    showRepoModal.value = true;
+    return;
+  }
+  closeRepoModal();
+}
+
 const repoUrlValidation = computed(() =>
   validateRepositoryUrl(repoForm.value.url),
 );
@@ -1077,11 +1085,12 @@ void loadRepoConfig();
 
   <!-- 添加/编辑仓库弹窗 -->
   <n-modal
-    v-model:show="showRepoModal"
+    :show="showRepoModal"
     preset="card"
     title="添加在线书源仓库"
     style="width: 460px; max-width: 95vw"
     :mask-closable="false"
+    @update:show="updateRepoModalShow"
   >
     <n-form label-placement="top" size="small">
       <n-form-item label="仓库名称">

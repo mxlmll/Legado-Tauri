@@ -7,7 +7,7 @@ import {
   ArrowRightLeft,
   Pencil,
   X,
-  Upload,
+  Download,
 } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import { ref, computed } from 'vue';
@@ -16,7 +16,9 @@ import { useAppConfigStore } from '@/stores';
 
 const props = withDefaults(
   defineProps<{
+    bookName?: string;
     chapterName: string;
+    sourceName?: string;
     currentIndex: number;
     totalChapters: number;
     chapterUrl?: string;
@@ -66,6 +68,9 @@ const cacheCountDisplay = computed(() => {
 
 /** 是否支持缓存（视频不支持） */
 const supportCache = computed(() => props.sourceType !== 'video');
+const displayBookName = computed(() => props.bookName?.trim() || props.chapterName);
+const displaySourceName = computed(() => props.sourceName?.trim() || '未知书源');
+const canSourceSwitch = computed(() => !!props.canWholeBookSwitch || !!props.canTemporarySwitch);
 
 function openMenu() {
   menuOpen.value = true;
@@ -82,7 +87,19 @@ function handleRefresh() {
 }
 
 function handleShowCachePanel() {
+  menuOpen.value = true;
   showCachePanel.value = true;
+}
+
+function handleSourceSwitch() {
+  closeMenu();
+  if (props.canWholeBookSwitch) {
+    emit('whole-book-switch');
+    return;
+  }
+  if (props.canTemporarySwitch) {
+    emit('temporary-switch');
+  }
 }
 
 function handleStartCache() {
@@ -115,25 +132,68 @@ useOverlay(() => menuOpen.value, closeMenu);
     :class="{ 'reader-toolbar--hidden': visible === false }"
     :aria-hidden="visible === false ? 'true' : undefined"
   >
-    <button class="reader-top-bar__back" @click="emit('close')" title="返回">
-      <ChevronLeft :size="20" />
-    </button>
-    <div class="reader-top-bar__center">
-      <span class="reader-top-bar__title" :title="chapterName">{{ chapterName }}</span>
-      <a
-        v-if="chapterUrl"
-        class="reader-top-bar__url"
-        href="#"
-        :title="chapterUrl"
-        @click.prevent="openUrl(chapterUrl)"
-        >{{ chapterUrl }}</a
-      >
+    <div class="reader-top-bar__main">
+      <button class="reader-top-bar__back" @click="emit('close')" title="返回" aria-label="返回">
+        <ChevronLeft :size="22" />
+      </button>
+      <div class="reader-top-bar__center">
+        <span class="reader-top-bar__title" :title="displayBookName">{{ displayBookName }}</span>
+      </div>
+
+      <div class="reader-top-bar__actions">
+        <button
+          v-if="canSourceSwitch"
+          class="reader-top-bar__action"
+          title="换源"
+          aria-label="换源"
+          @click.stop="handleSourceSwitch"
+        >
+          <ArrowRightLeft :size="20" />
+        </button>
+        <button
+          class="reader-top-bar__action"
+          title="刷新本章"
+          aria-label="刷新本章"
+          @click.stop="handleRefresh"
+        >
+          <RefreshCw :size="20" />
+        </button>
+        <button
+          v-if="supportCache"
+          class="reader-top-bar__action"
+          title="缓存章节"
+          aria-label="缓存章节"
+          @click.stop="handleShowCachePanel"
+        >
+          <Download :size="20" />
+        </button>
+        <button
+          class="reader-top-bar__more"
+          @click.stop="openMenu"
+          title="更多操作"
+          aria-label="更多操作"
+        >
+          <MoreVertical :size="20" />
+        </button>
+      </div>
     </div>
 
-    <!-- 三点菜单按钮 -->
-    <button class="reader-top-bar__more" @click.stop="openMenu" title="更多操作">
-      <MoreVertical :size="20" />
-    </button>
+    <div class="reader-top-bar__details">
+      <div class="reader-top-bar__chapter">
+        <span class="reader-top-bar__chapter-name" :title="chapterName">{{ chapterName }}</span>
+        <a
+          v-if="chapterUrl"
+          class="reader-top-bar__url"
+          href="#"
+          :title="chapterUrl"
+          @click.prevent="openUrl(chapterUrl)"
+          >{{ chapterUrl }}</a
+        >
+      </div>
+      <span class="reader-top-bar__source" :title="displaySourceName">
+        {{ displaySourceName }}
+      </span>
+    </div>
 
     <!-- 遮罩 -->
     <Transition name="reader-menu-fade">
@@ -178,7 +238,7 @@ useOverlay(() => menuOpen.value, closeMenu);
             class="reader-top-bar__menu-item"
             @click="handleShowCachePanel"
           >
-            <Upload :size="16" />
+            <Download :size="16" />
             <span>缓存章节</span>
           </button>
           <div class="reader-top-bar__menu-info">{{ currentIndex + 1 }}/{{ totalChapters }}</div>
@@ -229,8 +289,9 @@ useOverlay(() => menuOpen.value, closeMenu);
   right: var(--reader-top-right, 0px);
   z-index: 11;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   min-height: var(--reader-top-height, auto);
   padding: var(--reader-top-padding, 8px 12px);
   padding-top: var(
@@ -259,6 +320,7 @@ useOverlay(() => menuOpen.value, closeMenu);
 }
 
 .reader-top-bar__back,
+.reader-top-bar__action,
 .reader-top-bar__more {
   display: var(--reader-top-icon-display, inline-flex);
   align-items: center;
@@ -267,7 +329,9 @@ useOverlay(() => menuOpen.value, closeMenu);
   border: none;
   color: inherit;
   cursor: pointer;
-  padding: 4px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border-radius: 4px;
   transition: background 0.15s;
   flex-shrink: 0;
@@ -281,7 +345,22 @@ useOverlay(() => menuOpen.value, closeMenu);
   display: var(--reader-top-more-display, var(--reader-top-icon-display, inline-flex));
 }
 
+.reader-top-bar__main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reader-top-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .reader-top-bar__back:hover,
+.reader-top-bar__action:hover,
 .reader-top-bar__more:hover {
   background: rgba(255, 255, 255, 0.1);
 }
@@ -300,6 +379,48 @@ useOverlay(() => menuOpen.value, closeMenu);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.reader-top-bar__details {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 2px 2px 40px;
+}
+
+.reader-top-bar__chapter {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reader-top-bar__chapter-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--reader-top-bar-color, #e0e0e0);
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  opacity: 0.86;
+}
+
+.reader-top-bar__source {
+  max-width: min(34vw, 112px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 1px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--reader-top-source-bg, rgba(210, 162, 62, 0.9));
+  color: var(--reader-top-source-color, #fff7dd);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .reader-top-bar__url {

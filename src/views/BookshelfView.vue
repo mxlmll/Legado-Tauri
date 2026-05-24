@@ -1,37 +1,52 @@
 <script setup lang="ts">
-import { useMessage } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { computed, onMounted, ref, watch } from 'vue';
-import ChapterReaderModal from '@/components/explore/ChapterReaderModal.vue';
-import ShelfGroupMenu from '@/components/shelf/ShelfGroupMenu.vue';
-import { useDynamicConfig } from '@/composables/useDynamicConfig';
-import { useShelfGroups } from '@/composables/useShelfGroups';
-import { useTocAutoUpdate } from '@/composables/useTocAutoUpdate';
-import { isTransportAvailable } from '@/composables/useTransport';
-import { useViewCardDensity, type CardSizeKey } from '@/composables/useViewCardDensity';
-import BookshelfContextMenu from '@/features/bookshelf/components/BookshelfContextMenu.vue';
-import BookshelfDialogs from '@/features/bookshelf/components/BookshelfDialogs.vue';
-import BookshelfGrid from '@/features/bookshelf/components/BookshelfGrid.vue';
-import BookshelfHeader from '@/features/bookshelf/components/BookshelfHeader.vue';
-import { useBookshelfActions } from '@/features/bookshelf/services/bookshelfActions';
-import { useBookshelfReaderLauncher } from '@/features/bookshelf/services/bookshelfReaderLauncher';
+import { useMessage } from "naive-ui";
+import { storeToRefs } from "pinia";
+import { computed, onMounted, ref, watch } from "vue";
+import BookDetailDrawer from "@/components/explore/BookDetailDrawer.vue";
+import ChapterReaderModal from "@/components/explore/ChapterReaderModal.vue";
+import ShelfGroupMenu from "@/components/shelf/ShelfGroupMenu.vue";
+import { useBookDetailDrawerState } from "@/composables/useBookDetailDrawerState";
+import { useDynamicConfig } from "@/composables/useDynamicConfig";
+import { useInlineBookReader } from "@/composables/useInlineBookReader";
+import { useOverlay } from "@/composables/useOverlay";
+import { useShelfGroups } from "@/composables/useShelfGroups";
+import { useTocAutoUpdate } from "@/composables/useTocAutoUpdate";
+import { isTransportAvailable } from "@/composables/useTransport";
+import {
+  useViewCardDensity,
+  type CardSizeKey,
+} from "@/composables/useViewCardDensity";
+import BookshelfContextMenu from "@/features/bookshelf/components/BookshelfContextMenu.vue";
+import BookshelfDialogs from "@/features/bookshelf/components/BookshelfDialogs.vue";
+import BookshelfDiscoveryRecommend from "@/features/bookshelf/components/BookshelfDiscoveryRecommend.vue";
+import BookshelfGrid from "@/features/bookshelf/components/BookshelfGrid.vue";
+import BookshelfHeader from "@/features/bookshelf/components/BookshelfHeader.vue";
+import { useBookshelfActions } from "@/features/bookshelf/services/bookshelfActions";
+import { useBookshelfReaderLauncher } from "@/features/bookshelf/services/bookshelfReaderLauncher";
 import {
   useBookshelfReaderStore,
   useBookshelfStore,
   useBookshelfUiStore,
+  useBookSourceStore,
   useFrontendPluginsStore,
   useNavigationStore,
   usePrivacyModeStore,
-} from '@/stores';
+  useScriptBridgeStore,
+  type ShelfBook,
+} from "@/stores";
 
 const message = useMessage();
 const bookshelfStore = useBookshelfStore();
 const uiStore = useBookshelfUiStore();
 const readerStore = useBookshelfReaderStore();
+const bookSourceStore = useBookSourceStore();
 const frontendPluginsStore = useFrontendPluginsStore();
 const privacyModeStore = usePrivacyModeStore();
+const scriptBridgeStore = useScriptBridgeStore();
 
-const { books, loading, tocRefreshingBookIds, tocRefreshingCount } = storeToRefs(bookshelfStore);
+const { books, loading, tocRefreshingBookIds, tocRefreshingCount } =
+  storeToRefs(bookshelfStore);
+const { sources: bookSources } = storeToRefs(bookSourceStore);
 const {
   searchKw,
   openingBookId,
@@ -92,7 +107,29 @@ const showGroupMenu = computed({
 
 // 搜索弹出层
 const showSearch = ref(false);
-const searchPopupKw = ref('');
+const searchPopupKw = ref("");
+const { triggerClose: closeSearch } = useOverlay(
+  () => showSearch.value,
+  () => {
+    showSearch.value = false;
+  },
+);
+
+function toggleSearch() {
+  if (showSearch.value) {
+    closeSearch();
+    return;
+  }
+  showSearch.value = true;
+}
+
+function onSearchModalUpdateShow(value: boolean) {
+  if (value) {
+    showSearch.value = true;
+    return;
+  }
+  closeSearch();
+}
 
 // 书架编辑模式
 const editMode = ref(false);
@@ -148,7 +185,7 @@ const contextBookGroupId = computed(() => {
   if (!bookId) {
     return undefined;
   }
-  return shelfGroupsState.bookGroupMap[bookId] ?? 'all';
+  return shelfGroupsState.bookGroupMap[bookId] ?? "all";
 });
 
 const {
@@ -157,11 +194,11 @@ const {
   activeSizeKey,
   style: bookshelfDensityStyle,
   setSize,
-} = useViewCardDensity('bookshelf');
+} = useViewCardDensity("bookshelf");
 
 // 移动端每行列数（2~6，持久化）
 const mobileColsConfig = useDynamicConfig<{ cols: number }>({
-  namespace: 'ui.bookshelf.mobileCols',
+  namespace: "ui.bookshelf.mobileCols",
   version: 1,
   defaults: () => ({ cols: 3 }),
   migrate: () => null,
@@ -173,7 +210,7 @@ function setMobileCols(cols: number) {
 }
 const bookshelfStyle = computed(() => ({
   ...bookshelfDensityStyle.value,
-  '--bs-mobile-cols': String(mobileCols.value),
+  "--bs-mobile-cols": String(mobileCols.value),
 }));
 
 const navigationStore = useNavigationStore();
@@ -182,6 +219,68 @@ const { activeView } = storeToRefs(navigationStore);
 const readerLauncher = useBookshelfReaderLauncher(message);
 const bookshelfActions = useBookshelfActions(message);
 const tocAutoUpdate = useTocAutoUpdate();
+const recommendationRef = ref<InstanceType<
+  typeof BookshelfDiscoveryRecommend
+> | null>(null);
+const bookshelfShelfOrder = ref(0);
+const { runChapterList, cancelTask } = scriptBridgeStore;
+const {
+  getShelfId,
+  ensureLoaded: ensureShelfLoaded,
+  isPrivateShelfBook,
+} = bookshelfStore;
+
+const {
+  showDrawer: showRecommendDetail,
+  drawerBookUrl: recommendDrawerBookUrl,
+  drawerFileName: recommendDrawerFileName,
+  drawerSourceName: recommendDrawerSourceName,
+  drawerSourceType: recommendDrawerSourceType,
+  openDetail: openRecommendDetail,
+  openDetailByUrl: openRecommendDetailByUrl,
+} = useBookDetailDrawerState({
+  sources: bookSources,
+});
+
+const {
+  showReader: showRecommendReader,
+  readerChapterUrl: recommendReaderChapterUrl,
+  readerChapterName: recommendReaderChapterName,
+  readerFileName: recommendReaderFileName,
+  readerChapters: recommendReaderChapters,
+  readerCurrentIndex: recommendReaderCurrentIndex,
+  readerBookInfo: recommendReaderBookInfo,
+  readerSourceType: recommendReaderSourceType,
+  readerShelfId: recommendReaderShelfId,
+  readerChapterGroups: recommendReaderChapterGroups,
+  readerActiveGroupIndex: recommendReaderActiveGroupIndex,
+  applySourceSwitchToReader: applyRecommendSourceSwitchToReader,
+  onReadChapter: onRecommendReadChapter,
+} = useInlineBookReader({
+  showDrawer: showRecommendDetail,
+  drawerBookUrl: recommendDrawerBookUrl,
+  drawerFileName: recommendDrawerFileName,
+  privacyExitTick,
+  runChapterList,
+  cancelTask,
+  ensureShelfLoaded,
+  getShelfId,
+  isPrivateShelfBook,
+  onTrackReaderOpen: () => {},
+});
+
+function openRecommendationSettings() {
+  recommendationRef.value?.openSettings();
+}
+
+function updateBookshelfShelfOrder(order: number) {
+  bookshelfShelfOrder.value = order;
+}
+
+function openSearchResult(book: ShelfBook) {
+  readerLauncher.openBook(book);
+  closeSearch();
+}
 
 // 计算可见书籍数量
 const visibleBookCount = computed(() => {
@@ -240,7 +339,9 @@ const searchedBooks = computed(() => {
     return sortedBooks.value;
   }
   return sortedBooks.value.filter(
-    (book) => book.name.toLowerCase().includes(kw) || book.author.toLowerCase().includes(kw),
+    (book) =>
+      book.name.toLowerCase().includes(kw) ||
+      book.author.toLowerCase().includes(kw),
   );
 });
 
@@ -251,7 +352,7 @@ watch(activeView, (newView) => {
     _shelfViewWatchInitialized = true;
     return;
   }
-  if (newView === 'bookshelf') {
+  if (newView === "bookshelf") {
     tocAutoUpdate.refreshAllOnShelfView();
   }
 });
@@ -268,17 +369,17 @@ watch(privacyExitTick, () => {
 // 分组菜单操作
 async function handleAddGroup(name: string) {
   await addGroup(name);
-  message.success('分组已创建');
+  message.success("分组已创建");
 }
 
 function handleRemoveGroup(groupId: string) {
   removeGroup(groupId);
-  message.success('分组已删除');
+  message.success("分组已删除");
 }
 
 async function handleRenameGroup(groupId: string, name: string) {
   await renameGroup(groupId, name);
-  message.success('分组已重命名');
+  message.success("分组已重命名");
 }
 
 function handleToggleGroup(groupId: string, enabled: boolean) {
@@ -296,11 +397,11 @@ async function handleRefresh() {
   if (result.updated > 0) {
     message.success(`发现 ${result.updated} 个新章节`);
   } else if (result.success > 0) {
-    message.info('已是最新，没有新章节');
+    message.info("已是最新，没有新章节");
   } else if (result.failed > 0) {
     message.warning(`刷新完成，${result.failed} 本书刷新失败`);
   } else {
-    message.info('没有需要刷新的书籍');
+    message.info("没有需要刷新的书籍");
   }
 }
 
@@ -311,9 +412,14 @@ onMounted(async () => {
   }
   loading.value = true;
   try {
-    await Promise.all([bookshelfStore.loadBooks(), frontendPluginsStore.ensureInitialized()]);
+    await Promise.all([
+      bookshelfStore.loadBooks(),
+      frontendPluginsStore.ensureInitialized(),
+    ]);
   } catch (error: unknown) {
-    message.error(`加载书架失败: ${error instanceof Error ? error.message : String(error)}`);
+    message.error(
+      `加载书架失败: ${error instanceof Error ? error.message : String(error)}`,
+    );
   } finally {
     loading.value = false;
   }
@@ -342,7 +448,8 @@ onMounted(async () => {
       @select-group="(id: string) => selectGroup(id)"
       @import-txt="uiStore.showTxtImportDialog = true"
       @refresh="handleRefresh"
-      @toggle-search="showSearch = !showSearch"
+      @toggle-search="toggleSearch"
+      @configure-recommendation="openRecommendationSettings"
       @toggle-edit="toggleEditMode"
     />
 
@@ -355,18 +462,32 @@ onMounted(async () => {
       :toc-refreshing-book-ids="tocRefreshingBookIds"
       :edit-mode="editMode"
       :selected-book-ids="selectedBookIds"
-      @select="editMode ? toggleBookSelect($event.id) : readerLauncher.openBook($event)"
+      :shelf-order="bookshelfShelfOrder"
+      @select="
+        editMode ? toggleBookSelect($event.id) : readerLauncher.openBook($event)
+      "
       @contextmenu="(book, e) => !editMode && uiStore.openContextMenu(book, e)"
       @refresh="handleRefresh"
-    />
+    >
+      <template #before-grid>
+        <BookshelfDiscoveryRecommend
+          ref="recommendationRef"
+          @select="openRecommendDetail"
+          @open-book="openRecommendDetailByUrl"
+          @shelf-order-change="updateBookshelfShelfOrder"
+        />
+      </template>
+    </BookshelfGrid>
 
     <!-- 编辑模式底部操作栏 -->
     <Transition name="bs-edit-bar">
       <div v-if="editMode" class="bs-edit-bar">
-        <span class="bs-edit-bar__count">已选 {{ selectedBookIds.size }} 本</span>
+        <span class="bs-edit-bar__count"
+          >已选 {{ selectedBookIds.size }} 本</span
+        >
         <div class="bs-edit-bar__actions">
           <button class="bs-edit-bar__btn" @click="toggleSelectAll">
-            {{ allSelected ? '取消全选' : '全选' }}
+            {{ allSelected ? "取消全选" : "全选" }}
           </button>
           <button class="bs-edit-bar__btn" @click="toggleEditMode">取消</button>
           <button
@@ -382,46 +503,58 @@ onMounted(async () => {
 
     <!-- 搜索弹出层 -->
     <n-modal
-      v-model:show="showSearch"
+      :show="showSearch"
       preset="card"
       title="搜索书架"
       :style="{ width: '380px', maxWidth: '92vw' }"
       :segmented="{ content: true }"
+      @update:show="onSearchModalUpdateShow"
       @after-leave="searchPopupKw = ''"
     >
-      <n-input v-model:value="searchPopupKw" placeholder="搜索书名或作者..." clearable autofocus />
+      <n-input
+        v-model:value="searchPopupKw"
+        placeholder="搜索书名或作者..."
+        clearable
+        autofocus
+      />
       <div class="bs-search-results">
         <template v-if="searchPopupKw.trim()">
           <div
             v-for="book in sortedBooks
               .filter(
                 (b) =>
-                  b.name.toLowerCase().includes(searchPopupKw.trim().toLowerCase()) ||
-                  b.author.toLowerCase().includes(searchPopupKw.trim().toLowerCase()),
+                  b.name
+                    .toLowerCase()
+                    .includes(searchPopupKw.trim().toLowerCase()) ||
+                  b.author
+                    .toLowerCase()
+                    .includes(searchPopupKw.trim().toLowerCase()),
               )
               .slice(0, 30)"
             :key="book.id"
             class="bs-search-item"
             role="button"
             tabindex="0"
-            @click="
-              readerLauncher.openBook(book);
-              showSearch = false;
-            "
-            @keydown.enter.prevent="
-              readerLauncher.openBook(book);
-              showSearch = false;
-            "
+            @click="openSearchResult(book)"
+            @keydown.enter.prevent="openSearchResult(book)"
           >
-            <span class="bs-search-item__name">{{ book.name || '未知书名' }}</span>
-            <span class="bs-search-item__author">{{ book.author || '佚名' }}</span>
+            <span class="bs-search-item__name">{{
+              book.name || "未知书名"
+            }}</span>
+            <span class="bs-search-item__author">{{
+              book.author || "佚名"
+            }}</span>
           </div>
           <div
             v-if="
               !sortedBooks.filter(
                 (b) =>
-                  b.name.toLowerCase().includes(searchPopupKw.trim().toLowerCase()) ||
-                  b.author.toLowerCase().includes(searchPopupKw.trim().toLowerCase()),
+                  b.name
+                    .toLowerCase()
+                    .includes(searchPopupKw.trim().toLowerCase()) ||
+                  b.author
+                    .toLowerCase()
+                    .includes(searchPopupKw.trim().toLowerCase()),
               ).length
             "
             class="bs-search-empty"
@@ -457,6 +590,31 @@ onMounted(async () => {
       @select="bookshelfActions.handleMenuSelect"
     />
 
+    <BookDetailDrawer
+      v-model:show="showRecommendDetail"
+      :book-url="recommendDrawerBookUrl"
+      :file-name="recommendDrawerFileName"
+      :source-name="recommendDrawerSourceName"
+      :source-type="recommendDrawerSourceType"
+      @read-chapter="onRecommendReadChapter"
+    />
+
+    <ChapterReaderModal
+      v-model:show="showRecommendReader"
+      v-model:current-index="recommendReaderCurrentIndex"
+      :chapter-url="recommendReaderChapterUrl"
+      :chapter-name="recommendReaderChapterName"
+      :file-name="recommendReaderFileName"
+      :chapters="recommendReaderChapters"
+      :shelf-book-id="recommendReaderShelfId"
+      :book-info="recommendReaderBookInfo"
+      :source-type="recommendReaderSourceType"
+      :chapter-groups="recommendReaderChapterGroups"
+      :initial-group-index="recommendReaderActiveGroupIndex"
+      @added-to-shelf="recommendReaderShelfId = $event"
+      @source-switched="applyRecommendSourceSwitchToReader"
+    />
+
     <ChapterReaderModal
       v-model:show="showReader"
       v-model:current-index="readerCurrentIndex"
@@ -467,7 +625,9 @@ onMounted(async () => {
       :chapter-groups="readerChapterGroups"
       :inline-group-tabs="true"
       :episode-progress="episodeProgressMap"
-      :save-episode-progress="(_, url, t, d) => readerStore.setEpisodeProgress(url, t, d)"
+      :save-episode-progress="
+        (_, url, t, d) => readerStore.setEpisodeProgress(url, t, d)
+      "
       :shelf-book-id="readerShelfId"
       :book-info="readerBookInfo"
       :source-type="readerSourceType"

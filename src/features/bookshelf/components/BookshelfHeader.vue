@@ -11,6 +11,7 @@ import {
   FilePlus,
   RefreshCw,
   Search,
+  Sparkles,
   Pencil,
   Settings2,
 } from 'lucide-vue-next';
@@ -42,6 +43,7 @@ const emit = defineEmits<{
   (e: 'import-txt'): void;
   (e: 'refresh'): void;
   (e: 'toggle-search'): void;
+  (e: 'configure-recommendation'): void;
   (e: 'toggle-edit'): void;
 }>();
 
@@ -61,6 +63,10 @@ const mobileMenuOptions = computed<DropdownOption[]>(() => [
   {
     label: '搜索书架',
     key: 'search',
+  },
+  {
+    label: '首页推荐',
+    key: 'recommendation',
   },
   {
     label: '刷新书架',
@@ -99,6 +105,9 @@ function handleMobileMenuSelect(key: string) {
     case 'search':
       emit('toggle-search');
       break;
+    case 'recommendation':
+      emit('configure-recommendation');
+      break;
     case 'refresh':
       emit('refresh');
       break;
@@ -135,6 +144,16 @@ function handleMobileMenuSelect(key: string) {
             @click="emit('toggle-search')"
           >
             <Search :size="16" />
+          </button>
+          <!-- 首页推荐 -->
+          <button
+            class="bs-icon-btn"
+            type="button"
+            title="首页推荐"
+            aria-label="首页推荐"
+            @click="emit('configure-recommendation')"
+          >
+            <Sparkles :size="16" />
           </button>
           <!-- 分组按钮 -->
           <button

@@ -5,8 +5,8 @@
  * 全局单例模式，可在任意组件中 `const shelf = useBookshelf()` 使用。
  */
 
-import { ref } from 'vue';
-import { invokeWithTimeout } from './useInvoke';
+import { ref } from "vue";
+import { invokeWithTimeout } from "./useInvoke";
 
 // ── 类型定义 ──────────────────────────────────────────────────────────────
 
@@ -121,6 +121,9 @@ export interface CachedChapter {
   name: string;
   url: string;
   group?: string;
+  vip?: boolean;
+  price?: unknown;
+  currency?: string;
 }
 
 export interface EpisodeProgress {
@@ -155,7 +158,11 @@ const TIMEOUT = 10_000;
 export function useBookshelf() {
   /** 加载/刷新书架列表 */
   async function loadBooks(): Promise<ShelfBook[]> {
-    const list = await invokeWithTimeout<ShelfBook[]>('bookshelf_list', undefined, TIMEOUT);
+    const list = await invokeWithTimeout<ShelfBook[]>(
+      "bookshelf_list",
+      undefined,
+      TIMEOUT,
+    );
     books.value = list;
     buildIndex(list);
     initialized = true;
@@ -176,7 +183,7 @@ export function useBookshelf() {
     sourceName: string,
   ): Promise<ShelfBook> {
     const result = await invokeWithTimeout<ShelfBook>(
-      'bookshelf_add',
+      "bookshelf_add",
       {
         book,
         fileName,
@@ -191,13 +198,13 @@ export function useBookshelf() {
 
   /** 移出书架 */
   async function removeFromShelf(id: string): Promise<void> {
-    await invokeWithTimeout<void>('bookshelf_remove', { id }, TIMEOUT);
+    await invokeWithTimeout<void>("bookshelf_remove", { id }, TIMEOUT);
     await loadBooks();
   }
 
   /** 获取单本详情 */
   async function getShelfBook(id: string): Promise<ShelfBook> {
-    return invokeWithTimeout<ShelfBook>('bookshelf_get', { id }, TIMEOUT);
+    return invokeWithTimeout<ShelfBook>("bookshelf_get", { id }, TIMEOUT);
   }
 
   /** 更新阅读进度（支持分页页码 / 滚动比例 / 每本书独立设置） */
@@ -213,7 +220,7 @@ export function useBookshelf() {
     },
   ): Promise<void> {
     await invokeWithTimeout<void>(
-      'bookshelf_update_progress',
+      "bookshelf_update_progress",
       {
         id,
         chapterIndex,
@@ -249,14 +256,21 @@ export function useBookshelf() {
 
   /** 更新书籍隐私标记 */
   async function setBookPrivate(id: string, isPrivate: boolean): Promise<void> {
-    await invokeWithTimeout<void>('bookshelf_set_private', { id, isPrivate }, TIMEOUT);
+    await invokeWithTimeout<void>(
+      "bookshelf_set_private",
+      { id, isPrivate },
+      TIMEOUT,
+    );
     await loadBooks();
   }
 
   /** 保存章节目录 */
-  async function saveChapters(id: string, chapters: CachedChapter[]): Promise<void> {
+  async function saveChapters(
+    id: string,
+    chapters: CachedChapter[],
+  ): Promise<void> {
     await invokeWithTimeout<void>(
-      'bookshelf_save_chapters',
+      "bookshelf_save_chapters",
       {
         id,
         chapters,
@@ -267,7 +281,11 @@ export function useBookshelf() {
 
   /** 获取缓存的章节目录 */
   async function getChapters(id: string): Promise<CachedChapter[]> {
-    return invokeWithTimeout<CachedChapter[]>('bookshelf_get_chapters', { id }, TIMEOUT);
+    return invokeWithTimeout<CachedChapter[]>(
+      "bookshelf_get_chapters",
+      { id },
+      TIMEOUT,
+    );
   }
 
   /** 更新书籍元信息，可选替换章节目录 */
@@ -276,7 +294,7 @@ export function useBookshelf() {
     chapters?: CachedChapter[],
   ): Promise<ShelfBook> {
     const result = await invokeWithTimeout<ShelfBook>(
-      'bookshelf_update_book',
+      "bookshelf_update_book",
       {
         book,
         chapters: chapters ?? null,
@@ -295,7 +313,7 @@ export function useBookshelf() {
   ): Promise<ShelfBook> {
     const current =
       books.value.find((item) => item.id === id) ??
-      (await invokeWithTimeout<ShelfBook>('bookshelf_get', { id }, TIMEOUT));
+      (await invokeWithTimeout<ShelfBook>("bookshelf_get", { id }, TIMEOUT));
     return updateBook(
       {
         id,
@@ -328,9 +346,11 @@ export function useBookshelf() {
   }
 
   /** 恢复最近一次整本换源 */
-  async function restoreSourceSwitch(id: string): Promise<SourceSwitchRestoreResult> {
+  async function restoreSourceSwitch(
+    id: string,
+  ): Promise<SourceSwitchRestoreResult> {
     const result = await invokeWithTimeout<SourceSwitchRestoreResult>(
-      'bookshelf_restore_source_switch',
+      "bookshelf_restore_source_switch",
       { id },
       TIMEOUT,
     );
@@ -339,9 +359,13 @@ export function useBookshelf() {
   }
 
   /** 缓存单章正文 */
-  async function saveContent(id: string, chapterIndex: number, content: string): Promise<void> {
+  async function saveContent(
+    id: string,
+    chapterIndex: number,
+    content: string,
+  ): Promise<void> {
     await invokeWithTimeout<void>(
-      'bookshelf_save_content',
+      "bookshelf_save_content",
       {
         id,
         chapterIndex,
@@ -352,9 +376,12 @@ export function useBookshelf() {
   }
 
   /** 读取缓存正文 */
-  async function getContent(id: string, chapterIndex: number): Promise<string | null> {
+  async function getContent(
+    id: string,
+    chapterIndex: number,
+  ): Promise<string | null> {
     return invokeWithTimeout<string | null>(
-      'bookshelf_get_content',
+      "bookshelf_get_content",
       {
         id,
         chapterIndex,
@@ -364,9 +391,12 @@ export function useBookshelf() {
   }
 
   /** 删除单章正文缓存（幂等：文件不存在时也返回成功） */
-  async function deleteContent(id: string, chapterIndex: number): Promise<void> {
+  async function deleteContent(
+    id: string,
+    chapterIndex: number,
+  ): Promise<void> {
     await invokeWithTimeout<void>(
-      'bookshelf_delete_content',
+      "bookshelf_delete_content",
       {
         id,
         chapterIndex,
@@ -377,14 +407,20 @@ export function useBookshelf() {
 
   /** 获取已缓存正文的章节索引集合（用于目录面板标记"已下载"状态） */
   async function getCachedIndices(id: string): Promise<Set<number>> {
-    const list = await invokeWithTimeout<number[]>('bookshelf_get_cached_indices', { id }, TIMEOUT);
+    const list = await invokeWithTimeout<number[]>(
+      "bookshelf_get_cached_indices",
+      { id },
+      TIMEOUT,
+    );
     return new Set(list);
   }
 
   /** 获取全书各集播放进度 */
-  async function getEpisodeProgress(id: string): Promise<Record<string, EpisodeProgress>> {
+  async function getEpisodeProgress(
+    id: string,
+  ): Promise<Record<string, EpisodeProgress>> {
     return invokeWithTimeout<Record<string, EpisodeProgress>>(
-      'bookshelf_get_episode_progress',
+      "bookshelf_get_episode_progress",
       { id },
       TIMEOUT,
     );
@@ -398,7 +434,7 @@ export function useBookshelf() {
     duration: number,
   ): Promise<void> {
     await invokeWithTimeout<void>(
-      'bookshelf_save_episode_progress',
+      "bookshelf_save_episode_progress",
       { id, chapterUrl, time, duration },
       TIMEOUT,
     );

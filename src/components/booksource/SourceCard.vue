@@ -186,6 +186,13 @@ const emit = defineEmits<{
           >正文</n-tag
         >
         <n-tag
+          v-if="capabilities?.has('purchaseChapter')"
+          size="tiny"
+          :bordered="false"
+          class="src-card__cap src-card__cap--dim"
+          >购买</n-tag
+        >
+        <n-tag
           v-if="capabilities?.has('chapterParagraphCommentCounts')"
           size="tiny"
           :bordered="false"

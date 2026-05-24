@@ -72,6 +72,21 @@ export interface ChapterItem {
   name: string;
   url: string;
   group?: string;
+  /** VIP / 付费章节标记。旧书源可省略，默认视为免费章节。 */
+  vip?: boolean;
+  /** 兼容少量书源可能使用的别名；新书源推荐使用 vip。 */
+  isVip?: boolean;
+  /** 可选价格展示字段，具体结构由书源决定。 */
+  price?: unknown;
+  currency?: string;
+}
+
+export interface PurchaseChapterResult {
+  ok?: boolean;
+  success?: boolean;
+  purchased?: boolean;
+  message?: string;
+  [key: string]: unknown;
 }
 
 export interface ChapterGroup {
@@ -266,6 +281,26 @@ export const useScriptBridgeStore = defineStore("scriptBridge", () => {
     );
   }
 
+  async function runPurchaseChapter(
+    fileName: string,
+    chapterUrl: string,
+    chapter?: ChapterItem,
+    sourceDir?: string,
+  ) {
+    const prefs = usePreferencesStore();
+    const timeoutMs = (prefs.search.chapterContentTimeoutSecs || 35) * 1000;
+    return invokeWithTimeout<PurchaseChapterResult | boolean | unknown>(
+      "booksource_purchase_chapter",
+      {
+        fileName,
+        chapterUrl,
+        chapter: chapter ?? null,
+        sourceDir: sourceDir ?? null,
+      },
+      timeoutMs,
+    );
+  }
+
   async function runChapterParagraphCommentCounts(
     fileName: string,
     chapterUrl: string,
@@ -426,6 +461,7 @@ export const useScriptBridgeStore = defineStore("scriptBridge", () => {
     runChapterList,
     cancelTask,
     runChapterContent,
+    runPurchaseChapter,
     runChapterParagraphCommentCounts,
     runChapterParagraphComments,
     likeParagraphComment,

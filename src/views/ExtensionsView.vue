@@ -1,24 +1,25 @@
 <!-- ExtensionsView — 前端插件管理页，负责插件安装、编辑、启停、排序、示例与配置管理。 -->
 <script setup lang="ts">
-import { Folder, Search, Code2 } from 'lucide-vue-next';
-import { useMessage, type DropdownOption } from 'naive-ui';
-import { storeToRefs } from 'pinia';
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import JavaScriptHighlightEditor from '@/components/base/JavaScriptHighlightEditor.vue';
-import ExampleCard from '@/components/extensions/ExampleCard.vue';
-import ExtensionCard from '@/components/extensions/ExtensionCard.vue';
-import AppPageHeader from '@/components/layout/AppPageHeader.vue';
-import MobileToolbarMenu from '@/components/layout/MobileToolbarMenu.vue';
-import { useBackAwareDialog as useDialog } from '@/composables/useBackAwareDialog';
-import { isMobile } from '@/composables/useEnv';
-import { eventListen } from '@/composables/useEventBus';
-import { invokeWithTimeout } from '@/composables/useInvoke';
-import { useOverlay } from '@/composables/useOverlay';
+import { Folder, Search, Code2 } from "lucide-vue-next";
+import { useMessage, type DropdownOption } from "naive-ui";
+import { storeToRefs } from "pinia";
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import JavaScriptHighlightEditor from "@/components/base/JavaScriptHighlightEditor.vue";
+import ExampleCard from "@/components/extensions/ExampleCard.vue";
+import ExtensionCard from "@/components/extensions/ExtensionCard.vue";
+import PluginImageListField from "@/components/extensions/PluginImageListField.vue";
+import AppPageHeader from "@/components/layout/AppPageHeader.vue";
+import MobileToolbarMenu from "@/components/layout/MobileToolbarMenu.vue";
+import { useBackAwareDialog as useDialog } from "@/composables/useBackAwareDialog";
+import { isMobile } from "@/composables/useEnv";
+import { eventListen } from "@/composables/useEventBus";
+import { invokeWithTimeout } from "@/composables/useInvoke";
+import { useOverlay } from "@/composables/useOverlay";
 import {
   useFrontendPluginsStore,
   type PluginSettingValue,
   type ResolvedPluginSettingField,
-} from '@/stores';
+} from "@/stores";
 import {
   type ExtensionMeta,
   listExtensions,
@@ -30,59 +31,59 @@ import {
   openExtensionInVscode,
   toExtSafeFileName,
   newExtensionTemplate,
-} from '../composables/useExtension';
-import { EXAMPLE_SCRIPTS, type ExampleScript } from '../data/extensionExamples';
-import { saveExportFile } from '../utils/exportFile';
+} from "../composables/useExtension";
+import { EXAMPLE_SCRIPTS, type ExampleScript } from "../data/extensionExamples";
+import { saveExportFile } from "../utils/exportFile";
 
 type ExtensionListItem = ExtensionMeta & { builtin?: boolean };
 
 const message = useMessage();
 const dialog = useDialog();
 
-const activeTab = ref<'installed' | 'examples'>('installed');
+const activeTab = ref<"installed" | "examples">("installed");
 const extensions = ref<ExtensionListItem[]>([]);
-const extDir = ref('');
+const extDir = ref("");
 const loading = ref(false);
 const reloadingAll = ref(false);
-const searchQuery = ref('');
-const categoryFilter = ref<string>('');
+const searchQuery = ref("");
+const categoryFilter = ref<string>("");
 
 const showEditor = ref(false);
-const editorTitle = ref('');
-const editorContent = ref('');
-const editorFile = ref('');
+const editorTitle = ref("");
+const editorContent = ref("");
+const editorFile = ref("");
 const editorSaving = ref(false);
 const editorVscodeOpen = ref(false);
 const editorReloaded = ref(false);
 const editorOpenKey = ref(0);
 
 const showPreview = ref(false);
-const previewTitle = ref('');
-const previewSource = ref('');
+const previewTitle = ref("");
+const previewSource = ref("");
 const previewExampleId = ref<string | null>(null);
 const installLoading = ref(false);
 const showSettings = ref(false);
-const settingsTitle = ref('');
-const settingsFileName = ref('');
+const settingsTitle = ref("");
+const settingsFileName = ref("");
 const settingsLoading = ref(false);
 const settingsSaving = ref(false);
 const settingsFields = ref<ResolvedPluginSettingField[]>([]);
 const settingsValues = ref<Record<string, PluginSettingValue>>({});
 const settingsDraftValues = ref<Record<string, PluginSettingValue>>({});
 
-useOverlay(
+const { triggerClose: closeEditor } = useOverlay(
   () => showEditor.value,
   () => {
     showEditor.value = false;
   },
 );
-useOverlay(
+const { triggerClose: closePreview } = useOverlay(
   () => showPreview.value,
   () => {
     showPreview.value = false;
   },
 );
-useOverlay(
+const { triggerClose: closeSettings } = useOverlay(
   () => showSettings.value,
   () => {
     showSettings.value = false;
@@ -90,15 +91,47 @@ useOverlay(
 );
 
 const showUrlImport = ref(false);
-const urlImportUrl = ref('');
+const urlImportUrl = ref("");
 const urlImporting = ref(false);
 
-useOverlay(
+const { triggerClose: closeUrlImport } = useOverlay(
   () => showUrlImport.value,
   () => {
     showUrlImport.value = false;
   },
 );
+
+function updateEditorShow(value: boolean) {
+  if (value) {
+    showEditor.value = true;
+    return;
+  }
+  closeEditor();
+}
+
+function updatePreviewShow(value: boolean) {
+  if (value) {
+    showPreview.value = true;
+    return;
+  }
+  closePreview();
+}
+
+function updateSettingsShow(value: boolean) {
+  if (value) {
+    showSettings.value = true;
+    return;
+  }
+  closeSettings();
+}
+
+function updateUrlImportShow(value: boolean) {
+  if (value) {
+    showUrlImport.value = true;
+    return;
+  }
+  closeUrlImport();
+}
 
 const frontendPluginsStore = useFrontendPluginsStore();
 const { plugins: runtimePlugins } = storeToRefs(frontendPluginsStore);
@@ -112,7 +145,8 @@ const {
 } = frontendPluginsStore;
 
 const runtimeByFileName = computed(
-  () => new Map(runtimePlugins.value.map((plugin) => [plugin.fileName, plugin])),
+  () =>
+    new Map(runtimePlugins.value.map((plugin) => [plugin.fileName, plugin])),
 );
 
 function runtimePluginToExtensionItem(
@@ -125,9 +159,9 @@ function runtimePluginToExtensionItem(
     version: plugin.version,
     description: plugin.description,
     author: plugin.author,
-    matchPatterns: ['*'],
+    matchPatterns: ["*"],
     grants: [],
-    runAt: 'document-idle',
+    runAt: "document-idle",
     category: plugin.category,
     enabled: plugin.enabled,
     fileSize: plugin.source.length,
@@ -142,9 +176,9 @@ function isBuiltinExtension(ext: ExtensionListItem): boolean {
 
 const shortExtDir = computed(() => {
   if (!extDir.value) {
-    return '';
+    return "";
   }
-  const sep = extDir.value.includes('\\') ? '\\' : '/';
+  const sep = extDir.value.includes("\\") ? "\\" : "/";
   const parts = extDir.value.split(sep).filter(Boolean);
   if (parts.length <= 3) {
     return extDir.value;
@@ -153,30 +187,36 @@ const shortExtDir = computed(() => {
 });
 
 const categories = computed(() => {
-  const cats = new Set(extensions.value.map((e) => e.category || '其他'));
-  return [{ label: '全部', value: '' }, ...[...cats].map((c) => ({ label: c, value: c }))];
+  const cats = new Set(extensions.value.map((e) => e.category || "其他"));
+  return [
+    { label: "全部", value: "" },
+    ...[...cats].map((c) => ({ label: c, value: c })),
+  ];
 });
 
-const examplesSearchQuery = ref('');
-const examplesCategoryFilter = ref('');
+const examplesSearchQuery = ref("");
+const examplesCategoryFilter = ref("");
 
 const exampleCategories = computed(() => {
-  const cats = new Set(EXAMPLE_SCRIPTS.map((e) => e.meta.category || '其他'));
-  return [{ label: '全部', value: '' }, ...[...cats].map((c) => ({ label: c, value: c }))];
+  const cats = new Set(EXAMPLE_SCRIPTS.map((e) => e.meta.category || "其他"));
+  return [
+    { label: "全部", value: "" },
+    ...[...cats].map((c) => ({ label: c, value: c })),
+  ];
 });
 
 const filteredExamples = computed(() =>
   EXAMPLE_SCRIPTS.filter((ex) => {
     const byCategory =
       !examplesCategoryFilter.value ||
-      (ex.meta.category || '其他') === examplesCategoryFilter.value;
+      (ex.meta.category || "其他") === examplesCategoryFilter.value;
     const q = examplesSearchQuery.value.trim();
     const bySearch =
       !q ||
-      (ex.meta.name ?? '').includes(q) ||
-      (ex.meta.description ?? '').includes(q) ||
-      (ex.meta.author ?? '').includes(q) ||
-      (ex.meta.category ?? '').includes(q);
+      (ex.meta.name ?? "").includes(q) ||
+      (ex.meta.description ?? "").includes(q) ||
+      (ex.meta.author ?? "").includes(q) ||
+      (ex.meta.category ?? "").includes(q);
     return byCategory && bySearch;
   }),
 );
@@ -184,7 +224,9 @@ const filteredExamples = computed(() =>
 const filtered = computed(() =>
   extensions.value.filter((e) => {
     const byCategory =
-      !categoryFilter.value || categoryFilter.value === '' || e.category === categoryFilter.value;
+      !categoryFilter.value ||
+      categoryFilter.value === "" ||
+      e.category === categoryFilter.value;
     const q = searchQuery.value.trim();
     const bySearch =
       !q ||
@@ -196,25 +238,32 @@ const filtered = computed(() =>
   }),
 );
 
-const installedFileNames = computed(() => new Set(extensions.value.map((e) => e.fileName)));
+const installedFileNames = computed(
+  () => new Set(extensions.value.map((e) => e.fileName)),
+);
 const installedHeaderMenuOptions: DropdownOption[] = [
-  { label: '新建扩展', key: 'new' },
-  { label: '导入本地', key: 'import-file' },
-  { label: '从 URL 安装', key: 'import-url' },
-  { label: '刷新列表', key: 'refresh' },
-  { label: '全部重载', key: 'reload-all' },
+  { label: "新建扩展", key: "new" },
+  { label: "导入本地", key: "import-file" },
+  { label: "从 URL 安装", key: "import-url" },
+  { label: "刷新列表", key: "refresh" },
+  { label: "全部重载", key: "reload-all" },
 ];
 
 async function loadExtensions() {
   loading.value = true;
   try {
     await ensureFrontendPlugins();
-    const [list, dir] = await Promise.all([listExtensions(), getExtensionDir()]);
+    const [list, dir] = await Promise.all([
+      listExtensions(),
+      getExtensionDir(),
+    ]);
     const diskFileNames = new Set(list.map((item) => item.fileName));
     const builtinItems = runtimePlugins.value
       .filter((plugin) => !diskFileNames.has(plugin.fileName))
       .map(runtimePluginToExtensionItem);
-    const orderMap = new Map(runtimePlugins.value.map((plugin, index) => [plugin.fileName, index]));
+    const orderMap = new Map(
+      runtimePlugins.value.map((plugin, index) => [plugin.fileName, index]),
+    );
     extensions.value = [...list, ...builtinItems].toSorted(
       (left, right) =>
         (orderMap.get(left.fileName) ?? Number.MAX_SAFE_INTEGER) -
@@ -246,15 +295,21 @@ async function openDirInExplorer() {
     return;
   }
   try {
-    await invokeWithTimeout('open_dir_in_explorer', { path: extDir.value }, 5_000);
+    await invokeWithTimeout(
+      "open_dir_in_explorer",
+      { path: extDir.value },
+      5_000,
+    );
   } catch (e: unknown) {
-    message.error(`无法打开目录: ${e instanceof Error ? e.message : String(e)}`);
+    message.error(
+      `无法打开目录: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 
 async function onToggle(ext: ExtensionListItem) {
   if (isBuiltinExtension(ext)) {
-    message.info('内置插件随应用启用，可通过设置调整行为');
+    message.info("内置插件随应用启用，可通过设置调整行为");
     return;
   }
   try {
@@ -267,21 +322,25 @@ async function onToggle(ext: ExtensionListItem) {
 
 function confirmDelete(ext: ExtensionListItem) {
   if (isBuiltinExtension(ext)) {
-    message.info('内置插件不能删除');
+    message.info("内置插件不能删除");
     return;
   }
   dialog.warning({
-    title: '删除扩展',
+    title: "删除扩展",
     content: `确认删除「${ext.name}」？此操作将删除磁盘文件，不可恢复。`,
-    positiveText: '删除',
-    negativeText: '取消',
+    positiveText: "删除",
+    negativeText: "取消",
     onPositiveClick: async () => {
       try {
         await deleteExtension(ext.fileName);
-        extensions.value = extensions.value.filter((e) => e.fileName !== ext.fileName);
-        message.success('已删除');
+        extensions.value = extensions.value.filter(
+          (e) => e.fileName !== ext.fileName,
+        );
+        message.success("已删除");
       } catch (e: unknown) {
-        message.error(`删除失败: ${e instanceof Error ? e.message : String(e)}`);
+        message.error(
+          `删除失败: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     },
   });
@@ -290,7 +349,7 @@ function confirmDelete(ext: ExtensionListItem) {
 async function openEditor(ext?: ExtensionListItem) {
   if (ext) {
     if (isBuiltinExtension(ext)) {
-      message.info('内置插件源码可查看，但不能直接编辑');
+      message.info("内置插件源码可查看，但不能直接编辑");
       return;
     }
     editorTitle.value = `编辑：${ext.name}`;
@@ -302,8 +361,8 @@ async function openEditor(ext?: ExtensionListItem) {
       return;
     }
   } else {
-    editorTitle.value = '新建扩展';
-    editorFile.value = '';
+    editorTitle.value = "新建扩展";
+    editorFile.value = "";
     editorContent.value = newExtensionTemplate();
   }
   editorOpenKey.value += 1;
@@ -313,14 +372,14 @@ async function openEditor(ext?: ExtensionListItem) {
 async function saveEditor() {
   if (!editorFile.value) {
     const m = editorContent.value.match(/\/\/\s*@name\s+(.+)/);
-    const name = m?.[1]?.trim() || '未命名扩展';
+    const name = m?.[1]?.trim() || "未命名扩展";
     editorFile.value = toExtSafeFileName(name);
   }
   editorSaving.value = true;
   try {
     await saveExtension(editorFile.value, editorContent.value);
-    message.success('已保存');
-    showEditor.value = false;
+    message.success("已保存");
+    closeEditor();
     await loadExtensions();
   } catch (e: unknown) {
     message.error(`保存失败: ${e instanceof Error ? e.message : String(e)}`);
@@ -331,7 +390,7 @@ async function saveEditor() {
 
 async function openEditorInVscode() {
   if (!editorFile.value) {
-    message.warning('请先保存，再用 VS Code 打开');
+    message.warning("请先保存，再用 VS Code 打开");
     return;
   }
   editorVscodeOpen.value = true;
@@ -348,7 +407,7 @@ async function viewInstalledCode(ext: ExtensionListItem) {
   try {
     const runtimeInfo = runtimeByFileName.value.get(ext.fileName);
     previewSource.value = isBuiltinExtension(ext)
-      ? (runtimeInfo?.source ?? '')
+      ? (runtimeInfo?.source ?? "")
       : await readExtension(ext.fileName);
     previewTitle.value = ext.name;
     previewExampleId.value = null;
@@ -366,7 +425,9 @@ function viewExampleCode(example: ExampleScript) {
 }
 
 function isExampleInstalled(example: ExampleScript): boolean {
-  return installedFileNames.value.has(toExtSafeFileName(example.meta.name ?? example.id));
+  return installedFileNames.value.has(
+    toExtSafeFileName(example.meta.name ?? example.id),
+  );
 }
 
 async function installExample(example: ExampleScript) {
@@ -389,15 +450,15 @@ async function installFromPreview() {
     return;
   }
   await installExample(example);
-  showPreview.value = false;
+  closePreview();
 }
 
 function importFromFile() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'text/javascript,application/javascript,text/plain,.js';
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "text/javascript,application/javascript,text/plain,.js";
   input.multiple = true;
-  input.addEventListener('change', async () => {
+  input.addEventListener("change", async () => {
     if (!input.files?.length) {
       return;
     }
@@ -409,7 +470,9 @@ function importFromFile() {
         await saveExtension(file.name, text);
         ok++;
       } catch (e) {
-        message.error(`导入 ${file.name} 失败: ${e instanceof Error ? e.message : String(e)}`);
+        message.error(
+          `导入 ${file.name} 失败: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     }
     if (ok) {
@@ -424,19 +487,19 @@ async function exportExtension(ext: ExtensionListItem) {
   try {
     const runtimeInfo = runtimeByFileName.value.get(ext.fileName);
     const source = isBuiltinExtension(ext)
-      ? (runtimeInfo?.source ?? '')
+      ? (runtimeInfo?.source ?? "")
       : await readExtension(ext.fileName);
     const saved = await saveExportFile({
       defaultName: ext.fileName,
-      mime: 'text/javascript;charset=utf-8',
+      mime: "text/javascript;charset=utf-8",
       text: source,
-      filterName: 'JavaScript',
-      extensions: ['js'],
+      filterName: "JavaScript",
+      extensions: ["js"],
     });
     if (!saved) {
       return;
     }
-    message.success('已导出扩展');
+    message.success("已导出扩展");
   } catch (e: unknown) {
     message.error(`导出失败: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -455,13 +518,13 @@ async function importFromUrl() {
     }
     const text = await resp.text();
     const nameMatch = text.match(/\/\/\s*@name\s+(.+)/);
-    const name = nameMatch?.[1]?.trim() || 'unknown';
+    const name = nameMatch?.[1]?.trim() || "unknown";
     const fileName = toExtSafeFileName(name);
     await saveExtension(fileName, text);
     await loadExtensions();
     message.success(`已安装「${name}」`);
-    showUrlImport.value = false;
-    urlImportUrl.value = '';
+    closeUrlImport();
+    urlImportUrl.value = "";
   } catch (e: unknown) {
     message.error(`安装失败: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
@@ -471,19 +534,19 @@ async function importFromUrl() {
 
 function handleInstalledHeaderMenuSelect(key: string) {
   switch (key) {
-    case 'new':
+    case "new":
       void openEditor();
       break;
-    case 'import-file':
+    case "import-file":
       importFromFile();
       break;
-    case 'import-url':
+    case "import-url":
       showUrlImport.value = true;
       break;
-    case 'refresh':
+    case "refresh":
       void loadExtensions();
       break;
-    case 'reload-all':
+    case "reload-all":
       void forceReloadExtensions();
       break;
     default:
@@ -503,22 +566,22 @@ async function reloadExtensionItem(fileName: string) {
 
 function getSettingString(key: string): string {
   const value = settingsValues.value[key];
-  return typeof value === 'string' ? value : '';
+  return typeof value === "string" ? value : "";
 }
 
 function getDraftString(key: string): string {
   const value = settingsDraftValues.value[key];
-  return typeof value === 'string' ? value : getSettingString(key);
+  return typeof value === "string" ? value : getSettingString(key);
 }
 
 function getSettingNumber(key: string): number {
   const value = settingsValues.value[key];
-  return typeof value === 'number' ? value : 0;
+  return typeof value === "number" ? value : 0;
 }
 
 function getSettingScalar(key: string): string | number | null {
   const value = settingsValues.value[key];
-  return typeof value === 'string' || typeof value === 'number' ? value : null;
+  return typeof value === "string" || typeof value === "number" ? value : null;
 }
 
 function getSettingBoolean(key: string): boolean {
@@ -528,19 +591,19 @@ function getSettingBoolean(key: string): boolean {
 function getSettingStringArray(key: string): string[] {
   const value = settingsValues.value[key];
   return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string')
+    ? value.filter((item): item is string => typeof item === "string")
     : [];
 }
 
 function getDraftStringList(key: string): string {
   const draft = settingsDraftValues.value[key];
   if (Array.isArray(draft)) {
-    return (draft as string[]).filter(Boolean).join('\n');
+    return (draft as string[]).filter(Boolean).join("\n");
   }
-  if (typeof draft === 'string') {
+  if (typeof draft === "string") {
     return draft;
   }
-  return getSettingStringArray(key).join('\n');
+  return getSettingStringArray(key).join("\n");
 }
 
 async function loadSettingsDialog(fileName: string) {
@@ -554,13 +617,18 @@ async function loadSettingsDialog(fileName: string) {
     settingsDraftValues.value = { ...payload.values };
     showSettings.value = true;
   } catch (e: unknown) {
-    message.error(`加载设置失败: ${e instanceof Error ? e.message : String(e)}`);
+    message.error(
+      `加载设置失败: ${e instanceof Error ? e.message : String(e)}`,
+    );
   } finally {
     settingsLoading.value = false;
   }
 }
 
-async function saveSettingsField(key: string, value: PluginSettingValue | undefined) {
+async function saveSettingsField(
+  key: string,
+  value: PluginSettingValue | undefined,
+) {
   if (!settingsFileName.value) {
     return;
   }
@@ -570,7 +638,9 @@ async function saveSettingsField(key: string, value: PluginSettingValue | undefi
     await loadSettingsDialog(settingsFileName.value);
     await loadExtensions();
   } catch (e: unknown) {
-    message.error(`保存设置失败: ${e instanceof Error ? e.message : String(e)}`);
+    message.error(
+      `保存设置失败: ${e instanceof Error ? e.message : String(e)}`,
+    );
   } finally {
     settingsSaving.value = false;
   }
@@ -592,7 +662,7 @@ async function resetSettingsDialog() {
     await resetPluginSettings(settingsFileName.value);
     await loadSettingsDialog(settingsFileName.value);
     await loadExtensions();
-    message.success('已恢复插件默认设置');
+    message.success("已恢复插件默认设置");
   } catch (e: unknown) {
     message.error(`恢复失败: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
@@ -614,30 +684,36 @@ function handleInstallPluginEvent(e: Event) {
 
 onMounted(async () => {
   await loadExtensions();
-  window.addEventListener('app:install-plugin', handleInstallPluginEvent);
-  unlistenExt = await eventListen<{ fileName: string }>('extension:changed', async (event) => {
-    await loadExtensions();
-    if (showEditor.value && editorFile.value === event.payload.fileName) {
-      try {
-        editorContent.value = await readExtension(event.payload.fileName);
-        editorReloaded.value = true;
-        setTimeout(() => {
-          editorReloaded.value = false;
-        }, 3000);
-      } catch {
-        /* 文件可能已被删除 */
+  window.addEventListener("app:install-plugin", handleInstallPluginEvent);
+  unlistenExt = await eventListen<{ fileName: string }>(
+    "extension:changed",
+    async (event) => {
+      await loadExtensions();
+      if (showEditor.value && editorFile.value === event.payload.fileName) {
+        try {
+          editorContent.value = await readExtension(event.payload.fileName);
+          editorReloaded.value = true;
+          setTimeout(() => {
+            editorReloaded.value = false;
+          }, 3000);
+        } catch {
+          /* 文件可能已被删除 */
+        }
       }
-    }
-  });
-  unlistenViewReload = await eventListen<{ view?: string }>('app:view-reload', async (event) => {
-    if (event.payload?.view === 'extensions') {
-      await forceReloadExtensions();
-    }
-  });
+    },
+  );
+  unlistenViewReload = await eventListen<{ view?: string }>(
+    "app:view-reload",
+    async (event) => {
+      if (event.payload?.view === "extensions") {
+        await forceReloadExtensions();
+      }
+    },
+  );
 });
 
 onUnmounted(() => {
-  window.removeEventListener('app:install-plugin', handleInstallPluginEvent);
+  window.removeEventListener("app:install-plugin", handleInstallPluginEvent);
   unlistenExt?.();
   unlistenViewReload?.();
 });
@@ -645,7 +721,11 @@ onUnmounted(() => {
 
 <template>
   <div class="ext-view">
-    <AppPageHeader title="前端插件管理" :divider="true" :hide-subtitle-on-mobile="true">
+    <AppPageHeader
+      title="前端插件管理"
+      :divider="true"
+      :hide-subtitle-on-mobile="true"
+    >
       <template #title-extra>
         <div
           v-if="extDir && !isMobile"
@@ -666,11 +746,21 @@ onUnmounted(() => {
           :options="installedHeaderMenuOptions"
           @select="handleInstalledHeaderMenuSelect"
         >
-          <n-button size="small" type="primary" @click="openEditor()">新建扩展</n-button>
-          <n-button size="small" quaternary :loading="loading" @click="loadExtensions"
+          <n-button size="small" type="primary" @click="openEditor()"
+            >新建扩展</n-button
+          >
+          <n-button
+            size="small"
+            quaternary
+            :loading="loading"
+            @click="loadExtensions"
             >刷新</n-button
           >
-          <n-button size="small" quaternary :loading="reloadingAll" @click="forceReloadExtensions"
+          <n-button
+            size="small"
+            quaternary
+            :loading="reloadingAll"
+            @click="forceReloadExtensions"
             >全部重载</n-button
           >
         </MobileToolbarMenu>
@@ -710,11 +800,15 @@ onUnmounted(() => {
             共 {{ filtered.length }} 个扩展，已启用
             {{ filtered.filter((e) => e.enabled).length }} 个，前端运行中
             {{
-              filtered.filter((e) => runtimeByFileName.get(e.fileName)?.status === 'active').length
+              filtered.filter(
+                (e) => runtimeByFileName.get(e.fileName)?.status === "active",
+              ).length
             }}
             个，异常
             {{
-              filtered.filter((e) => runtimeByFileName.get(e.fileName)?.status === 'error').length
+              filtered.filter(
+                (e) => runtimeByFileName.get(e.fileName)?.status === "error",
+              ).length
             }}
             个
           </div>
@@ -770,7 +864,8 @@ onUnmounted(() => {
             />
           </div>
           <p class="examples-tip">
-            以下为内置示例脚本，展示 UserScript 格式与 Legado 扩展 API 的使用方式。
+            以下为内置示例脚本，展示 UserScript 格式与 Legado 扩展 API
+            的使用方式。
             点击「查看代码」预览完整源码，点击「安装」写入扩展目录即可启用。
           </p>
           <div class="examples-grid">
@@ -790,12 +885,19 @@ onUnmounted(() => {
 
     <!-- 编辑器弹窗 -->
     <n-modal
-      v-model:show="showEditor"
+      :show="showEditor"
       preset="card"
       :title="editorTitle"
-      style="width: 820px; max-width: 95vw; height: 92vh; display: flex; flex-direction: column"
+      style="
+        width: 820px;
+        max-width: 95vw;
+        height: 92vh;
+        display: flex;
+        flex-direction: column;
+      "
       content-style="display:flex;flex-direction:column;overflow:hidden"
       :mask-closable="false"
+      @update:show="updateEditorShow"
     >
       <n-alert
         v-if="editorReloaded"
@@ -813,7 +915,9 @@ onUnmounted(() => {
         @save="saveEditor"
       />
       <template #footer>
-        <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px">
+        <div
+          style="display: flex; align-items: center; gap: 8px; margin-top: 8px"
+        >
           <n-button
             v-if="editorFile"
             size="small"
@@ -828,29 +932,47 @@ onUnmounted(() => {
             在 VS Code 中打开
           </n-button>
           <div style="flex: 1" />
-          <n-button @click="showEditor = false">取消</n-button>
-          <n-button type="primary" :loading="editorSaving" @click="saveEditor">保存到磁盘</n-button>
+          <n-button @click="closeEditor">取消</n-button>
+          <n-button type="primary" :loading="editorSaving" @click="saveEditor"
+            >保存到磁盘</n-button
+          >
         </div>
       </template>
     </n-modal>
 
     <!-- 代码预览弹窗（只读） -->
     <n-modal
-      v-model:show="showPreview"
+      :show="showPreview"
       preset="card"
       :title="previewTitle"
-      style="width: 760px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column"
+      style="
+        width: 760px;
+        max-width: 95vw;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+      "
+      @update:show="updatePreviewShow"
     >
       <div class="code-preview">
         <pre class="code-preview__pre">{{ previewSource }}</pre>
       </div>
       <template #footer>
-        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px">
-          <n-button @click="showPreview = false">关闭</n-button>
+        <div
+          style="
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 8px;
+          "
+        >
+          <n-button @click="closePreview">关闭</n-button>
           <n-button
             v-if="
               previewExampleId &&
-              !isExampleInstalled(EXAMPLE_SCRIPTS.find((e) => e.id === previewExampleId)!)
+              !isExampleInstalled(
+                EXAMPLE_SCRIPTS.find((e) => e.id === previewExampleId)!,
+              )
             "
             type="primary"
             :loading="installLoading"
@@ -863,17 +985,33 @@ onUnmounted(() => {
     </n-modal>
 
     <n-modal
-      v-model:show="showSettings"
+      :show="showSettings"
       preset="card"
       :title="settingsTitle"
-      style="width: 720px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column"
+      style="
+        width: 720px;
+        max-width: 95vw;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+      "
+      @update:show="updateSettingsShow"
     >
       <n-spin :show="settingsLoading || settingsSaving">
         <div class="plugin-settings">
-          <template v-for="field in settingsFields" :key="field.key || field.label || field.type">
-            <div v-if="field.type === 'divider'" class="plugin-settings__divider" />
+          <template
+            v-for="field in settingsFields"
+            :key="field.key || field.label || field.type"
+          >
+            <div
+              v-if="field.type === 'divider'"
+              class="plugin-settings__divider"
+            />
 
-            <div v-else-if="field.type === 'info'" class="plugin-settings__info">
+            <div
+              v-else-if="field.type === 'info'"
+              class="plugin-settings__info"
+            >
               <div class="plugin-settings__info-title">{{ field.label }}</div>
               <div v-if="field.description" class="plugin-settings__info-desc">
                 {{ field.description }}
@@ -897,7 +1035,9 @@ onUnmounted(() => {
                   :placeholder="field.placeholder"
                   :disabled="field.disabled"
                   @update:value="setDraftSetting(field.key, $event)"
-                  @blur="saveSettingsField(field.key, getDraftString(field.key))"
+                  @blur="
+                    saveSettingsField(field.key, getDraftString(field.key))
+                  "
                 />
 
                 <n-input
@@ -908,7 +1048,9 @@ onUnmounted(() => {
                   :placeholder="field.placeholder"
                   :disabled="field.disabled"
                   @update:value="setDraftSetting(field.key, $event)"
-                  @blur="saveSettingsField(field.key, getDraftString(field.key))"
+                  @blur="
+                    saveSettingsField(field.key, getDraftString(field.key))
+                  "
                 />
 
                 <n-input
@@ -919,7 +1061,9 @@ onUnmounted(() => {
                   :placeholder="field.placeholder"
                   :disabled="field.disabled"
                   @update:value="setDraftSetting(field.key, $event)"
-                  @blur="saveSettingsField(field.key, getDraftString(field.key))"
+                  @blur="
+                    saveSettingsField(field.key, getDraftString(field.key))
+                  "
                 />
 
                 <n-input-number
@@ -931,20 +1075,31 @@ onUnmounted(() => {
                   :disabled="field.disabled"
                   style="width: 100%"
                   @update:value="
-                    saveSettingsField(field.key, typeof $event === 'number' ? $event : 0)
+                    saveSettingsField(
+                      field.key,
+                      typeof $event === 'number' ? $event : 0,
+                    )
                   "
                 />
 
-                <div v-else-if="field.type === 'color'" class="plugin-settings__color-row">
+                <div
+                  v-else-if="field.type === 'color'"
+                  class="plugin-settings__color-row"
+                >
                   <input
                     class="plugin-settings__color-input"
                     type="color"
                     :value="getSettingString(field.key) || '#000000'"
                     :disabled="field.disabled"
-                    @input="saveSettingsField(field.key, ($event.target as HTMLInputElement).value)"
+                    @input="
+                      saveSettingsField(
+                        field.key,
+                        ($event.target as HTMLInputElement).value,
+                      )
+                    "
                   />
                   <span class="plugin-settings__color-text">
-                    {{ getSettingString(field.key) || '#000000' }}
+                    {{ getSettingString(field.key) || "#000000" }}
                   </span>
                 </div>
 
@@ -960,14 +1115,18 @@ onUnmounted(() => {
                   :value="getSettingScalar(field.key)"
                   :options="field.options"
                   :disabled="field.disabled"
-                  @update:value="saveSettingsField(field.key, $event as string | number)"
+                  @update:value="
+                    saveSettingsField(field.key, $event as string | number)
+                  "
                 />
 
                 <n-radio-group
                   v-else-if="field.type === 'radio'"
                   :value="getSettingScalar(field.key)"
                   :disabled="field.disabled"
-                  @update:value="saveSettingsField(field.key, $event as string | number)"
+                  @update:value="
+                    saveSettingsField(field.key, $event as string | number)
+                  "
                 >
                   <n-space vertical>
                     <n-radio
@@ -980,7 +1139,10 @@ onUnmounted(() => {
                   </n-space>
                 </n-radio-group>
 
-                <div v-else-if="field.type === 'slider'" class="plugin-settings__slider-wrap">
+                <div
+                  v-else-if="field.type === 'slider'"
+                  class="plugin-settings__slider-wrap"
+                >
                   <n-slider
                     :value="getSettingNumber(field.key)"
                     :min="field.min ?? 0"
@@ -1011,6 +1173,15 @@ onUnmounted(() => {
                     )
                   "
                 />
+
+                <PluginImageListField
+                  v-else-if="field.type === 'image-list'"
+                  :value="settingsValues[field.key]"
+                  :placeholder="field.placeholder"
+                  :disabled="field.disabled || settingsSaving"
+                  :max="field.max"
+                  @update:value="saveSettingsField(field.key, $event)"
+                />
               </div>
             </div>
           </template>
@@ -1025,22 +1196,26 @@ onUnmounted(() => {
 
       <template #footer>
         <div class="plugin-settings__footer">
-          <n-button quaternary :disabled="settingsSaving" @click="resetSettingsDialog"
+          <n-button
+            quaternary
+            :disabled="settingsSaving"
+            @click="resetSettingsDialog"
             >恢复默认</n-button
           >
           <div style="flex: 1" />
-          <n-button @click="showSettings = false">关闭</n-button>
+          <n-button @click="closeSettings">关闭</n-button>
         </div>
       </template>
     </n-modal>
 
     <!-- 从 URL 安装插件 -->
     <n-modal
-      v-model:show="showUrlImport"
+      :show="showUrlImport"
       preset="card"
       title="从 URL 安装插件"
       style="width: 480px; max-width: 95vw"
       :mask-closable="false"
+      @update:show="updateUrlImportShow"
     >
       <div style="display: flex; flex-direction: column; gap: 12px">
         <n-input
@@ -1055,7 +1230,7 @@ onUnmounted(() => {
       </div>
       <template #footer>
         <div style="display: flex; justify-content: flex-end; gap: 8px">
-          <n-button @click="showUrlImport = false">取消</n-button>
+          <n-button @click="closeUrlImport">取消</n-button>
           <n-button
             type="primary"
             :loading="urlImporting"
@@ -1112,7 +1287,7 @@ onUnmounted(() => {
 
 .ext-header__dir-path {
   font-size: var(--fs-11);
-  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-family: "Cascadia Code", "Consolas", monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1247,7 +1422,7 @@ onUnmounted(() => {
 .code-preview__pre {
   margin: 0;
   padding: 16px 18px;
-  font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
   font-size: 12.5px;
   line-height: 1.65;
   color: #d4d4d4;
@@ -1302,7 +1477,8 @@ onUnmounted(() => {
   padding: 10px 12px;
   border-radius: var(--radius-1);
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
+  border: 1px solid
+    color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
 }
 
 .plugin-settings__info-title {
@@ -1336,7 +1512,7 @@ onUnmounted(() => {
 .plugin-settings__color-text {
   font-size: var(--fs-12);
   color: var(--color-text-soft);
-  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-family: "Cascadia Code", "Consolas", monospace;
 }
 
 .plugin-settings__slider-wrap {

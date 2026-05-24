@@ -1,20 +1,31 @@
-import { defineStore } from 'pinia';
-import { computed, ref, watch } from 'vue';
-import type { ReaderBookInfo, WholeBookSwitchedPayload } from '@/components/reader/types';
-import type { ChapterItem, EpisodeProgress, ShelfBook, ChapterGroup } from '@/stores';
-import { groupChapters, useBookshelfStore } from '@/stores';
-import { cachedChaptersToChapterItems, shelfBookToReaderBookInfo } from '../utils/readerBookInfo';
+import { defineStore } from "pinia";
+import { computed, ref, watch } from "vue";
+import type {
+  ReaderBookInfo,
+  WholeBookSwitchedPayload,
+} from "@/components/reader/types";
+import type {
+  ChapterItem,
+  EpisodeProgress,
+  ShelfBook,
+  ChapterGroup,
+} from "@/stores";
+import { groupChapters, useBookshelfStore } from "@/stores";
+import {
+  cachedChaptersToChapterItems,
+  shelfBookToReaderBookInfo,
+} from "../utils/readerBookInfo";
 
-export const useBookshelfReaderStore = defineStore('bookshelfReader', () => {
+export const useBookshelfReaderStore = defineStore("bookshelfReader", () => {
   const showReader = ref(false);
-  const readerFileName = ref('');
-  const readerChapterUrl = ref('');
-  const readerChapterName = ref('');
+  const readerFileName = ref("");
+  const readerChapterUrl = ref("");
+  const readerChapterName = ref("");
   const readerChapters = ref<ChapterItem[]>([]);
   const readerCurrentIndex = ref(0);
-  const readerShelfId = ref('');
+  const readerShelfId = ref("");
   const readerBookInfo = ref<ReaderBookInfo | undefined>();
-  const readerSourceType = ref('novel');
+  const readerSourceType = ref("novel");
   const readerChapterGroups = computed<ChapterGroup[] | undefined>(() => {
     const groups = groupChapters(readerChapters.value);
     return groups.length > 1 ? groups : undefined;
@@ -24,12 +35,13 @@ export const useBookshelfReaderStore = defineStore('bookshelfReader', () => {
   /** key = chapter URL */
   const episodeProgressMap = ref<Record<string, EpisodeProgress>>({});
   let _progressSaveTimer: ReturnType<typeof setTimeout> | null = null;
-  let _pendingProgress: { url: string; time: number; duration: number } | null = null;
+  let _pendingProgress: { url: string; time: number; duration: number } | null =
+    null;
 
   function setBookMeta(book: ShelfBook) {
     readerShelfId.value = book.id;
     readerFileName.value = book.fileName;
-    readerSourceType.value = book.sourceType ?? 'novel';
+    readerSourceType.value = book.sourceType ?? "novel";
     readerBookInfo.value = shelfBookToReaderBookInfo(book);
   }
 
@@ -45,20 +57,35 @@ export const useBookshelfReaderStore = defineStore('bookshelfReader', () => {
     syncCurrentChapter();
   }
 
-  function setCachedChapters(chapters: { name: string; url: string; group?: string }[]) {
+  function setCachedChapters(
+    chapters: {
+      name: string;
+      url: string;
+      group?: string;
+      vip?: boolean;
+      price?: unknown;
+      currency?: string;
+    }[],
+  ) {
     readerChapters.value = cachedChaptersToChapterItems(
       chapters.map((chapter, index) => ({
         index,
         name: chapter.name,
         url: chapter.url,
         group: chapter.group,
+        vip: chapter.vip,
+        price: chapter.price,
+        currency: chapter.currency,
       })),
     );
     syncCurrentChapter();
   }
 
   function syncCurrentChapter() {
-    if (readerCurrentIndex.value >= 0 && readerCurrentIndex.value < readerChapters.value.length) {
+    if (
+      readerCurrentIndex.value >= 0 &&
+      readerCurrentIndex.value < readerChapters.value.length
+    ) {
       const chapter = readerChapters.value[readerCurrentIndex.value];
       readerChapterUrl.value = chapter.url;
       readerChapterName.value = chapter.name;
@@ -66,7 +93,10 @@ export const useBookshelfReaderStore = defineStore('bookshelfReader', () => {
   }
 
   function openAt(index: number) {
-    readerCurrentIndex.value = Math.max(0, Math.min(index, readerChapters.value.length - 1));
+    readerCurrentIndex.value = Math.max(
+      0,
+      Math.min(index, readerChapters.value.length - 1),
+    );
     syncCurrentChapter();
     showReader.value = true;
   }
@@ -76,8 +106,8 @@ export const useBookshelfReaderStore = defineStore('bookshelfReader', () => {
     readerChapters.value = payload.chapters;
     readerCurrentIndex.value = Math.max(0, payload.matchedChapterIndex);
     const active = payload.chapters[readerCurrentIndex.value];
-    readerChapterUrl.value = payload.matchedChapterUrl ?? active?.url ?? '';
-    readerChapterName.value = active?.name ?? '';
+    readerChapterUrl.value = payload.matchedChapterUrl ?? active?.url ?? "";
+    readerChapterName.value = active?.name ?? "";
   }
 
   function closeIfReadingShelfBook(bookId: string) {
@@ -96,7 +126,11 @@ export const useBookshelfReaderStore = defineStore('bookshelfReader', () => {
   }
 
   /** 节流写盘：内存立即更新，磁盘写入最少间隔 10s */
-  function setEpisodeProgress(chapterUrl: string, time: number, duration: number) {
+  function setEpisodeProgress(
+    chapterUrl: string,
+    time: number,
+    duration: number,
+  ) {
     const prev = episodeProgressMap.value[chapterUrl];
     // 已观看完的不再覆盖进度
     if (prev && prev.duration > 0 && prev.time >= prev.duration * 0.9) {

@@ -1,16 +1,16 @@
-import type { ExtensionMeta } from '@/composables/useExtension';
-import type { RuntimePluginRecord } from './pluginRuntimeTypes';
+import type { ExtensionMeta } from "@/composables/useExtension";
+import type { RuntimePluginRecord } from "./pluginRuntimeTypes";
 import type {
   FrontendPluginApi,
   FrontendPluginRegistration,
   PluginHookHandler,
   ReaderSlotMount,
-} from './pluginTypes';
+} from "./pluginTypes";
 import {
   normalizeHandlers,
   normalizeRuntimeMetadata,
   normalizeThemeDefinitions,
-  normalizeBackgroundDefinitions,
+  normalizeBackgroundDefinitionSources,
   normalizeSkinDefinitions,
   normalizeBookshelfActionDefinitions,
   normalizeReaderContextActionDefinitions,
@@ -18,9 +18,15 @@ import {
   normalizeTtsEngineDefinitions,
   extractLegacyExports,
   convertLegacyPlugin,
-} from './pluginNormalizer';
-import { createEmptyHookMap, SUPPORTED_FRONTEND_PLUGIN_HOOKS } from './readerHooks';
-import { createEmptySlotMap, SUPPORTED_READER_PLUGIN_SLOTS } from './readerSlots';
+} from "./pluginNormalizer";
+import {
+  createEmptyHookMap,
+  SUPPORTED_FRONTEND_PLUGIN_HOOKS,
+} from "./readerHooks";
+import {
+  createEmptySlotMap,
+  SUPPORTED_READER_PLUGIN_SLOTS,
+} from "./readerSlots";
 
 export async function evaluatePlugin(
   meta: ExtensionMeta,
@@ -37,7 +43,7 @@ export async function evaluatePlugin(
   const legacy = extractLegacyExports(source, legado);
   const registration = registrations[0] ?? convertLegacyPlugin(meta, legacy);
   if (!registration) {
-    throw new Error('插件未调用 legado.registerPlugin，且未识别到兼容的旧接口');
+    throw new Error("插件未调用 legado.registerPlugin，且未识别到兼容的旧接口");
   }
 
   const normalized = normalizeRuntimeMetadata(meta, registration);
@@ -48,11 +54,11 @@ export async function evaluatePlugin(
     version: normalized.version,
     description: normalized.description,
     author: meta.author,
-    category: meta.category || '其他',
+    category: meta.category || "其他",
     enabled: meta.enabled,
     order: 0,
-    status: 'active',
-    runtimeError: '',
+    status: "active",
+    runtimeError: "",
     runtimeHooks: [],
     runtimeSlots: [],
     runtimeBookshelfActions: [],
@@ -69,6 +75,7 @@ export async function evaluatePlugin(
     hookMap: createEmptyHookMap(),
     slotMap: createEmptySlotMap(),
     themes: [],
+    backgroundSources: [],
     backgrounds: [],
     skins: [],
     bookshelfActions: [],
@@ -78,7 +85,9 @@ export async function evaluatePlugin(
   };
 
   const api = createPluginApi(baseRecord);
-  const setupOutput = registration.setup ? await registration.setup(api) : undefined;
+  const setupOutput = registration.setup
+    ? await registration.setup(api)
+    : undefined;
 
   const hookDefs = { ...registration.hooks, ...setupOutput?.hooks };
   const slotDefs = { ...registration.slots, ...setupOutput?.slots };
@@ -86,10 +95,10 @@ export async function evaluatePlugin(
     ...normalizeHandlers(registration.themes),
     ...normalizeHandlers(setupOutput?.themes),
   ];
-  const backgroundDefs = [
-    ...normalizeHandlers(registration.backgrounds),
-    ...normalizeHandlers(setupOutput?.backgrounds),
-  ];
+  const backgroundSources = normalizeBackgroundDefinitionSources(
+    registration.backgrounds,
+    setupOutput?.backgrounds,
+  );
   const skinDefs = [
     ...normalizeHandlers(registration.skins),
     ...normalizeHandlers(setupOutput?.skins),
@@ -111,10 +120,11 @@ export async function evaluatePlugin(
     ...normalizeHandlers(setupOutput?.ttsEngines),
   ];
 
-  baseRecord.settingsDefinition = setupOutput?.settings ?? registration.settings;
+  baseRecord.settingsDefinition =
+    setupOutput?.settings ?? registration.settings;
   baseRecord.hasSettings = !!baseRecord.settingsDefinition;
   baseRecord.themes = normalizeThemeDefinitions(baseRecord, themeDefs);
-  baseRecord.backgrounds = normalizeBackgroundDefinitions(baseRecord, backgroundDefs);
+  baseRecord.backgroundSources = backgroundSources;
   baseRecord.skins = normalizeSkinDefinitions(baseRecord, skinDefs);
   baseRecord.bookshelfActions = normalizeBookshelfActionDefinitions(
     baseRecord,
@@ -124,11 +134,23 @@ export async function evaluatePlugin(
     baseRecord,
     readerContextActionDefs,
   );
-  baseRecord.coverGenerators = normalizeCoverGeneratorDefinitions(baseRecord, coverGeneratorDefs);
-  baseRecord.ttsEngines = normalizeTtsEngineDefinitions(baseRecord, ttsEngineDefs);
-  baseRecord.runtimeBookshelfActions = baseRecord.bookshelfActions.map((item) => item.id);
-  baseRecord.runtimeReaderContextActions = baseRecord.readerContextActions.map((item) => item.id);
-  baseRecord.runtimeCoverGenerators = baseRecord.coverGenerators.map((item) => item.id);
+  baseRecord.coverGenerators = normalizeCoverGeneratorDefinitions(
+    baseRecord,
+    coverGeneratorDefs,
+  );
+  baseRecord.ttsEngines = normalizeTtsEngineDefinitions(
+    baseRecord,
+    ttsEngineDefs,
+  );
+  baseRecord.runtimeBookshelfActions = baseRecord.bookshelfActions.map(
+    (item) => item.id,
+  );
+  baseRecord.runtimeReaderContextActions = baseRecord.readerContextActions.map(
+    (item) => item.id,
+  );
+  baseRecord.runtimeCoverGenerators = baseRecord.coverGenerators.map(
+    (item) => item.id,
+  );
   baseRecord.runtimeTtsEngines = baseRecord.ttsEngines.map((item) => item.id);
 
   if (setupOutput?.dispose) {
@@ -136,14 +158,18 @@ export async function evaluatePlugin(
   }
 
   for (const hookName of SUPPORTED_FRONTEND_PLUGIN_HOOKS) {
-    baseRecord.hookMap[hookName] = normalizeHandlers(hookDefs[hookName] as PluginHookHandler[]);
+    baseRecord.hookMap[hookName] = normalizeHandlers(
+      hookDefs[hookName] as PluginHookHandler[],
+    );
     if (baseRecord.hookMap[hookName].length) {
       baseRecord.runtimeHooks = [...baseRecord.runtimeHooks, hookName];
     }
   }
 
   for (const slotName of SUPPORTED_READER_PLUGIN_SLOTS) {
-    baseRecord.slotMap[slotName] = normalizeHandlers(slotDefs[slotName] as ReaderSlotMount[]);
+    baseRecord.slotMap[slotName] = normalizeHandlers(
+      slotDefs[slotName] as ReaderSlotMount[],
+    );
     if (baseRecord.slotMap[slotName].length) {
       baseRecord.runtimeSlots = [...baseRecord.runtimeSlots, slotName];
     }

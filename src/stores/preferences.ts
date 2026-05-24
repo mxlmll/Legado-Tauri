@@ -75,6 +75,8 @@ export interface DevToolsPreferences {
 export interface AppUpdatePreferences {
   /** GitHub releases 检测渠道：正式版 / 开发版 */
   channel: AppUpdateChannel;
+  /** 启动后是否异步检查应用更新；旧配置缺省时视为开启 */
+  autoCheckOnStartup?: boolean;
 }
 
 // ── 搜索偏好 ──────────────────────────────────────────────────────────────
@@ -163,6 +165,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     version: 1,
     defaults: () => ({
       channel: 'stable',
+      autoCheckOnStartup: true,
     }),
   });
 

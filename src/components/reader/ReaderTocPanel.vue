@@ -7,6 +7,7 @@ import { useVirtualList } from "@vueuse/core";
 import { Trash2, RefreshCw, Download } from "lucide-vue-next";
 import { ref, nextTick, watch, computed } from "vue";
 import type { ChapterItem } from "@/stores";
+import { isVipChapter } from "@/utils/chapter";
 import type { ReaderBookInfo } from "./types";
 import AppInput from "../base/AppInput.vue";
 import AppTabs from "../base/AppTabs.vue";
@@ -371,6 +372,11 @@ const detailRows = computed(() => {
               @keydown.space.prevent="onSelect(item.data.index)"
             >
               <span class="reader-toc__item-name">{{ item.data.ch.name }}</span>
+              <span
+                v-if="isVipChapter(item.data.ch)"
+                class="reader-toc__badge reader-toc__badge--vip"
+                >VIP</span
+              >
               <span
                 v-if="cachedIndices?.has(item.data.index)"
                 class="reader-toc__item-cache-icon"
@@ -781,6 +787,11 @@ const detailRows = computed(() => {
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.4);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.reader-toc__badge--vip {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.28);
 }
 
 /* 动画 */

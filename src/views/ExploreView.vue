@@ -144,12 +144,27 @@ const disclaimerStore = useDynamicConfig<{ hidden: boolean }>({
 const showDisclaimer = ref(false);
 const disclaimerDontShow = ref(false);
 
+const { triggerClose: closeDisclaimer } = useOverlay(
+  () => showDisclaimer.value,
+  () => {
+    showDisclaimer.value = false;
+  },
+);
+
+function updateDisclaimerShow(value: boolean) {
+  if (value) {
+    showDisclaimer.value = true;
+    return;
+  }
+  closeDisclaimer();
+}
+
 async function confirmDisclaimer() {
   if (disclaimerDontShow.value) {
     await disclaimerStore.replace({ hidden: true });
     dbgLog("[Disclaimer] hidden=true 写入后端完成");
   }
-  showDisclaimer.value = false;
+  closeDisclaimer();
 }
 
 const exploreTabOrderStore = useDynamicConfig<{ order: string[] }>({
@@ -204,13 +219,6 @@ function saveTabOrder(order: string[]) {
 
 // ── 排序弹窗 ────────────────────────────────────────────────────────────
 const showSortModal = ref(false);
-
-useOverlay(
-  () => showDisclaimer.value,
-  () => {
-    showDisclaimer.value = false;
-  },
-);
 
 function openSortModal() {
   showSortModal.value = true;
@@ -1082,13 +1090,14 @@ watch(
 
     <!-- 免责声明弹窗 -->
     <n-modal
-      v-model:show="showDisclaimer"
+      :show="showDisclaimer"
       :mask-closable="false"
       :close-on-esc="false"
       preset="card"
       title="使用须知"
       :style="{ maxWidth: '480px', width: '92vw' }"
       :bordered="false"
+      @update:show="updateDisclaimerShow"
     >
       <div class="disclaimer-body">
         <p>

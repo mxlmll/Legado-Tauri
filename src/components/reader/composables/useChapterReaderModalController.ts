@@ -19,6 +19,12 @@ import {
   useReaderViewStore,
   useScriptBridgeStore,
 } from "@/stores";
+import {
+  getChapterPriceLabel,
+  getPurchaseResultMessage,
+  isPurchaseResultOk,
+  isVipChapter,
+} from "@/utils/chapter";
 import type { ReaderBookInfo, WholeBookSwitchedPayload } from "../types";
 import { useReaderChapterContext } from "./useReaderChapterContext";
 import { useReaderChapterOpen } from "./useReaderChapterOpen";
@@ -42,6 +48,7 @@ declare global {
     LegadoAndroidInput?: {
       setVolumeKeyPageTurnEnabled?: (enabled: boolean) => void;
       setReaderImmersiveModeEnabled?: (enabled: boolean) => void;
+      installApk?: (absolutePath: string) => string;
     };
   }
 }
@@ -96,6 +103,7 @@ export function useChapterReaderModalController(
   const { config } = storeToRefs(appConfigStore);
   const {
     runChapterContent,
+    runPurchaseChapter,
     runChapterParagraphCommentCounts,
     appendDebugLog,
   } = useScriptBridgeStore();
@@ -269,6 +277,95 @@ export function useChapterReaderModalController(
     };
   }
 
+  async function resolveSourceCapabilities(sourceFileName: string) {
+    await bookSourceStore.ensureCapsLoaded();
+    return (
+      bookSourceStore.getCachedCapabilities(sourceFileName) ??
+      (await bookSourceStore.detectCapabilities(sourceFileName))
+    );
+  }
+
+  function confirmVipChapterPurchase(
+    chapter: ChapterItem,
+    loadError: unknown,
+  ): Promise<boolean> {
+    const price = getChapterPriceLabel(chapter);
+    const reason =
+      loadError instanceof Error ? loadError.message : String(loadError);
+    const content = [
+      `“${chapter.name}” 是 VIP 章节。`,
+      price ? `价格：${price}` : "",
+      reason ? `当前读取失败：${reason}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const settle = (value: boolean) => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+
+      dialog.warning({
+        title: "购买 VIP 章节",
+        content,
+        positiveText: "购买并重试",
+        negativeText: "取消",
+        maskClosable: false,
+        onPositiveClick: async () => {
+          try {
+            const result = await runPurchaseChapter(
+              fileName.value,
+              chapter.url,
+              chapter,
+            );
+            if (!isPurchaseResultOk(result)) {
+              const msg = getPurchaseResultMessage(result) || "购买失败";
+              message.error(msg);
+              settle(false);
+              return;
+            }
+            message.success(
+              getPurchaseResultMessage(result) || "购买成功，正在重新加载",
+            );
+            settle(true);
+          } catch (error: unknown) {
+            message.error(
+              `购买失败: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            settle(false);
+          }
+        },
+        onNegativeClick: () => {
+          settle(false);
+        },
+        onAfterLeave: () => {
+          settle(false);
+        },
+      });
+    });
+  }
+
+  async function requestVipChapterPurchase(
+    index: number,
+    loadError: unknown,
+  ): Promise<boolean> {
+    const chapter = getChapter(index);
+    if (!chapter || !isVipChapter(chapter)) {
+      return false;
+    }
+    const capabilities = await resolveSourceCapabilities(fileName.value).catch(
+      () => new Set(),
+    );
+    if (!capabilities.has("purchaseChapter")) {
+      return false;
+    }
+    return confirmVipChapterPurchase(chapter, loadError);
+  }
+
   watch(showMenu, (visible) => {
     if (!visible) {
       if (settingsVisible.value) {
@@ -360,13 +457,7 @@ export function useChapterReaderModalController(
     backgroundMeasureHostRef,
     settings,
     runChapterContent,
-    getSourceCapabilities: async (sourceFileName) => {
-      await bookSourceStore.ensureCapsLoaded();
-      return (
-        bookSourceStore.getCachedCapabilities(sourceFileName) ??
-        (await bookSourceStore.detectCapabilities(sourceFileName))
-      );
-    },
+    getSourceCapabilities: resolveSourceCapabilities,
     runChapterParagraphCommentCounts,
     getContent,
     saveContent,
@@ -644,12 +735,14 @@ export function useChapterReaderModalController(
       updateProgress,
       waitForLinearSeamlessWindowStable: (index) =>
         waitForLinearSeamlessWindowStable(index),
+      requestVipChapterPurchase,
       reportLoadError: (loadError) => {
         message.error(`加载正文失败: ${loadError}`, {
           duration: 8000,
           closable: true,
         });
       },
+      clearChapterRuntimeCache,
       clearRepaginateWork: () => clearRepaginateWork(),
     });
 

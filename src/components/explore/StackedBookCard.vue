@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { ChevronRight } from 'lucide-vue-next';
-import { ref } from 'vue';
-import type { BookItem } from '@/stores';
-import type { AggregatedBook, TaggedBookItem } from '@/types';
-import { useOverlay } from '@/composables/useOverlay';
-import { getBookMetaBadges, getBookMetaLine, getLatestChapterText } from '@/utils/bookMeta';
-import defaultLogoUrl from '../../assets/booksource-default.svg';
-import BookCoverImg from '../BookCoverImg.vue';
+import { ChevronRight } from "lucide-vue-next";
+import { ref } from "vue";
+import type { BookItem } from "@/stores";
+import type { AggregatedBook, TaggedBookItem } from "@/types";
+import { useOverlay } from "@/composables/useOverlay";
+import {
+  getBookMetaBadges,
+  getBookMetaLine,
+  getLatestChapterText,
+} from "@/utils/bookMeta";
+import defaultLogoUrl from "../../assets/booksource-default.svg";
+import BookCoverImg from "../BookCoverImg.vue";
 
 const props = defineProps<{
   group: AggregatedBook;
@@ -14,30 +18,38 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'select', book: BookItem, fileName: string): void;
+  (e: "select", book: BookItem, fileName: string): void;
 }>();
 
 const showSourcePicker = ref(false);
 
-useOverlay(
+const { triggerClose: closeSourcePicker } = useOverlay(
   () => showSourcePicker.value,
   () => {
     showSourcePicker.value = false;
   },
 );
 
+function updateSourcePickerShow(value: boolean) {
+  if (value) {
+    showSourcePicker.value = true;
+    return;
+  }
+  closeSourcePicker();
+}
+
 function handleClick() {
   if (props.group.sources.length > 1) {
     showSourcePicker.value = true;
   } else {
     const item = props.group.primary;
-    emit('select', item.book, item.fileName);
+    emit("select", item.book, item.fileName);
   }
 }
 
 function selectSource(item: TaggedBookItem) {
-  showSourcePicker.value = false;
-  emit('select', item.book, item.fileName);
+  closeSourcePicker();
+  emit("select", item.book, item.fileName);
 }
 
 function latestChapter(book: BookItem): string {
@@ -56,8 +68,14 @@ function metaLine(book: BookItem): string[] {
     @click="handleClick"
   >
     <!-- 堆叠层（仅多来源时显示底牌） -->
-    <div v-if="group.sources.length > 2" class="stacked-card__layer stacked-card__layer--3" />
-    <div v-if="group.sources.length > 1" class="stacked-card__layer stacked-card__layer--2" />
+    <div
+      v-if="group.sources.length > 2"
+      class="stacked-card__layer stacked-card__layer--3"
+    />
+    <div
+      v-if="group.sources.length > 1"
+      class="stacked-card__layer stacked-card__layer--2"
+    />
 
     <!-- 主卡片 -->
     <div class="stacked-card__main">
@@ -71,19 +89,26 @@ function metaLine(book: BookItem): string[] {
       <div class="stacked-card__info">
         <span
           class="stacked-card__name"
-          :class="{ 'stacked-card__name--placeholder': !group.primary.book.name }"
+          :class="{
+            'stacked-card__name--placeholder': !group.primary.book.name,
+          }"
           :title="group.primary.book.name || '未知书名'"
         >
-          {{ group.primary.book.name || '未知书名' }}
+          {{ group.primary.book.name || "未知书名" }}
         </span>
         <span
           class="stacked-card__author"
-          :class="{ 'stacked-card__author--placeholder': !group.primary.book.author }"
+          :class="{
+            'stacked-card__author--placeholder': !group.primary.book.author,
+          }"
           :title="group.primary.book.author || '佚名'"
         >
-          {{ group.primary.book.author || '佚名' }}
+          {{ group.primary.book.author || "佚名" }}
         </span>
-        <div v-if="getBookMetaBadges(group.primary.book).length" class="stacked-card__tags">
+        <div
+          v-if="getBookMetaBadges(group.primary.book).length"
+          class="stacked-card__tags"
+        >
           <n-tag
             v-for="badge in getBookMetaBadges(group.primary.book)"
             :key="badge.key"
@@ -125,13 +150,14 @@ function metaLine(book: BookItem): string[] {
 
   <!-- 来源选择弹窗 -->
   <n-modal
-    v-model:show="showSourcePicker"
+    :show="showSourcePicker"
     preset="card"
     :title="`${group.primary.book.name} — 共 ${group.sources.length} 个来源`"
     :style="{ maxWidth: '560px', width: '92vw' }"
     size="small"
     :bordered="false"
     :segmented="{ content: true }"
+    @update:show="updateSourcePickerShow"
   >
     <div class="source-picker">
       <div
@@ -163,7 +189,9 @@ function metaLine(book: BookItem): string[] {
               :alt="item.sourceName"
               @error="($event.target as HTMLImageElement).src = defaultLogoUrl"
             />
-            <span class="source-picker__source-name">{{ item.sourceName }}</span>
+            <span class="source-picker__source-name">{{
+              item.sourceName
+            }}</span>
             <ChevronRight class="source-picker__arrow" :size="13" />
           </div>
 
@@ -173,7 +201,10 @@ function metaLine(book: BookItem): string[] {
           </div>
 
           <!-- 分类标签 -->
-          <div v-if="getBookMetaBadges(item.book).length" class="source-picker__tags">
+          <div
+            v-if="getBookMetaBadges(item.book).length"
+            class="source-picker__tags"
+          >
             <n-tag
               v-for="badge in getBookMetaBadges(item.book)"
               :key="badge.key"
@@ -186,22 +217,39 @@ function metaLine(book: BookItem): string[] {
           </div>
 
           <!-- 最新章节 -->
-          <div v-if="latestChapter(item.book)" class="source-picker__last-chapter">
+          <div
+            v-if="latestChapter(item.book)"
+            class="source-picker__last-chapter"
+          >
             <span class="source-picker__label">最新</span>
-            <span class="source-picker__chapter-text">{{ latestChapter(item.book) }}</span>
+            <span class="source-picker__chapter-text">{{
+              latestChapter(item.book)
+            }}</span>
           </div>
-          <div v-if="metaLine(item.book).length" class="source-picker__meta-line">
-            <span v-for="meta in metaLine(item.book)" :key="meta" class="source-picker__meta-item">
+          <div
+            v-if="metaLine(item.book).length"
+            class="source-picker__meta-line"
+          >
+            <span
+              v-for="meta in metaLine(item.book)"
+              :key="meta"
+              class="source-picker__meta-item"
+            >
               {{ meta }}
             </span>
           </div>
 
           <!-- 简介 -->
-          <p v-if="item.book.intro" class="source-picker__intro">{{ item.book.intro }}</p>
+          <p v-if="item.book.intro" class="source-picker__intro">
+            {{ item.book.intro }}
+          </p>
         </div>
 
         <!-- 分割线 -->
-        <div v-if="idx < group.sources.length - 1" class="source-picker__divider" />
+        <div
+          v-if="idx < group.sources.length - 1"
+          class="source-picker__divider"
+        />
       </div>
     </div>
   </n-modal>
@@ -324,7 +372,11 @@ function metaLine(book: BookItem): string[] {
   font-size: var(--fs-10) !important;
 }
 .stacked-card__tag--status {
-  --n-color: color-mix(in srgb, var(--color-success) 12%, transparent) !important;
+  --n-color: color-mix(
+    in srgb,
+    var(--color-success) 12%,
+    transparent
+  ) !important;
   --n-text-color: var(--color-success) !important;
 }
 
@@ -353,7 +405,7 @@ function metaLine(book: BookItem): string[] {
   white-space: nowrap;
 }
 .stacked-card__meta-item + .stacked-card__meta-item::before {
-  content: '·';
+  content: "·";
   margin-right: 6px;
   opacity: 0.6;
 }
@@ -488,7 +540,11 @@ function metaLine(book: BookItem): string[] {
   font-size: var(--fs-10) !important;
 }
 .source-picker__tag--status {
-  --n-color: color-mix(in srgb, var(--color-success) 12%, transparent) !important;
+  --n-color: color-mix(
+    in srgb,
+    var(--color-success) 12%,
+    transparent
+  ) !important;
   --n-text-color: var(--color-success) !important;
 }
 
@@ -513,7 +569,7 @@ function metaLine(book: BookItem): string[] {
   color: var(--color-text-muted);
 }
 .source-picker__meta-item + .source-picker__meta-item::before {
-  content: '·';
+  content: "·";
   margin-right: 8px;
   opacity: 0.65;
 }
