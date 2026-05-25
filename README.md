@@ -243,5 +243,13 @@ function search(keyword, page) {
 <div align="center">
 
 **如果这个项目对你有帮助，请给一个 ⭐ Star 支持我们！**
+## Star History
 
+<a href="https://www.star-history.com/?repos=LegadoTeam%2FLegado-Tauri&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=LegadoTeam/Legado-Tauri&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=LegadoTeam/Legado-Tauri&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=LegadoTeam/Legado-Tauri&type=date&legend=top-left" />
+ </picture>
+</a>
 </div>
