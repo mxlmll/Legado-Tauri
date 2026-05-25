@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { formatVersion } from '@/utils/versionUtils';
-import type { RepoSourceInfo } from '../../composables/useBookSource';
+import { computed } from "vue";
+import { formatVersion } from "@/utils/versionUtils";
+import type { RepoSourceInfo } from "../../composables/useBookSource";
 
 const props = defineProps<{
   src: RepoSourceInfo;
   defaultLogoUrl: string;
   installed: boolean;
-  versionDiff: 'upgrade' | 'downgrade' | 'same' | null;
+  versionDiff: "upgrade" | "downgrade" | "same" | null;
   localVersion: string | undefined;
   bulkBusy: boolean;
   deleting: boolean;
@@ -15,8 +16,28 @@ const props = defineProps<{
 const emit = defineEmits<{
   install: [];
   delete: [];
-  'open-url': [url: string];
+  "open-url": [url: string];
 }>();
+
+function normalizeExternalHttpUrl(url: string | undefined | null) {
+  const value = url?.trim();
+  if (!value) {
+    return "";
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.href;
+  } catch {
+    return "";
+  }
+}
+
+const sourceExternalUrl = computed(() =>
+  normalizeExternalHttpUrl(props.src.url),
+);
 </script>
 
 <template>
@@ -29,11 +50,24 @@ const emit = defineEmits<{
         :alt="props.src.name"
         @error="($event.target as HTMLImageElement).src = defaultLogoUrl"
       />
-      <img v-else :src="defaultLogoUrl" class="src-card__logo" :alt="props.src.name" />
+      <img
+        v-else
+        :src="defaultLogoUrl"
+        class="src-card__logo"
+        :alt="props.src.name"
+      />
 
       <div class="src-card__title">
         <div class="src-card__name-line">
-          <span class="src-card__name">{{ props.src.name }}</span>
+          <a
+            v-if="sourceExternalUrl"
+            class="src-card__name src-card__name--link"
+            href="#"
+            :title="sourceExternalUrl"
+            @click.prevent.stop="emit('open-url', sourceExternalUrl)"
+            >{{ props.src.name }}</a
+          >
+          <span v-else class="src-card__name">{{ props.src.name }}</span>
           <n-tag
             v-if="props.src.version"
             size="tiny"
@@ -78,16 +112,24 @@ const emit = defineEmits<{
             class="src-card__badge src-card__badge--group"
             >{{ props.src.tags[0] }}</n-tag
           >
-          <span v-if="props.src.author" class="src-card__author">{{ props.src.author }}</span>
+          <span v-if="props.src.author" class="src-card__author">{{
+            props.src.author
+          }}</span>
         </div>
-        <div class="src-card__url-line">
-          <a class="src-card__url" href="#" @click.prevent.stop="emit('open-url', props.src.url)">{{
-            props.src.url
-          }}</a>
+        <div v-if="sourceExternalUrl" class="src-card__url-line">
+          <a
+            class="src-card__url"
+            href="#"
+            @click.prevent.stop="emit('open-url', sourceExternalUrl)"
+            >{{ sourceExternalUrl }}</a
+          >
         </div>
       </div>
 
-      <div class="src-card__actions" :class="{ 'src-card__actions--installed': installed }">
+      <div
+        class="src-card__actions"
+        :class="{ 'src-card__actions--installed': installed }"
+      >
         <!-- 未安装：安装按钮 -->
         <n-button
           v-if="!installed"
@@ -156,7 +198,10 @@ const emit = defineEmits<{
     </div>
     -->
 
-    <div v-if="props.src.tags.length > 1 || props.src.fileSize" class="src-card__chips">
+    <div
+      v-if="props.src.tags.length > 1 || props.src.fileSize"
+      class="src-card__chips"
+    >
       <n-tag
         v-for="t in props.src.tags.slice(1, 4)"
         :key="t"
@@ -165,17 +210,22 @@ const emit = defineEmits<{
         class="src-card__tag"
         >{{ t }}</n-tag
       >
-      <span v-if="props.src.tags.length > 1 && props.src.fileSize" class="src-card__chip-sep" />
+      <span
+        v-if="props.src.tags.length > 1 && props.src.fileSize"
+        class="src-card__chip-sep"
+      />
       <span v-if="props.src.fileSize" class="src-card__file-size">
         {{
           props.src.fileSize > 1024
-            ? (props.src.fileSize / 1024).toFixed(1) + ' KB'
-            : props.src.fileSize + ' B'
+            ? (props.src.fileSize / 1024).toFixed(1) + " KB"
+            : props.src.fileSize + " B"
         }}
       </span>
     </div>
 
-    <div v-if="props.src.description" class="src-card__desc">{{ props.src.description }}</div>
+    <div v-if="props.src.description" class="src-card__desc">
+      {{ props.src.description }}
+    </div>
   </div>
 </template>
 
@@ -282,11 +332,20 @@ const emit = defineEmits<{
   font-size: 0.8375rem;
   font-weight: 600;
   color: var(--color-text-primary);
+  text-decoration: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 240px;
   flex-shrink: 1;
+}
+.src-card__name--link {
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.src-card__name--link:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
 }
 .src-card__badge {
   flex-shrink: 0;
@@ -372,7 +431,11 @@ const emit = defineEmits<{
   height: 15px !important;
   line-height: 13px !important;
   padding: 0 5px !important;
-  --n-color: color-mix(in srgb, var(--color-border) 80%, transparent) !important;
+  --n-color: color-mix(
+    in srgb,
+    var(--color-border) 80%,
+    transparent
+  ) !important;
   --n-text-color: var(--color-text-muted) !important;
   opacity: 0.65;
 }

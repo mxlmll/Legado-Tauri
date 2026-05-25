@@ -11,6 +11,8 @@ export interface BookSourceMeta {
   url: string;
   /** 全部 URL（含主 URL；多镜像时有多条） */
   urls: string[];
+  /** 主页 URL（来自 @homepage / @homeurl，用于展示名称外链） */
+  homepageUrl?: string;
   author?: string;
   logo?: string;
   /** 多行描述（多条 @description 以换行拼接） */
@@ -964,6 +966,7 @@ export interface RepoSourceInfo {
 export interface RepoManifest {
   name: string;
   version: string;
+  url?: string;
   updatedAt: string;
   sources: RepoSourceInfo[];
 }
@@ -1024,6 +1027,9 @@ export function validateRepositoryManifest(
   }
   if (!manifest.updatedAt?.trim()) {
     errors.push("仓库清单缺少 updatedAt");
+  }
+  if (manifest.url && !isValidHttpUrl(manifest.url)) {
+    warnings.push("仓库清单 url 不是有效的 http(s) 地址");
   }
   if (!Array.isArray(manifest.sources)) {
     errors.push("仓库清单缺少 sources 数组");

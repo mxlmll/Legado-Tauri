@@ -46,14 +46,21 @@ interface RecommendationModule extends RecommendationConfig {
   id: string;
 }
 
+interface ShelfComponentConfig {
+  showTitle: boolean;
+  title: string;
+}
+
 interface RecommendationState extends Partial<RecommendationConfig> {
   modules?: RecommendationModule[];
   order?: string[];
+  shelf?: Partial<ShelfComponentConfig>;
 }
 
 interface BookshelfHomeConfig {
   modules: RecommendationModule[];
   order: string[];
+  shelf: ShelfComponentConfig;
 }
 
 type RecommendationLayout =
@@ -99,9 +106,9 @@ const DEFAULT_CONFIG: RecommendationConfig = {
   layout: "carousel",
 };
 
-const DEFAULT_HOME_CONFIG: BookshelfHomeConfig = {
-  modules: [],
-  order: [SHELF_COMPONENT_ID],
+const DEFAULT_SHELF_CONFIG: ShelfComponentConfig = {
+  showTitle: true,
+  title: "我的书架",
 };
 
 const LAYOUT_OPTIONS: LayoutOption[] = [
@@ -123,6 +130,7 @@ const emit = defineEmits<{
   (e: "select", book: BookItem, fileName: string): void;
   (e: "open-book", bookUrl: string, fileName: string): void;
   (e: "shelf-order-change", order: number): void;
+  (e: "shelf-config-change", config: ShelfComponentConfig): void;
 }>();
 
 const message = useMessage();
@@ -133,7 +141,11 @@ const settingsDrawerRef = ref<InstanceType<typeof AppDrawer> | null>(null);
 const configStore = useDynamicConfig<RecommendationState>({
   namespace: "ui.bookshelf.discoveryRecommendation",
   version: 1,
-  defaults: () => ({ ...DEFAULT_HOME_CONFIG }),
+  defaults: () => ({
+    modules: [],
+    order: [SHELF_COMPONENT_ID],
+    shelf: { ...DEFAULT_SHELF_CONFIG },
+  }),
   migrate: () => null,
   legacyKeys: [],
 });
@@ -174,6 +186,7 @@ const sourceOptions = computed<SelectOption[]>(() =>
 );
 
 const homeConfig = computed(() => normalizeHomeConfigState(configStore.state));
+const shelfConfig = computed(() => homeConfig.value.shelf);
 const configuredModules = computed(() => homeConfig.value.modules);
 const activeModules = computed(() =>
   configuredModules.value.filter(
@@ -249,6 +262,19 @@ function normalizeLimit(value: unknown): number {
 
 function normalizeText(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
+}
+
+function normalizeShelfConfig(raw: unknown): ShelfComponentConfig {
+  const record =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const title = normalizeText(record.title, DEFAULT_SHELF_CONFIG.title).trim();
+  return {
+    showTitle:
+      typeof record.showTitle === "boolean"
+        ? record.showTitle
+        : DEFAULT_SHELF_CONFIG.showTitle,
+    title: title || DEFAULT_SHELF_CONFIG.title,
+  };
 }
 
 function normalizeModule(
@@ -334,13 +360,14 @@ function normalizeHomeConfigState(
     }
   }
 
-  return { modules, order };
+  return { modules, order, shelf: normalizeShelfConfig(state.shelf) };
 }
 
 function toPersistableConfig(config: BookshelfHomeConfig): RecommendationState {
   return {
     modules: config.modules.map((module) => ({ ...module })),
     order: [...config.order],
+    shelf: { ...config.shelf },
   };
 }
 
@@ -374,6 +401,7 @@ async function persistNormalizedConfigIfNeeded(): Promise<void> {
     order: Array.isArray(configStore.state.order)
       ? configStore.state.order
       : [],
+    shelf: normalizeShelfConfig(configStore.state.shelf),
   };
   if (JSON.stringify(normalized) !== JSON.stringify(current)) {
     await configStore.replace(normalized);
@@ -737,7 +765,7 @@ async function saveSettings() {
     order.splice(shelfIndex >= 0 ? shelfIndex : order.length, 0, moduleId);
   }
 
-  await persistHomeConfig({ modules, order });
+  await persistHomeConfig({ modules, order, shelf: current.shelf });
   editingModuleId.value = moduleId;
   message.success(existingIndex >= 0 ? "推荐模块已保存" : "推荐模块已添加");
   await loadRecommendation(nextModule, true);
@@ -748,7 +776,11 @@ async function updateModuleEnabled(moduleId: string, enabled: boolean) {
   const modules = current.modules.map((module) =>
     module.id === moduleId ? { ...module, enabled } : { ...module },
   );
-  await persistHomeConfig({ modules, order: [...current.order] });
+  await persistHomeConfig({
+    modules,
+    order: [...current.order],
+    shelf: current.shelf,
+  });
   const module = modules.find((item) => item.id === moduleId);
   if (!module) {
     return;
@@ -774,7 +806,7 @@ async function deleteModule(moduleId: string) {
   const current = homeConfig.value;
   const modules = current.modules.filter((module) => module.id !== moduleId);
   const order = current.order.filter((id) => id !== moduleId);
-  await persistHomeConfig({ modules, order });
+  await persistHomeConfig({ modules, order, shelf: current.shelf });
   delete moduleBooks[moduleId];
   delete moduleLoading[moduleId];
   delete moduleRefreshing[moduleId];
@@ -801,7 +833,28 @@ async function moveComponent(componentId: string, delta: -1 | 1) {
   const currentId = order[index];
   order[index] = order[nextIndex];
   order[nextIndex] = currentId;
-  await persistHomeConfig({ modules: current.modules, order });
+  await persistHomeConfig({
+    modules: current.modules,
+    order,
+    shelf: current.shelf,
+  });
+}
+
+async function updateShelfConfig(patch: Partial<ShelfComponentConfig>) {
+  const current = homeConfig.value;
+  await persistHomeConfig({
+    modules: current.modules,
+    order: [...current.order],
+    shelf: normalizeShelfConfig({ ...current.shelf, ...patch }),
+  });
+}
+
+async function updateShelfShowTitle(showTitle: boolean) {
+  await updateShelfConfig({ showTitle });
+}
+
+async function updateShelfTitle(title: string) {
+  await updateShelfConfig({ title });
 }
 
 function canMove(componentId: string, delta: -1 | 1): boolean {
@@ -912,7 +965,9 @@ function getSettingsItemTitle(item: SettingsItem): string {
 
 function getSettingsItemHint(item: SettingsItem): string {
   if (item.type === "shelf") {
-    return "书架书籍网格，可与推荐模块一起排序";
+    return shelfConfig.value.showTitle
+      ? `顶部标题：${shelfConfig.value.title}`
+      : "书架书籍网格，顶部标题已隐藏";
   }
   return getModuleHint(item.module);
 }
@@ -940,6 +995,10 @@ onMounted(async () => {
 });
 
 watch(shelfOrder, (order) => emit("shelf-order-change", order), {
+  immediate: true,
+});
+
+watch(shelfConfig, (config) => emit("shelf-config-change", { ...config }), {
   immediate: true,
 });
 
@@ -1284,6 +1343,34 @@ defineExpose({ openSettings });
                 </n-button>
               </template>
             </div>
+          </div>
+        </div>
+
+        <div class="bs-rec-shelf-settings">
+          <div class="bs-rec-shelf-settings__head">
+            <div class="bs-rec-shelf-settings__text">
+              <div class="bs-rec-settings__label">默认书架</div>
+              <div class="bs-rec-settings__hint">
+                给书架网格加入独立顶部标题
+              </div>
+            </div>
+            <n-switch
+              :value="shelfConfig.showTitle"
+              @update:value="(value: boolean) => updateShelfShowTitle(value)"
+            />
+          </div>
+          <div class="bs-rec-settings__row">
+            <label class="bs-rec-settings__label" for="bookshelf-shelf-title"
+              >书架标题</label
+            >
+            <n-input
+              id="bookshelf-shelf-title"
+              :value="shelfConfig.title"
+              :disabled="!shelfConfig.showTitle"
+              maxlength="18"
+              placeholder="我的书架"
+              @update:value="(value: string) => updateShelfTitle(value)"
+            />
           </div>
         </div>
       </section>
@@ -2018,6 +2105,29 @@ defineExpose({ openSettings });
   justify-content: flex-end;
   gap: 4px;
   flex-wrap: wrap;
+}
+
+.bs-rec-shelf-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-1);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+}
+
+.bs-rec-shelf-settings__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bs-rec-shelf-settings__text {
+  min-width: 0;
 }
 
 .bs-rec-settings__row {

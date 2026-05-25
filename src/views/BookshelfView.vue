@@ -223,6 +223,8 @@ const recommendationRef = ref<InstanceType<
   typeof BookshelfDiscoveryRecommend
 > | null>(null);
 const bookshelfShelfOrder = ref(0);
+const bookshelfShowShelfTitle = ref(true);
+const bookshelfShelfTitle = ref("我的书架");
 const { runChapterList, cancelTask } = scriptBridgeStore;
 const {
   getShelfId,
@@ -275,6 +277,14 @@ function openRecommendationSettings() {
 
 function updateBookshelfShelfOrder(order: number) {
   bookshelfShelfOrder.value = order;
+}
+
+function updateBookshelfShelfConfig(config: {
+  showTitle: boolean;
+  title: string;
+}) {
+  bookshelfShowShelfTitle.value = config.showTitle;
+  bookshelfShelfTitle.value = config.title;
 }
 
 function openSearchResult(book: ShelfBook) {
@@ -463,6 +473,8 @@ onMounted(async () => {
       :edit-mode="editMode"
       :selected-book-ids="selectedBookIds"
       :shelf-order="bookshelfShelfOrder"
+      :show-shelf-title="bookshelfShowShelfTitle"
+      :shelf-title="bookshelfShelfTitle"
       @select="
         editMode ? toggleBookSelect($event.id) : readerLauncher.openBook($event)
       "
@@ -475,6 +487,7 @@ onMounted(async () => {
           @select="openRecommendDetail"
           @open-book="openRecommendDetailByUrl"
           @shelf-order-change="updateBookshelfShelfOrder"
+          @shelf-config-change="updateBookshelfShelfConfig"
         />
       </template>
     </BookshelfGrid>

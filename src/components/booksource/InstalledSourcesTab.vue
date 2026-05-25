@@ -1,11 +1,11 @@
 <!-- InstalledSourcesTab — 已安装书源列表、导入导出、编辑与目录管理入口。 -->
 <script setup lang="ts">
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { Search } from "lucide-vue-next";
 import { useMessage } from "naive-ui";
 import { storeToRefs } from "pinia";
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useBackAwareDialog as useDialog } from "@/composables/useBackAwareDialog";
+import { isTauri } from "@/composables/useEnv";
 import { eventEmit } from "@/composables/useEventBus";
 import { invokeWithTimeout } from "@/composables/useInvoke";
 import { parseLegadoDeepLink } from "@/composables/useLegadoDeepLink";
@@ -58,6 +58,45 @@ const dialog = useDialog();
 const { exploreDisabled, searchDisabled } = storeToRefs(bookSourceStore);
 const { setExploreUserEnabled, setSearchUserEnabled, getPendingUpdate } =
   bookSourceStore;
+
+function normalizeExternalHttpUrl(url: string | undefined | null) {
+  const value = url?.trim();
+  if (!value) {
+    return "";
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.href;
+  } catch {
+    return "";
+  }
+}
+
+async function openExternalUrl(url: string) {
+  const externalUrl = normalizeExternalHttpUrl(url);
+  if (!externalUrl) {
+    message.warning("链接地址格式不正确");
+    return;
+  }
+
+  if (isTauri) {
+    try {
+      const { openUrl: tauriOpenUrl } =
+        await import("@tauri-apps/plugin-opener");
+      await tauriOpenUrl(externalUrl);
+      return;
+    } catch (error) {
+      console.warn("[InstalledSourcesTab] 打开外部链接失败:", error);
+      message.error("打开系统浏览器失败");
+      return;
+    }
+  }
+
+  window.open(externalUrl, "_blank", "noopener,noreferrer");
+}
 
 // ---- 搜索过滤 ----
 const searchQuery = ref("");
@@ -861,7 +900,7 @@ defineExpose({
             emits('navigateTab', 'debug');
             emits('selectDebugSource', src);
           "
-          @open-url="openUrl($event)"
+          @open-url="openExternalUrl($event)"
           @toggle-search="
             setSearchUserEnabled(src.fileName, searchDisabled.has(src.fileName))
           "

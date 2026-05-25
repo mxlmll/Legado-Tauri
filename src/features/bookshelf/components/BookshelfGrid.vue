@@ -17,6 +17,8 @@ const props = defineProps<{
   editMode?: boolean;
   selectedBookIds?: Set<string>;
   shelfOrder?: number;
+  showShelfTitle?: boolean;
+  shelfTitle?: string;
 }>();
 
 const emit = defineEmits<{
@@ -117,35 +119,53 @@ const {
       @mousedown="onMouseDown"
     >
       <n-spin :show="loading" class="bs-spin" style="flex: 1">
-        <slot name="before-grid" />
+        <div class="bs-home-modules">
+          <slot name="before-grid" />
 
-        <div class="bs-shelf-module" :style="{ order: shelfOrder ?? 0 }">
-          <div v-if="!loading && !books.length" class="bs-empty">
-            <div class="bs-empty__icon">
-              <BookOpen :size="56" :stroke-width="1" />
+          <div class="bs-shelf-module" :style="{ order: shelfOrder ?? 0 }">
+            <div v-if="showShelfTitle !== false" class="bs-shelf-head">
+              <div class="bs-shelf-head__title-block">
+                <div class="bs-shelf-head__title-row">
+                  <BookOpen :size="16" />
+                  <h2 class="bs-shelf-head__title">
+                    {{ shelfTitle?.trim() || "我的书架" }}
+                  </h2>
+                </div>
+                <div class="bs-shelf-head__meta">
+                  {{ filteredBooks.length }} 本书籍
+                </div>
+              </div>
             </div>
-            <h3 class="bs-empty__title">书架空空如也</h3>
-            <p class="bs-empty__desc">去发现页搜索书籍，加入书架开始阅读吧</p>
-          </div>
 
-          <div v-else class="bs-grid">
-            <ShelfBookCard
-              v-for="book in filteredBooks"
-              :key="book.id"
-              :book="book"
-              :privacy-mode-enabled="privacyModeEnabled"
-              :loading="
-                openingBookId === book.id || tocRefreshingBookIds.has(book.id)
-              "
-              :loading-blocks-interaction="openingBookId === book.id"
-              :loading-label="
-                tocRefreshingBookIds.has(book.id) ? '检查更新中' : '加载中'
-              "
-              :edit-mode="editMode"
-              :selected="selectedBookIds?.has(book.id)"
-              @select="emit('select', $event)"
-              @contextmenu="(_, e: MouseEvent) => emit('contextmenu', book, e)"
-            />
+            <div v-if="!loading && !books.length" class="bs-empty">
+              <div class="bs-empty__icon">
+                <BookOpen :size="56" :stroke-width="1" />
+              </div>
+              <h3 class="bs-empty__title">书架空空如也</h3>
+              <p class="bs-empty__desc">去发现页搜索书籍，加入书架开始阅读吧</p>
+            </div>
+
+            <div v-else class="bs-grid">
+              <ShelfBookCard
+                v-for="book in filteredBooks"
+                :key="book.id"
+                :book="book"
+                :privacy-mode-enabled="privacyModeEnabled"
+                :loading="
+                  openingBookId === book.id || tocRefreshingBookIds.has(book.id)
+                "
+                :loading-blocks-interaction="openingBookId === book.id"
+                :loading-label="
+                  tocRefreshingBookIds.has(book.id) ? '检查更新中' : '加载中'
+                "
+                :edit-mode="editMode"
+                :selected="selectedBookIds?.has(book.id)"
+                @select="emit('select', $event)"
+                @contextmenu="
+                  (_, e: MouseEvent) => emit('contextmenu', book, e)
+                "
+              />
+            </div>
           </div>
         </div>
       </n-spin>
@@ -255,22 +275,62 @@ const {
 }
 
 .bs-spin {
-  display: flex;
+  display: block;
+  width: 100%;
   min-height: 100%;
 }
 
 .bs-spin :deep(.n-spin-container),
 .bs-spin :deep(.n-spin-content) {
+  width: 100%;
   min-height: 100%;
 }
 
-.bs-spin :deep(.n-spin-content) {
+.bs-home-modules {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
 }
 
 .bs-shelf-module {
+  width: 100%;
   min-width: 0;
+}
+
+.bs-shelf-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.bs-shelf-head__title-block {
+  min-width: 0;
+}
+
+.bs-shelf-head__title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-accent);
+}
+
+.bs-shelf-head__title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--fs-16);
+  font-weight: var(--fw-bold);
+  line-height: 1.35;
+}
+
+.bs-shelf-head__meta {
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-size: var(--fs-12);
+  line-height: 1.4;
 }
 
 .bs-grid {

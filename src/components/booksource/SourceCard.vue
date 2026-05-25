@@ -7,12 +7,13 @@ import {
   NInputNumber,
   NCheckbox,
 } from "naive-ui";
+import { computed } from "vue";
 import type {
   BookSourceMeta,
   UpdateCheckResult,
 } from "@/composables/useBookSource";
 
-defineProps<{
+const props = defineProps<{
   src: BookSourceMeta;
   sourceDir: string;
   defaultLogoUrl: string;
@@ -41,6 +42,26 @@ const emit = defineEmits<{
   "save-delay": [value: number | null];
   "apply-update": [];
 }>();
+
+function normalizeExternalHttpUrl(url: string | undefined | null) {
+  const value = url?.trim();
+  if (!value) {
+    return "";
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.href;
+  } catch {
+    return "";
+  }
+}
+
+const sourceHomepageUrl = computed(() =>
+  normalizeExternalHttpUrl(props.src.homepageUrl),
+);
 </script>
 
 <template>
@@ -77,7 +98,15 @@ const emit = defineEmits<{
 
       <div class="src-card__title">
         <div class="src-card__name-line">
-          <span class="src-card__name">{{ src.name }}</span>
+          <a
+            v-if="sourceHomepageUrl"
+            class="src-card__name src-card__name--link"
+            href="#"
+            :title="sourceHomepageUrl"
+            @click.prevent.stop="emit('open-url', sourceHomepageUrl)"
+            >{{ src.name }}</a
+          >
+          <span v-else class="src-card__name">{{ src.name }}</span>
           <n-tag
             v-if="!src.enabled"
             size="tiny"
@@ -396,11 +425,22 @@ const emit = defineEmits<{
   font-size: 0.8375rem;
   font-weight: 600;
   color: var(--color-text-primary);
+  text-decoration: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 240px;
   flex-shrink: 1;
+}
+
+.src-card__name--link {
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.src-card__name--link:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
 }
 
 .src-card__badge {

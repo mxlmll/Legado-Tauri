@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { useMessage } from "naive-ui";
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useBackAwareDialog as useDialog } from "@/composables/useBackAwareDialog";
+import { isTauri } from "@/composables/useEnv";
 import { useOverlay } from "@/composables/useOverlay";
 import { safeRandomUUID } from "@/utils/uuid";
 import { formatVersion, compareVersions } from "@/utils/versionUtils";
@@ -141,6 +141,49 @@ let syncRunId = 0;
 function normalizeRepoUrl(url: string) {
   return url.trim();
 }
+
+function normalizeExternalHttpUrl(url: string | undefined | null) {
+  const value = url?.trim();
+  if (!value) {
+    return "";
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.href;
+  } catch {
+    return "";
+  }
+}
+
+async function openExternalUrl(url: string) {
+  const externalUrl = normalizeExternalHttpUrl(url);
+  if (!externalUrl) {
+    message.warning("链接地址格式不正确");
+    return;
+  }
+
+  if (isTauri) {
+    try {
+      const { openUrl: tauriOpenUrl } =
+        await import("@tauri-apps/plugin-opener");
+      await tauriOpenUrl(externalUrl);
+      return;
+    } catch (error) {
+      console.warn("[OnlineSourcesTab] 打开外部链接失败:", error);
+      message.error("打开系统浏览器失败");
+      return;
+    }
+  }
+
+  window.open(externalUrl, "_blank", "noopener,noreferrer");
+}
+
+const manifestExternalUrl = computed(() =>
+  normalizeExternalHttpUrl(onlineManifest.value?.url),
+);
 
 function resetOnlineState() {
   onlineError.value = "";
@@ -1023,7 +1066,18 @@ void loadRepoConfig();
 
     <!-- 仓库描述 -->
     <div class="bv-repo-desc" v-if="onlineManifest">
-      {{ onlineManifest.name }} · v{{ onlineManifest.version }} · 更新于
+      <a
+        v-if="manifestExternalUrl"
+        class="bv-repo-desc__link"
+        href="#"
+        :title="manifestExternalUrl"
+        @click.prevent.stop="openExternalUrl(manifestExternalUrl)"
+        >{{ onlineManifest.name }}</a
+      >
+      <span v-else>{{ onlineManifest.name }}</span> · v{{
+        onlineManifest.version
+      }}
+      · 更新于
       {{ onlineManifest.updatedAt }}
     </div>
     <div
@@ -1078,7 +1132,7 @@ void loadRepoConfig();
           :deleting="deletingSet.has(src.fileName)"
           @install="installSource(src)"
           @delete="confirmDeleteInstalled(src)"
-          @open-url="openUrl"
+          @open-url="openExternalUrl"
         />
       </div>
     </n-spin>
@@ -1204,6 +1258,18 @@ void loadRepoConfig();
   font-size: 0.8rem;
   color: var(--color-text-muted);
   margin-bottom: 10px;
+}
+
+.bv-repo-desc__link {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.bv-repo-desc__link:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
 }
 
 .bv-compare-note {
