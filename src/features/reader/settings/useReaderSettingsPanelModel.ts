@@ -1,7 +1,11 @@
 import { computed, onBeforeUnmount, ref, watch, type Ref } from "vue";
 import type { ReaderAppearancePatch } from "@/composables/useFrontendPlugins";
-import { PRESET_THEMES, type ReaderTapAction } from "@/components/reader/types";
-import { isTauri } from "@/composables/useEnv";
+import {
+  PRESET_THEMES,
+  type ReaderBrightnessMode,
+  type ReaderTapAction,
+} from "@/components/reader/types";
+import { isTauri, platform } from "@/composables/useEnv";
 import { useFrontendPlugins } from "@/composables/useFrontendPlugins";
 import { invokeWithTimeout } from "@/composables/useInvoke";
 import { useNavigationHistory } from "@/composables/useNavigationHistory";
@@ -131,6 +135,23 @@ export function useReaderSettingsPanelModel(options: {
 
   const isComic = computed(() => options.sourceType.value === "comic");
   const isVideo = computed(() => options.sourceType.value === "video");
+  const isAndroidPlatform = computed(() => platform.value === "Android");
+  const brightnessSliderDisabled = computed(
+    () => isAndroidPlatform.value && settings.brightnessMode === "system",
+  );
+  const brightnessValueLabel = computed(() =>
+    brightnessSliderDisabled.value ? "系统" : `${settings.brightness}%`,
+  );
+
+  function setBrightnessMode(mode: ReaderBrightnessMode) {
+    settings.brightnessMode = mode;
+  }
+
+  function setBrightness(value: number) {
+    settings.brightnessMode = "custom";
+    settings.brightness = value;
+  }
+
   const canDumpPaginationLayout = computed(
     () => !isComic.value && !isVideo.value && settings.flipMode !== "scroll",
   );
@@ -460,6 +481,11 @@ export function useReaderSettingsPanelModel(options: {
     increaseFontSize,
     isComic,
     isVideo,
+    isAndroidPlatform,
+    brightnessSliderDisabled,
+    brightnessValueLabel,
+    setBrightnessMode,
+    setBrightness,
     canDumpPaginationLayout,
     activeFlipOptions,
     EXPERIMENTAL_FLIP_MODE_HINT,

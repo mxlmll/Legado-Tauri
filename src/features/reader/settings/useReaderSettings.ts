@@ -22,6 +22,7 @@ import {
   DEFAULT_SETTINGS,
 } from '@/components/reader/types';
 import { useDynamicConfig } from '@/composables/useDynamicConfig';
+import { platform } from '@/composables/useEnv';
 import {
   ensureFrontendNamespaceLoaded,
   getFrontendStorageItem,
@@ -41,6 +42,7 @@ const READER_DEFAULTS_STATE_KEY = 'state';
 const READER_DEFAULTS_VERSION = 1;
 const BOOK_LEVEL_GLOBAL_FIELDS: (keyof ReaderSettings)[] = [
   'paginationEngine',
+  'brightnessMode',
   'hideTopBarOnMobile',
   'volumeKeyPageTurnEnabled',
   'useGlobalSettingsForAllBooks',
@@ -92,6 +94,13 @@ function resolvePagePadding(
   };
 }
 
+function clampBrightness(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_SETTINGS.brightness;
+  }
+  return Math.min(100, Math.max(20, Math.round(value)));
+}
+
 function mergeSettings(base: ReaderSettings, partial: StoredReaderSettings): ReaderSettings {
   const pagePadding = resolvePagePadding(base.pagePadding, partial);
   const merged = {
@@ -122,6 +131,10 @@ function mergeSettings(base: ReaderSettings, partial: StoredReaderSettings): Rea
   ) {
     merged.paginationEngine = 'pretext';
   }
+  if (merged.brightnessMode !== 'system' && merged.brightnessMode !== 'custom') {
+    merged.brightnessMode = DEFAULT_SETTINGS.brightnessMode;
+  }
+  merged.brightness = clampBrightness(Number(merged.brightness));
   return merged;
 }
 
@@ -477,6 +490,8 @@ export function useReaderSettings() {
   /** 生成内容区 CSS 变量对象，直接绑定到 :style */
   function getContentStyle(): Record<string, string> {
     const t = settings.typography;
+    const brightness = clampBrightness(settings.brightness);
+    const brightnessOverlayOpacity = platform.value === 'Android' ? 0 : (100 - brightness) / 100;
     return {
       '--reader-font-family': t.fontFamily,
       '--reader-font-size': `${t.fontSize}px`,
@@ -501,7 +516,8 @@ export function useReaderSettings() {
       '--reader-padding-bottom': `${settings.pagePadding.bottom}px`,
       '--reader-padding-left': `${settings.pagePadding.left}px`,
       '--reader-padding': `${settings.pagePadding.top}px ${settings.pagePadding.right}px ${settings.pagePadding.bottom}px ${settings.pagePadding.left}px`,
-      '--reader-brightness': `${settings.brightness}%`,
+      '--reader-brightness': `${brightness}%`,
+      '--reader-brightness-overlay-opacity': brightnessOverlayOpacity.toFixed(2),
       '--reader-bg-image': settings.backgroundImage || 'none',
       '--reader-bg-size': 'auto',
       '--reader-bg-position': '0 0',

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia';
 import { computed } from 'vue';
+import { platform } from '@/composables/useEnv';
 import { useAppConfigStore, usePreferencesStore } from '@/stores';
 import SettingItem from './SettingItem.vue';
 import SettingSection from './SettingSection.vue';
@@ -13,6 +14,7 @@ const prefsStore = usePreferencesStore();
 const tocCfg = computed(() => prefsStore.tocAutoUpdate);
 const searchCfg = computed(() => prefsStore.search);
 const appUpdateCfg = computed(() => prefsStore.appUpdate);
+const isAndroidPlatform = computed(() => platform.value === 'Android');
 
 async function handleSet(key: string, value: string) {
   try {
@@ -20,6 +22,11 @@ async function handleSet(key: string, value: string) {
   } catch (e: unknown) {
     console.error(`保存失败: ${e}`);
   }
+}
+
+function setReaderAwakeTimeoutMinutes(value: number | null) {
+  const minutes = Math.min(120, Math.max(1, Math.round(value ?? 10)));
+  void handleSet('power_reader_awake_timeout_secs', String(minutes * 60));
 }
 
 const INTERVAL_OPTIONS = [
@@ -64,6 +71,51 @@ const INTERVAL_OPTIONS = [
         <template #checked>开启</template>
         <template #unchecked>关闭</template>
       </n-switch>
+    </SettingItem>
+  </SettingSection>
+
+  <SettingSection v-if="isAndroidPlatform" title="屏幕唤醒" section-id="section-power">
+    <SettingItem
+      label="朗读时保持亮屏"
+      desc="朗读播放期间阻止屏幕自动休眠，停止或暂停后恢复系统规则"
+    >
+      <n-switch
+        :value="config.power_keep_awake_on_tts"
+        @update:value="(v: boolean) => handleSet('power_keep_awake_on_tts', String(v))"
+      >
+        <template #checked>开启</template>
+        <template #unchecked>关闭</template>
+      </n-switch>
+    </SettingItem>
+
+    <SettingItem label="阅读页保持亮屏" desc="仅在阅读页面生效，离开阅读后恢复系统休眠">
+      <n-radio-group
+        :value="config.power_reader_awake_mode"
+        size="small"
+        @update:value="(v: string) => handleSet('power_reader_awake_mode', v)"
+      >
+        <n-radio-button value="off">关闭</n-radio-button>
+        <n-radio-button value="always">始终</n-radio-button>
+        <n-radio-button value="timeout">自定义时长</n-radio-button>
+      </n-radio-group>
+    </SettingItem>
+
+    <SettingItem
+      v-if="config.power_reader_awake_mode === 'timeout'"
+      label="保持时长"
+      desc="每次触摸、翻页、滚动或按键后重新计时"
+    >
+      <div style="display: flex; gap: 6px; align-items: center">
+        <n-input-number
+          :value="Math.round((config.power_reader_awake_timeout_secs ?? 600) / 60)"
+          size="small"
+          :min="1"
+          :max="120"
+          style="width: 96px"
+          @update:value="setReaderAwakeTimeoutMinutes"
+        />
+        <span>分钟</span>
+      </div>
     </SettingItem>
   </SettingSection>
 

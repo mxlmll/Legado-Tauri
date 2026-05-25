@@ -36,6 +36,11 @@ const {
   increaseFontSize,
   isComic,
   isVideo,
+  isAndroidPlatform,
+  brightnessSliderDisabled,
+  brightnessValueLabel,
+  setBrightnessMode,
+  setBrightness,
   canDumpPaginationLayout,
   activeFlipOptions,
   EXPERIMENTAL_FLIP_MODE_HINT,
@@ -101,23 +106,34 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
 
       <template v-else>
         <!-- 亮度 -->
-        <div class="reader-settings__row">
+        <div class="reader-settings__row reader-settings__row--brightness">
           <span class="reader-settings__label">亮度</span>
-          <n-slider
-            :value="settings.brightness"
-            @update:value="
-              (v: number) => {
-                settings.brightness = v;
-              }
-            "
-            :min="20"
-            :max="100"
-            :step="5"
-            style="flex: 1"
-          />
-          <span class="reader-settings__val" style="width: 36px"
-            >{{ settings.brightness }}%</span
-          >
+          <div class="reader-settings__brightness-control">
+            <n-radio-group
+              v-if="isAndroidPlatform"
+              :value="settings.brightnessMode"
+              size="small"
+              @update:value="setBrightnessMode"
+            >
+              <n-radio-button value="system">系统</n-radio-button>
+              <n-radio-button value="custom">自定义</n-radio-button>
+            </n-radio-group>
+            <div class="reader-settings__brightness-slider">
+              <n-slider
+                :value="settings.brightness"
+                :disabled="brightnessSliderDisabled"
+                @update:value="setBrightness"
+                :min="20"
+                :max="100"
+                :step="5"
+              />
+              <span
+                class="reader-settings__val reader-settings__brightness-value"
+              >
+                {{ brightnessValueLabel }}
+              </span>
+            </div>
+          </div>
         </div>
 
         <!-- 字号 + 字体 + 更多 -->
@@ -565,6 +581,34 @@ defineExpose({ isNight, toggleDayNight, hideTapZoneDebugPreview });
 
 .reader-settings__row--top {
   align-items: flex-start;
+}
+
+.reader-settings__row--brightness {
+  align-items: flex-start;
+}
+
+.reader-settings__brightness-control {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reader-settings__brightness-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.reader-settings__brightness-slider :deep(.n-slider) {
+  flex: 1;
+}
+
+.reader-settings__brightness-value {
+  width: 44px;
+  flex-shrink: 0;
 }
 
 .reader-settings__label {

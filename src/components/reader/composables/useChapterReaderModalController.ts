@@ -43,16 +43,6 @@ import { useReaderSeamlessWindow } from "./useReaderSeamlessWindow";
 import { useReaderSessionBridge } from "./useReaderSessionBridge";
 import { useReaderTtsManager } from "./useReaderTtsManager";
 
-declare global {
-  interface Window {
-    LegadoAndroidInput?: {
-      setVolumeKeyPageTurnEnabled?: (enabled: boolean) => void;
-      setReaderImmersiveModeEnabled?: (enabled: boolean) => void;
-      installApk?: (absolutePath: string) => string;
-    };
-  }
-}
-
 export interface ChapterReaderModalProps {
   show: boolean;
   chapterUrl: string;

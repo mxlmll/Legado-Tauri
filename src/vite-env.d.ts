@@ -12,6 +12,9 @@ interface Window {
   LegadoAndroidInput?: {
     setVolumeKeyPageTurnEnabled?: (enabled: boolean) => void;
     setReaderImmersiveModeEnabled?: (enabled: boolean) => void;
+    setKeepScreenOn?: (enabled: boolean) => void;
+    setReaderBrightnessPercent?: (percent: number) => void;
+    clearReaderBrightnessOverride?: () => void;
     installApk?: (absolutePath: string) => string;
   };
 }

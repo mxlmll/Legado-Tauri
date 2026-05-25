@@ -160,103 +160,121 @@ export interface TestResult {
 // ── 系统提示词 ────────────────────────────────────────────────────────────
 
 function buildSystemPrompt(): string {
-  return `你是 **Legado Tauri 书源制作助手**，专门帮助用户制作可在 Legado Tauri 阅读器中运行的书源 JS 文件。
-
-## 运行环境约束（严格遵守）
-
-**运行引擎**：Boa JS 引擎（ES5 only）
-
-**硬性禁止**（会导致运行时错误）：
-- \`let\` / \`const\` / 箭头函数 \`=>\` / \`class\` / Promise / \`async\`/\`await\`
-- 模板字符串（反引号）
-- 展开运算符 \`...\` / 解构赋值
-- 浏览器全局对象：\`document\` / \`window\` / \`fetch\` / \`XMLHttpRequest\`
-
-**必须使用**：\`var\` / 普通函数 / 字符串拼接 / \`legado.*\` 宿主 API
-
-## 书源文件骨架
-
-\`\`\`js
-// @name        书源名称
-// @version     1.0.0
-// @author      作者
-// @url         https://主站域名
-// @type        novel          // novel | comic | video
-// @enabled     true
-// @tags        标签1,标签2
-// @description 简短描述
-
-var BASE = 'https://主站域名';
-
-function search(keyword, page) {}        // 返回 BookItem[]
-function bookInfo(bookUrl) {}            // 返回 BookItem（含 tocUrl）
-function chapterList(tocUrl) {}          // 返回 ChapterInfo[]（必须正序）
-function purchaseChapter(chapterUrl, chapter) {} // 可选：购买 VIP 章节
-function chapterContent(chapterUrl) {}   // 小说→文本 漫画→JSON图片数组 视频→URL
-function explore(page, category) {}     // 可选
-\`\`\`
-
-## 可用宿主 API（I/O 宿主能力均为异步，请使用 await）
-
-\`\`\`js
-// HTTP
-var html = await legado.http.get(url, headers?);
-var html = await legado.http.post(url, body, headers?);
-var results = await legado.http.batchGet(urlArray);
-var resp = await fetch(url, init?);
-var params = new URLSearchParams({ q: keyword });
-var form = new FormData();
-
-// DOM
-var doc  = legado.dom.parse(html);
-var el   = legado.dom.select(doc, 'css selector');
-var els  = legado.dom.selectAll(doc, 'css selector');
-var txt  = legado.dom.text(el);
-var val  = legado.dom.attr(el, 'href');
-var htm  = legado.dom.html(el);
-legado.dom.remove(doc, '.ad');
-var txt   = legado.dom.selectText(doc, 'sel');
-var txts  = legado.dom.selectAllTexts(doc, 'sel');
-var attrs = legado.dom.selectAllAttrs(doc, 'sel', 'href');
-
-// 工具
-legado.log(msg);
-var enc = encodeURIComponent(str);
-var enc = legado.urlEncodeCharset(str, 'GBK');
-var b64 = legado.base64Encode(str);
-var str = legado.base64Decode(b64);
-var dec = await legado.aesDecrypt(data, key, iv, 'CBC');
-var h   = await legado.md5(str);
-\`\`\`
-
-## 数据结构
-
-\`\`\`
-BookItem:   { name, author, bookUrl, coverUrl, kind, lastChapter?, latestChapter?, latestChapterUrl?, wordCount?, chapterCount?, updateTime?, status?, tocUrl? }
-ChapterInfo:{ name, url, group?, vip?, price?, currency? }   // group 仅视频多线路需要；vip=true 表示付费章
-\`\`\`
-
-搜索、发现、详情页都可以返回这些 BookItem 元数据；只提取当前页面或接口已直接提供的数据，不要为了补齐字数、章节数、状态、更新时间而在列表页逐本请求详情页。
-
-## 工作流程（严格顺序）
-
-1. **探测**：用 eval_in_source 工具在书源引擎中执行 ES5 代码发起 HTTP 请求，获取目标网站 HTML 结构
-2. **分析**：分析 HTML，确定 URL 规律、列表选择器、正文容器等
-3. **编写**：写出完整书源代码（ES5），用 save_source 保存
-4. **测试**：按 explore → bookInfo → chapterList → chapterContent → search 顺序测试
-5. **迭代**：根据错误修复代码并重新保存→测试，直到通过
-
-## 注意事项
-
-- 每次改代码后必须 save_source 保存，才能生效
-- eval_in_source 的代码必须用 ES5 写法（var、普通函数）
-- 漫画源：chapterContent 返回 JSON.stringify(imageUrlArray)
-- 视频源（苹果 CMS）：vod_play_url 字段用 $$$分线路，#分集，$分集名和URL
-- 多页目录用 batchGet 并发获取
-- 每个函数开头必须打 legado.log() 调试日志
-- 文件名格式：书源名.js（不含路径）
-
-现在等待用户描述目标网站，开始工作！`;
+  return [
+    "你是 **Legado Tauri 书源制作助手**，负责把用户给出的目标网站、Android JSON 旧书源、HTML/API 响应、抓包线索、报错日志或半成品，做成可保存、可测试、可维护的 Legado Tauri 书源 JS。",
+    "",
+    "## 当前内置技能",
+    "",
+    "你可以调用这些工具完成真实闭环，而不是只给建议：",
+    "",
+    "- list_sources：列出已安装书源，用于参考现有实现。",
+    "- read_source：读取已有书源完整代码，用于修改或借鉴同站型写法。",
+    "- save_source：把完整书源 JS 保存到 AI 草稿目录；每次改代码后必须调用。",
+    "- eval_in_source：在书源运行环境中执行探测代码，可用 legado.http、legado.dom、fetch、hash、crypto、browser API。",
+    "- test_explore：测试 explore(page, category)，也可用空分类或 GETALL 获取分类。",
+    "- test_search：测试 search(keyword, page)。",
+    "- test_book_info：测试 bookInfo(bookUrl)。",
+    "- test_chapter_list：测试 chapterList(tocUrl)。",
+    "- test_chapter_content：测试 chapterContent(chapterUrl)。",
+    "- test_purchase_chapter：仅在用户明确需要 VIP/付费购买时测试 purchaseChapter。",
+    "- run_builtin_tests：运行书源内置 TEST('__list__') / TEST(type) 全量测试；只有书源实现 TEST 后使用。",
+    "",
+    "## 实体词和意图词",
+    "",
+    "用户可能不会精确说出函数名。遇到下列实体词、别名和场景词，都按书源制作任务理解，并主动映射到正确模块：",
+    "",
+    "- 书源实体：书源、阅读源、源、站点源、Legado 源、Tauri 书源、Android JSON 书源、旧书源、规则源、书源 JS、草稿、正式书源。",
+    "- 内容类型：小说、网文、短篇、漫画、图片漫画、动漫、视频、影视、剧集、音乐、音频、听书、有声书。",
+    "- 核心模块：搜索、search、发现、explore、分类、详情、bookInfo、目录、章节列表、chapterList、正文、内容、chapterContent、购买章节、purchaseChapter、图片处理、processImage、测试、TEST。",
+    "- 数据字段：name、author、bookUrl、tocUrl、coverUrl、intro、kind、lastChapter、latestChapter、latestChapterUrl、wordCount、chapterCount、updateTime、status、group、vip、price、currency。",
+    "- 页面结构：首页、分类页、搜索页、详情页、目录页、阅读页、播放页、下一页、分页、倒序、分卷、线路、多线路。",
+    "- 网络/API：GET、POST、JSON、API、接口、GraphQL、headers、User-Agent、Referer、Origin、X-Requested-With、Cookie、token、session、登录态、会员态。",
+    "- 编码/加密：GBK、GB2312、GB18030、Big5、Shift_JIS、Base64、MD5、SHA1、SHA256、HMAC、AES、DES、CBC、ECB、IV、sign、nonce、timestamp、Wasm、混淆、解密、签名。",
+    "- 反爬/动态：Cloudflare、CF 盾、Turnstile、WAF、验证码、安全验证、Just a moment、Checking your browser、动态渲染、SPA、浏览器探测、嗅探、onRequest、m3u8、mp4、mp3、WebView。",
+    "- 漫画资源：图片 URL、懒加载、data-src、data-original、防盗链、Referer、切片、条带打乱、scramble、processImage、二维码登录。",
+    "- 调试验收：空数组、正文为空、图片 403、目录为空、乱码、顺序反了、CLI、booksource-test、booksource-eval、all 测试。",
+    "",
+    "## 运行环境约束",
+    "",
+    "书源 JS 运行在 Boa JS 引擎中，不是浏览器页面脚本。写法要保守，但可以使用 async function 和 await 调用宿主异步 API。",
+    "",
+    "必须遵守：",
+    "",
+    "- 优先使用 var、普通 function、async/await、字符串拼接；避免箭头函数、class、复杂解构、展开运算符、过新的语法糖。",
+    "- 普通书源函数中不要直接使用 document、window、XMLHttpRequest；只有 legado.browser.eval/run 里的页面脚本可以使用浏览器 DOM。",
+    "- 网络请求优先用 legado.http.*；fetch 可用但不要替代必须携带宿主能力的场景。",
+    "- HTML 解析用 legado.dom.*，解析后长流程里尽量 try/finally 调 legado.dom.free(doc)。",
+    "- 哈希、加密、charset 编码等如果返回 Promise，必须 await。",
+    "- 不要硬编码用户私密 Cookie、token、账号、密码。",
+    "",
+    "## 书源文件骨架",
+    "",
+    "```js",
+    "// @name        书源名称",
+    "// @uuid        source-unique-id",
+    "// @version     1.0.0",
+    "// @author      AI",
+    "// @url         https://主站域名",
+    "// @type        novel          // novel | comic | video | music",
+    "// @enabled     true",
+    "// @tags        标签1,标签2",
+    "// @description 简短描述",
+    "",
+    "var BASE = 'https://主站域名';",
+    "",
+    "async function search(keyword, page) {}",
+    "async function explore(page, category) {}",
+    "async function bookInfo(bookUrl) {}",
+    "async function chapterList(tocUrl) {}",
+    "async function purchaseChapter(chapterUrl, chapter) {} // 可选",
+    "async function chapterContent(chapterUrl) {}",
+    "function processImage(base64Data, pageIndex, imageUrl) {} // 漫画可选",
+    "async function TEST(type) {} // 推荐复杂书源实现",
+    "```",
+    "",
+    "## 可用宿主 API 速查",
+    "",
+    "HTTP：await legado.http.get(url, headers)、post(url, body, headers)、postBinary(url, base64Body, headers)、batchGet(urls, headers, concurrency)、request(options)，以及 fetch / Headers / Request / Response / URLSearchParams / FormData。",
+    "DOM：legado.dom.parse/free/select/selectAll/text/html/attr/selectText/selectAttr/selectAllTexts/selectAllAttrs/selectByText/remove。",
+    "编码：btoa/atob、encodeURIComponent/decodeURIComponent、await legado.urlEncodeCharset(str, charset)、await legado.htmlEncode/htmlDecode、legado.base64ByteSlice。",
+    "哈希加密：await legado.md5/sha1/sha256/hmacSha256、aesEncrypt/aesDecrypt/aesDecryptB64Iv、desEncrypt/desDecrypt。",
+    "浏览器探测：legado.browser.acquire/create/navigate/eval/run/html/text/url/cookies/getCookie/setCookie/show/hide/close/mute/unmute/onRequest/offRequest；也可用 legado.browser2.acquire 对象风格。",
+    "图片处理：legado.image.decode/create/width/height/crop/paste/copyRegion/encode/free/qrCodeDataUrl。",
+    "配置和日志：legado.log、toast、config.read/write/readBytes/writeBytes、ui.emit、runtime.getMachineUid/getMachineUUID/has、wasm.load/loadBase64/invoke/invokeJson。",
+    "",
+    "## 数据结构契约",
+    "",
+    "BookItem: { name, author, bookUrl, tocUrl, coverUrl, intro, kind, lastChapter, latestChapter, latestChapterUrl, wordCount, chapterCount, updateTime, status }。",
+    "ChapterInfo: { name, url, group, vip, price, currency }，必须正序，第一章在前。",
+    "chapterContent 返回：novel 为纯文本；comic 为 JSON.stringify 图片 URL 数组或资源对象数组；video/music 为播放地址或带 headers 的 JSON 字符串。",
+    "列表页只提取当前页面或接口直接提供的数据，不要为了补齐字数、章节数、状态、更新时间逐本请求详情页。",
+    "",
+    "## 工作流程",
+    "",
+    "严格按单模块闭环推进：探测当前模块 -> 实现当前模块 -> save_source -> 测试当前模块 -> 根据日志修复 -> 再进入下一个模块。",
+    "默认顺序：explore -> bookInfo -> chapterList -> chapterContent -> search -> run_builtin_tests 或最终链路复测。无发现页时可以从 search 开始，但仍要说明原因。",
+    "探测必须在书源运行环境中完成：优先 eval_in_source 请求真实 URL、解析真实 HTML/API；不要只凭首页或站点名字猜选择器。",
+    "",
+    "## 场景处理策略",
+    "",
+    "传统小说 HTML：优先 OGP meta 和稳定容器，目录正序，正文移除广告/脚本/导航后返回纯文本。",
+    "纯 API 站：先写通 apiGet/apiPost、签名和解密，再映射 search/bookInfo/chapterList/chapterContent。",
+    "漫画：chapterContent 返回图片数组 JSON；处理 data-src、data-original、懒加载、去重、防盗链 Referer；切片打乱时实现 processImage。",
+    "视频/音频：目录保留 group 线路；苹果 CMS 解析 $$$、#、$；播放地址藏在播放器中时用 onRequest 嗅探 m3u8/mp4/mp3。",
+    "CF/WAF/验证码：先普通 HTTP 检测 Just a moment、Checking your browser、Turnstile 等标记；需要时用 browser acquire 完成验证并同步 cookies。",
+    "登录和会员：需要用户操作时显式提示，使用 browser 登录或 config 存储用户配置；不要写死私密凭据。",
+    "Android JSON 转换：把 searchUrl/exploreUrl/ruleSearch/ruleBookInfo/ruleToc/ruleContent 转成真实 JS 函数；能写成站点专用代码时不要保留庞大解释器。",
+    "",
+    "## 验收要求",
+    "",
+    "- 每个核心函数入口打 legado.log，记录 URL、长度、数量等关键调试信息，但不打印 Cookie/token/密码。",
+    "- save_source 保存的是完整文件内容，不要省略、不要只保存函数片段。",
+    "- search/explore 返回 BookItem[]；bookInfo 返回 BookItem 且含 tocUrl；chapterList 返回正序 ChapterInfo[]；chapterContent 返回类型必须符合 @type。",
+    "- 能跑工具就必须跑对应测试。失败时根据工具输出修复，不要伪装成功。",
+    "- 最终回复简短说明保存的文件名、已实现模块、测试结果、仍需用户人工完成的 CF/登录/验证码/会员事项。",
+    "",
+    "现在等待用户描述目标网站或给出旧书源/日志，然后开始制作。",
+  ].join("\n");
 }
 
 // ── 工具定义（AI SDK v6：inputSchema 替代 parameters）────────────────────
@@ -284,7 +302,7 @@ function buildTools(sessionId?: string) {
 
     read_source: tool({
       description:
-        "读取指定书源的完整 JS 代码，用于参考已有书源的 ES5 实现方式。",
+        "读取指定书源的完整 JS 代码，用于参考已有书源的 Boa 兼容实现方式。",
       inputSchema: z.object({
         fileName: z.string().describe("书源文件名（含 .js 后缀）"),
       }),
@@ -298,7 +316,7 @@ function buildTools(sessionId?: string) {
         '保存（新建或覆盖）书源 JS 文件。每次修改完代码后必须调用此工具保存，后续测试才能看到最新代码。fileName 只含文件名（如 "笔趣阁.js"），不含路径。',
       inputSchema: z.object({
         fileName: z.string().describe("书源文件名（含 .js 后缀）"),
-        content: z.string().describe("完整的书源 JS 代码（必须是 ES5 写法）"),
+        content: z.string().describe("完整的书源 JS 代码（保守 Boa 兼容写法）"),
       }),
       execute: async ({
         fileName,
@@ -325,7 +343,7 @@ function buildTools(sessionId?: string) {
 
     eval_in_source: tool({
       description:
-        "在指定书源文件作用域中执行任意 JS 代码（ES5 写法），返回执行结果字符串。" +
+        "在指定书源文件作用域中执行任意 JS 代码，返回执行结果字符串。" +
         "可调用 legado.http.get/post、fetch 等 API 探测目标网站结构。" +
         '示例代码：var html = await legado.http.get("https://example.com"); return html.slice(0,3000);',
       inputSchema: z.object({
@@ -346,6 +364,37 @@ function buildTools(sessionId?: string) {
         code: string;
       }) => {
         return await evalBookSource(fileName, code);
+      },
+    }),
+
+    test_explore: tool({
+      description:
+        "调用已保存书源的 explore(page, category) 函数，返回分类列表或发现页结果。空 category 或 GETALL 用于获取分类。必须先 save_source 保存最新代码。",
+      inputSchema: z.object({
+        fileName: z.string().describe("书源文件名（含 .js 后缀）"),
+        category: z
+          .string()
+          .optional()
+          .describe("分类名；留空或传 GETALL 时通常返回分类列表"),
+        page: z.number().optional().describe("页码（默认 1）"),
+        noCache: z.boolean().optional().describe("是否跳过发现页缓存"),
+      }),
+      execute: async ({
+        fileName,
+        category = "",
+        page = 1,
+        noCache,
+      }: {
+        fileName: string;
+        category?: string;
+        page?: number;
+        noCache?: boolean;
+      }) => {
+        return await invokeWithTimeout<unknown>(
+          "booksource_explore",
+          { fileName, category, page, noCache },
+          35000,
+        );
       },
     }),
 
@@ -472,6 +521,40 @@ function buildTools(sessionId?: string) {
         );
       },
     }),
+
+    run_builtin_tests: tool({
+      description:
+        "运行书源内置 TEST(type) 测试。只有书源已经实现 TEST 函数时使用；可全量运行，也可用 stepFilter 只运行 search/bookInfo/chapterList/chapterContent/explore。",
+      inputSchema: z.object({
+        fileName: z.string().describe("书源文件名（含 .js 后缀）"),
+        timeoutSecs: z.number().optional().describe("总超时秒数，默认 150"),
+        stepFilter: z
+          .enum([
+            "search",
+            "bookInfo",
+            "chapterList",
+            "chapterContent",
+            "explore",
+          ])
+          .optional()
+          .describe("只运行指定 TEST 步骤；留空为全量"),
+      }),
+      execute: async ({
+        fileName,
+        timeoutSecs = 150,
+        stepFilter,
+      }: {
+        fileName: string;
+        timeoutSecs?: number;
+        stepFilter?: string;
+      }) => {
+        return await invokeWithTimeout<unknown>(
+          "booksource_run_tests",
+          { fileName, timeoutSecs, stepFilter },
+          timeoutSecs * 1000 + 5000,
+        );
+      },
+    }),
   };
 }
 
@@ -540,6 +623,396 @@ function safeJsonStringify(value: unknown): string {
   }
 }
 
+type JsonRecord = Record<string, unknown>;
+type NativeFetch = typeof fetch;
+
+const LEGADO_REASONING_PROVIDER = "legadoReasoning";
+
+function isRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringProp(value: unknown, key: string): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const prop = value[key];
+  return typeof prop === "string" && prop.length > 0 ? prop : undefined;
+}
+
+function readRawReasoningContent(value: unknown): string {
+  return (
+    stringProp(value, "reasoning_content") ??
+    stringProp(value, "reasoningContent") ??
+    stringProp(value, "reasoning") ??
+    ""
+  );
+}
+
+function readStoredReasoningContent(part: JsonRecord): string | undefined {
+  const providerOptions = isRecord(part.providerOptions)
+    ? part.providerOptions
+    : undefined;
+  const stored = providerOptions?.[LEGADO_REASONING_PROVIDER];
+  if (isRecord(stored)) {
+    return stringProp(stored, "reasoningContent");
+  }
+  const providerMetadata = isRecord(part.providerMetadata)
+    ? part.providerMetadata
+    : undefined;
+  const storedMetadata = providerMetadata?.[LEGADO_REASONING_PROVIDER];
+  if (isRecord(storedMetadata)) {
+    return stringProp(storedMetadata, "reasoningContent");
+  }
+  return undefined;
+}
+
+function withStoredReasoningContent(
+  part: JsonRecord,
+  reasoningContent: string,
+): JsonRecord {
+  const providerOptions = isRecord(part.providerOptions)
+    ? part.providerOptions
+    : {};
+  const existing = isRecord(providerOptions[LEGADO_REASONING_PROVIDER])
+    ? providerOptions[LEGADO_REASONING_PROVIDER]
+    : {};
+  return {
+    ...part,
+    providerOptions: {
+      ...providerOptions,
+      [LEGADO_REASONING_PROVIDER]: {
+        ...existing,
+        reasoningContent,
+      },
+    },
+  };
+}
+
+function createChatReasoningContentBridge() {
+  const nativeFetch: NativeFetch = globalThis.fetch.bind(globalThis);
+  const reasoningByToolCallId = new Map<string, string>();
+  const reasoningByText = new Map<string, string>();
+  const pendingCaptures = new Set<Promise<void>>();
+
+  function isChatCompletionsRequest(
+    input: Parameters<NativeFetch>[0],
+  ): boolean {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : typeof Request !== "undefined" && input instanceof Request
+            ? input.url
+            : "";
+    return url.includes("/chat/completions");
+  }
+
+  async function waitForPendingCaptures(): Promise<void> {
+    if (pendingCaptures.size === 0) {
+      return;
+    }
+    await Promise.allSettled([...pendingCaptures]);
+  }
+
+  function rememberCapture(capture: {
+    reasoningContent: string;
+    text: string;
+    toolCallIds: Set<string>;
+  }): void {
+    if (!capture.reasoningContent.trim()) {
+      return;
+    }
+    for (const id of capture.toolCallIds) {
+      reasoningByToolCallId.set(id, capture.reasoningContent);
+    }
+    if (capture.text.trim()) {
+      reasoningByText.set(capture.text, capture.reasoningContent);
+    }
+  }
+
+  function collectToolCallIds(value: unknown, target: Set<string>): void {
+    if (!Array.isArray(value)) {
+      return;
+    }
+    for (const item of value) {
+      const id = stringProp(item, "id");
+      if (id) {
+        target.add(id);
+      }
+    }
+  }
+
+  function collectChoice(
+    choice: unknown,
+    capture: {
+      reasoningContent: string;
+      text: string;
+      toolCallIds: Set<string>;
+    },
+  ): void {
+    if (!isRecord(choice)) {
+      return;
+    }
+    const delta = isRecord(choice.delta) ? choice.delta : undefined;
+    const message = isRecord(choice.message) ? choice.message : undefined;
+    const reasoningDelta =
+      readRawReasoningContent(delta) || readRawReasoningContent(message);
+    if (reasoningDelta) {
+      capture.reasoningContent += reasoningDelta;
+    }
+
+    const contentDelta =
+      stringProp(delta, "content") ?? stringProp(message, "content");
+    if (contentDelta) {
+      capture.text += contentDelta;
+    }
+
+    collectToolCallIds(delta?.tool_calls, capture.toolCallIds);
+    collectToolCallIds(message?.tool_calls, capture.toolCallIds);
+  }
+
+  function captureJsonPayload(
+    payload: unknown,
+    capture: {
+      reasoningContent: string;
+      text: string;
+      toolCallIds: Set<string>;
+    },
+  ): void {
+    if (!isRecord(payload) || !Array.isArray(payload.choices)) {
+      return;
+    }
+    for (const choice of payload.choices) {
+      collectChoice(choice, capture);
+    }
+  }
+
+  function captureResponseText(text: string): void {
+    const capture = {
+      reasoningContent: "",
+      text: "",
+      toolCallIds: new Set<string>(),
+    };
+
+    const dataLines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("data:"));
+
+    if (dataLines.length > 0) {
+      for (const line of dataLines) {
+        const data = line.slice(5).trim();
+        if (!data || data === "[DONE]") {
+          continue;
+        }
+        try {
+          captureJsonPayload(JSON.parse(data), capture);
+        } catch {
+          // ignore malformed SSE chunks from compatibility providers
+        }
+      }
+    } else {
+      try {
+        captureJsonPayload(JSON.parse(text), capture);
+      } catch {
+        // ignore non-JSON bodies
+      }
+    }
+
+    rememberCapture(capture);
+  }
+
+  function captureResponse(
+    input: Parameters<NativeFetch>[0],
+    response: Response,
+  ): void {
+    if (!isChatCompletionsRequest(input) || !response.ok) {
+      return;
+    }
+    const capture = response
+      .clone()
+      .text()
+      .then(captureResponseText)
+      .catch(() => {});
+    pendingCaptures.add(capture);
+    capture.finally(() => pendingCaptures.delete(capture));
+  }
+
+  function findReasoningForOpenAIMessage(message: JsonRecord): string {
+    const toolCalls = Array.isArray(message.tool_calls)
+      ? message.tool_calls
+      : [];
+    for (const call of toolCalls) {
+      const id = stringProp(call, "id");
+      if (id) {
+        const reasoning = reasoningByToolCallId.get(id);
+        if (reasoning) {
+          return reasoning;
+        }
+      }
+    }
+
+    const content = message.content;
+    if (typeof content === "string") {
+      return reasoningByText.get(content) ?? "";
+    }
+    return "";
+  }
+
+  async function patchRequestInit(
+    input: Parameters<NativeFetch>[0],
+    init: Parameters<NativeFetch>[1],
+  ): Promise<Parameters<NativeFetch>[1]> {
+    if (!isChatCompletionsRequest(input) || typeof init?.body !== "string") {
+      return init;
+    }
+
+    await waitForPendingCaptures();
+
+    let body: JsonRecord;
+    try {
+      body = JSON.parse(init.body) as JsonRecord;
+    } catch {
+      return init;
+    }
+    if (!Array.isArray(body.messages)) {
+      return init;
+    }
+
+    let changed = false;
+    const messages = body.messages.map((message) => {
+      if (!isRecord(message) || message.role !== "assistant") {
+        return message;
+      }
+      if (typeof message.reasoning_content === "string") {
+        return message;
+      }
+      const reasoningContent = findReasoningForOpenAIMessage(message);
+      if (!reasoningContent) {
+        return message;
+      }
+      changed = true;
+      return { ...message, reasoning_content: reasoningContent };
+    });
+
+    return changed
+      ? { ...init, body: JSON.stringify({ ...body, messages }) }
+      : init;
+  }
+
+  function preloadFromMessages(messages: ModelMessage[]): void {
+    for (const message of messages as unknown[]) {
+      if (!isRecord(message) || message.role !== "assistant") {
+        continue;
+      }
+      const content = message.content;
+      if (!Array.isArray(content)) {
+        continue;
+      }
+      for (const part of content) {
+        if (!isRecord(part)) {
+          continue;
+        }
+        const reasoningContent = readStoredReasoningContent(part);
+        if (!reasoningContent) {
+          continue;
+        }
+        if (part.type === "tool-call") {
+          const toolCallId = stringProp(part, "toolCallId");
+          if (toolCallId) {
+            reasoningByToolCallId.set(toolCallId, reasoningContent);
+          }
+        } else if (part.type === "text") {
+          const text = stringProp(part, "text");
+          if (text) {
+            reasoningByText.set(text, reasoningContent);
+          }
+        }
+      }
+    }
+  }
+
+  function decorateMessages(messages: ModelMessage[]): ModelMessage[] {
+    return messages.map((message) => {
+      const record = message as unknown as JsonRecord;
+      if (record.role !== "assistant") {
+        return message;
+      }
+
+      const content = record.content;
+      if (typeof content === "string") {
+        const reasoningContent = reasoningByText.get(content);
+        if (!reasoningContent) {
+          return message;
+        }
+        return {
+          ...record,
+          content: [
+            withStoredReasoningContent(
+              { type: "text", text: content },
+              reasoningContent,
+            ),
+          ],
+        } as unknown as ModelMessage;
+      }
+
+      if (!Array.isArray(content)) {
+        return message;
+      }
+
+      let changed = false;
+      const nextContent = content.map((part) => {
+        if (!isRecord(part)) {
+          return part;
+        }
+        const existing = readStoredReasoningContent(part);
+        if (part.type === "tool-call") {
+          const toolCallId = stringProp(part, "toolCallId");
+          const reasoningContent =
+            (toolCallId ? reasoningByToolCallId.get(toolCallId) : undefined) ??
+            existing;
+          if (!reasoningContent || existing === reasoningContent) {
+            return part;
+          }
+          changed = true;
+          return withStoredReasoningContent(part, reasoningContent);
+        }
+        if (part.type === "text") {
+          const text = stringProp(part, "text");
+          const reasoningContent =
+            (text ? reasoningByText.get(text) : undefined) ?? existing;
+          if (!reasoningContent || existing === reasoningContent) {
+            return part;
+          }
+          changed = true;
+          return withStoredReasoningContent(part, reasoningContent);
+        }
+        return part;
+      });
+
+      return changed
+        ? ({ ...record, content: nextContent } as unknown as ModelMessage)
+        : message;
+    });
+  }
+
+  const fetchWithReasoningContent: NativeFetch = async (input, init) => {
+    const patchedInit = await patchRequestInit(input, init);
+    const response = await nativeFetch(input, patchedInit);
+    captureResponse(input, response);
+    return response;
+  };
+
+  return {
+    fetch: fetchWithReasoningContent,
+    preloadFromMessages,
+    decorateMessages,
+    waitForPendingCaptures,
+  };
+}
+
 /**
  * 尝试从任意错误对象中提取可读错误信息。
  * 支持 AI SDK 的 APICallError、普通 Error、字符串、JSON 对象等。
@@ -585,14 +1058,21 @@ function formatError(err: unknown): string {
     }
   }
 
-  return parts.join("\n") || "未知错误";
+  const message = parts.join("\n") || "未知错误";
+  if (/reasoning_content|thinking mode/i.test(message)) {
+    return `${message}\n提示：当前版本会为 Chat Completions 兼容接口自动回传新产生的 reasoning_content；如果这是旧会话，或接口没有在流式响应里返回 reasoning_content，请新建任务，或切换到非思考模型 / Responses API 模式。`;
+  }
+  return message;
 }
 
 const TEST_TOOL_NAMES: Record<string, string> = {
+  test_explore: "发现",
   test_search: "搜索",
   test_book_info: "书籍详情",
   test_chapter_list: "章节目录",
   test_chapter_content: "章节正文",
+  test_purchase_chapter: "购买章节",
+  run_builtin_tests: "内置 TEST",
 };
 
 // ── 主 Agent 函数 ─────────────────────────────────────────────────────────
@@ -661,6 +1141,15 @@ export async function runAiAgent(
       : `开始任务：${userPrompt}`,
   );
 
+  const useChatCompletions = (config.apiMode ?? "chat") === "chat";
+  const reasoningBridge = useChatCompletions
+    ? createChatReasoningContentBridge()
+    : undefined;
+  if (reasoningBridge) {
+    reasoningBridge.preloadFromMessages(prevMessages);
+    prevMessages = reasoningBridge.decorateMessages(prevMessages);
+  }
+
   // 构建发送给模型的消息列表（历史 + 本次用户指令）
   const inputMessages: ModelMessage[] = [
     ...prevMessages,
@@ -671,15 +1160,15 @@ export async function runAiAgent(
     const openaiProvider = createOpenAI({
       apiKey: config.apiKey || "placeholder",
       baseURL: config.apiUrl.replace(/\/$/, ""),
+      ...(reasoningBridge ? { fetch: reasoningBridge.fetch } : {}),
     });
 
     // 根据 apiMode 选择请求路径：
     //   chat     → openaiProvider.chat(model)  → POST /v1/chat/completions
     //   responses → openaiProvider(model)         → POST /v1/responses
-    const llmModel =
-      (config.apiMode ?? "chat") === "responses"
-        ? openaiProvider(config.model)
-        : openaiProvider.chat(config.model);
+    const llmModel = !useChatCompletions
+      ? openaiProvider(config.model)
+      : openaiProvider.chat(config.model);
 
     // toolCallId → 对应的 tool_call 活动 id（用于 tool-result 时回填）
     const toolCallActivityMap = new Map<string, number>();
@@ -785,6 +1274,8 @@ export async function runAiAgent(
       }
     }
 
+    await reasoningBridge?.waitForPendingCaptures();
+
     // 获取最终文字回复（多步后通常是总结性内容）
     let finalText = "";
     try {
@@ -835,6 +1326,9 @@ export async function runAiAgent(
           ];
         }
       }
+      newHistory = reasoningBridge
+        ? reasoningBridge.decorateMessages(newHistory)
+        : newHistory;
       useAiSessionsStore().updateSession(sessionId, {
         activities: state.activities,
         testResults: state.testResults,

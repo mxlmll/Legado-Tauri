@@ -52,6 +52,12 @@ export interface AppConfig {
   ui_theme: string;
   /** 是否启用 Aplus 数据追踪 */
   ui_enable_aplus_tracking: boolean;
+  /** 朗读播放期间保持屏幕唤醒（Android） */
+  power_keep_awake_on_tts: boolean;
+  /** 阅读页保持唤醒策略："off" | "always" | "timeout" */
+  power_reader_awake_mode: string;
+  /** 阅读页自定义唤醒时长（秒） */
+  power_reader_awake_timeout_secs: number;
   /** Windows 主窗口上次退出时的逻辑宽度，0 表示未记录 */
   windows_main_window_width: number;
   /** Windows 主窗口上次退出时的逻辑高度，0 表示未记录 */
@@ -158,6 +164,9 @@ const config = ref<AppConfig>({
   ui_layout_mode: 'auto',
   ui_theme: 'auto',
   ui_enable_aplus_tracking: true,
+  power_keep_awake_on_tts: false,
+  power_reader_awake_mode: 'off',
+  power_reader_awake_timeout_secs: 600,
   windows_main_window_width: 0,
   windows_main_window_height: 0,
   video_player_type: 'videojs',
