@@ -34,6 +34,8 @@ export interface BookSourceMeta {
   minDelayMs: number;
   /** @require 依赖 JS 的 URL 列表（按声明顺序），书源加载前会依序 eval */
   requireUrls: string[];
+  /** 文本扫描检测到的顶层 explore 函数标志（无需启动 JS 引擎） */
+  hasExplore?: boolean;
 }
 
 export interface ValidationResult {
@@ -51,6 +53,27 @@ export interface BookSourceFormatInfo {
 
 export interface BookSourceValidationResult extends ValidationResult {
   meta: BookSourceFormatInfo;
+}
+
+export interface LegacyJsonImportResult {
+  imported: number;
+  skipped: number;
+  files: string[];
+  errors: string[];
+}
+
+export interface BookSourceDeleteItem {
+  fileName: string;
+  sourceDir?: string | null;
+}
+
+export interface BookSourceDeleteError extends BookSourceDeleteItem {
+  message: string;
+}
+
+export interface BookSourceBatchDeleteResult {
+  deleted: BookSourceDeleteItem[];
+  errors: BookSourceDeleteError[];
 }
 
 const BOOK_SOURCE_META_SCAN_LINES = 80;
@@ -379,6 +402,28 @@ export async function saveBookSource(
   );
 }
 
+/** 将开源阅读/Legado Android JSON 书源内容转换为 Tauri JS 书源并安装。 */
+export async function importLegacyJsonText(
+  content: string,
+): Promise<LegacyJsonImportResult> {
+  return invokeWithTimeout<LegacyJsonImportResult>(
+    "booksource_import_legacy_json_text",
+    { content },
+    70000,
+  );
+}
+
+/** 从远程 URL 下载开源阅读/Legado Android JSON 书源，转换为 Tauri JS 书源并安装。 */
+export async function importLegacyJsonUrl(
+  url: string,
+): Promise<LegacyJsonImportResult> {
+  return invokeWithTimeout<LegacyJsonImportResult>(
+    "booksource_import_legacy_json_url",
+    { url },
+    70000,
+  );
+}
+
 /** 删除书源文件 */
 export async function deleteBookSource(
   fileName: string,
@@ -388,6 +433,22 @@ export async function deleteBookSource(
     "booksource_delete",
     { fileName, sourceDir: sourceDir ?? null },
     10000,
+  );
+}
+
+/** 批量删除书源文件，后端会去重并只触发一次列表刷新事件 */
+export async function deleteBookSources(
+  items: BookSourceDeleteItem[],
+): Promise<BookSourceBatchDeleteResult> {
+  return invokeWithTimeout<BookSourceBatchDeleteResult>(
+    "booksource_delete_batch",
+    {
+      items: items.map((item) => ({
+        fileName: item.fileName,
+        sourceDir: item.sourceDir ?? null,
+      })),
+    },
+    60000,
   );
 }
 

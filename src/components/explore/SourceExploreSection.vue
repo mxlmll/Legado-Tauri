@@ -10,7 +10,9 @@ import {
   getUrlFromExploreResult,
 } from '../../composables/useExploreBridge';
 import {
+  type ExploreCategoryItem,
   getCachedExploreCategories,
+  normalizeExploreCategories,
   setCachedExploreCategories,
   getCachedExploreBooks,
   setCachedExploreBooks,
@@ -45,13 +47,21 @@ const { runExplore, clearExploreCache } = useScriptBridgeStore();
 // MIN_LOADING_MS: 已注释掉的 loading 最小展示时长（保留供将来启用）
 
 // ── 分类 ──────────────────────────────────────────────────────────────────
-const categories = ref<string[]>([]);
+const categories = ref<ExploreCategoryItem[]>([]);
 const catLoading = ref(false); // 有缓存时不显示骨架屏
 const catError = ref('');
 
-/** 比较两个字符串数组是否内容相同（顺序敏感） */
-function stringArraysEqual(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((v, i) => v === b[i]);
+/** 比较两个分类数组是否内容相同（顺序敏感） */
+function categoryArraysEqual(a: ExploreCategoryItem[], b: ExploreCategoryItem[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (v, i) =>
+        v.name === b[i].name &&
+        v.url === b[i].url &&
+        categoryStyleKey(v) === categoryStyleKey(b[i]),
+    )
+  );
 }
 
 /** 比较两个书籍列表是否相同（用 bookUrl 作为稳定标识符） */
@@ -82,6 +92,46 @@ let booksRequestToken = 0;
 
 // ── 翻页 ─────────────────────────────────────────────────────────────────
 const currentPage = ref(1);
+
+function categoryKey(category: ExploreCategoryItem | string): string {
+  return typeof category === 'string' ? category : category.url || category.name;
+}
+
+function categoryLabel(category: ExploreCategoryItem | string): string {
+  return typeof category === 'string' ? category : category.name;
+}
+
+function findCategoryByKey(key: string): ExploreCategoryItem | undefined {
+  return categories.value.find((cat) => cat.url === key || cat.name === key);
+}
+
+function firstCategoryKey(): string {
+  return categories.value.length ? categoryKey(categories.value[0]) : '';
+}
+
+function categoryStyleKey(category: ExploreCategoryItem): string {
+  const style = category.style;
+  return `${style?.layout_flexGrow ?? ''}:${style?.layout_flexBasisPercent ?? ''}`;
+}
+
+function categoryMobileStyle(category: ExploreCategoryItem): Record<string, string> | undefined {
+  const style = category.style;
+  if (!style) {
+    return undefined;
+  }
+  const vars: Record<string, string> = {};
+  const flexGrow = style.layout_flexGrow;
+  if (flexGrow !== undefined && Number.isFinite(flexGrow)) {
+    vars['--ses-cat-flex-grow'] = String(flexGrow);
+  }
+  const flexBasis = style.layout_flexBasisPercent;
+  if (flexBasis !== undefined && Number.isFinite(flexBasis)) {
+    const rawBasis = Number(flexBasis);
+    const percent = rawBasis > 1 ? rawBasis : rawBasis * 100;
+    vars['--ses-cat-flex-basis'] = `${Math.max(0, Math.min(100, percent))}%`;
+  }
+  return Object.keys(vars).length ? vars : undefined;
+}
 
 const paginationPages = computed(() => {
   const start = Math.max(1, currentPage.value - 3);
@@ -118,7 +168,10 @@ async function loadCategories(restoreCategory?: string, skipBooks = false) {
         void loadBooks('');
       } else {
         const target =
-          restoreCategory && cached.includes(restoreCategory) ? restoreCategory : cached[0];
+          restoreCategory &&
+          cached.some((cat) => cat.url === restoreCategory || cat.name === restoreCategory)
+            ? restoreCategory
+            : cached[0];
         void loadBooks(target);
       }
     }
@@ -132,13 +185,13 @@ async function loadCategories(restoreCategory?: string, skipBooks = false) {
         if (!Array.isArray(raw)) {
           return;
         }
-        const fresh = raw.filter((v): v is string => typeof v === 'string');
+        const fresh = normalizeExploreCategories(raw);
         // 仅有变化才更新缓存 + 重渲染，内容与缓存一致时无需任何操作
-        if (!stringArraysEqual(categories.value, fresh)) {
+        if (!categoryArraysEqual(categories.value, fresh)) {
           categories.value = fresh;
           setCachedExploreCategories(props.source.fileName, fresh);
           // 当前分类不在新列表中，切换到首个分类
-          if (fresh.length && !fresh.includes(activeCategory.value)) {
+          if (fresh.length && !findCategoryByKey(activeCategory.value)) {
             void loadBooks(fresh[0]);
           }
         }
@@ -157,9 +210,9 @@ async function loadCategories(restoreCategory?: string, skipBooks = false) {
       return;
     }
     if (Array.isArray(raw)) {
-      const cats = raw.filter((v): v is string => typeof v === 'string');
+      const cats = normalizeExploreCategories(raw);
       // [] 或 [''] 表示单页源，隐藏分类标签栏，直接加载内容
-      const isSinglePage = cats.length === 0 || (cats.length === 1 && cats[0] === '');
+      const isSinglePage = cats.length === 0 || (cats.length === 1 && categoryKey(cats[0]) === '');
       categories.value = isSinglePage ? [] : cats;
       // 首次获取到分类后立即缓存（单页源缓存空数组以便下次跳过骨架屏）
       setCachedExploreCategories(props.source.fileName, categories.value);
@@ -168,14 +221,17 @@ async function loadCategories(restoreCategory?: string, skipBooks = false) {
           await loadBooks('');
         } else if (cats.length) {
           const target =
-            restoreCategory && cats.includes(restoreCategory) ? restoreCategory : cats[0];
+            restoreCategory &&
+            cats.some((cat) => cat.url === restoreCategory || cat.name === restoreCategory)
+              ? restoreCategory
+              : cats[0];
           await loadBooks(target);
         }
       }
     } else if (isUrlExploreResult(raw) || isHtmlExploreResult(raw)) {
       // 网页发现源：GETALL 直接返回内容，使用单一"发现"分类
-      categories.value = ['发现'];
-      setCachedExploreCategories(props.source.fileName, ['发现']);
+      categories.value = [{ name: '发现', url: '发现' }];
+      setCachedExploreCategories(props.source.fileName, categories.value);
       if (!skipBooks) {
         activeCategory.value = '发现';
         booksEverLoaded.value = true;
@@ -200,9 +256,11 @@ async function loadCategories(restoreCategory?: string, skipBooks = false) {
   }
 }
 
-async function loadBooks(category: string, page = 1) {
+async function loadBooks(category: ExploreCategoryItem | string, page = 1) {
   const requestToken = ++booksRequestToken;
-  activeCategory.value = category;
+  const key = categoryKey(category);
+  const label = categoryLabel(category);
+  activeCategory.value = key;
   currentPage.value = page;
   booksError.value = '';
   booksEverLoaded.value = true;
@@ -212,7 +270,7 @@ async function loadBooks(category: string, page = 1) {
   forceRefreshBooksFlag = false;
 
   if (page === 1 && !forceRefresh) {
-    const cached = getCachedExploreBooks(props.source.fileName, category);
+    const cached = getCachedExploreBooks(props.source.fileName, key);
     if (cached) {
       // 立即展示缓存数据，不显示 loading 遮罩
       htmlContent.value = null;
@@ -223,7 +281,7 @@ async function loadBooks(category: string, page = 1) {
       // 后台静默刷新
       void (async () => {
         try {
-          const raw = await runExplore(props.source.fileName, category, 1);
+          const raw = await runExplore(props.source.fileName, key, 1);
           if (requestToken !== booksRequestToken) {
             return;
           }
@@ -242,7 +300,7 @@ async function loadBooks(category: string, page = 1) {
           }
           const fresh = Array.isArray(raw) ? (raw as BookItem[]) : [];
           // 更新缓存（无论是否有变化都刷新时间戳）
-          setCachedExploreBooks(props.source.fileName, category, fresh);
+          setCachedExploreBooks(props.source.fileName, key, fresh);
           // 仅当内容有变化时才更新视图
           if (!bookListsEqual(books.value, fresh)) {
             books.value = fresh;
@@ -258,7 +316,7 @@ async function loadBooks(category: string, page = 1) {
   // ── 无缓存 / 翻页 / 强制刷新：正常 loading 流程 ─────────────────────────
   booksLoading.value = true;
   try {
-    const raw = await runExplore(props.source.fileName, category, page);
+    const raw = await runExplore(props.source.fileName, key, page);
     if (requestToken !== booksRequestToken) {
       return;
     }
@@ -280,13 +338,13 @@ async function loadBooks(category: string, page = 1) {
       books.value = freshBooks;
       // 第 1 页结果写入持久化缓存
       if (page === 1) {
-        setCachedExploreBooks(props.source.fileName, category, freshBooks);
+        setCachedExploreBooks(props.source.fileName, key, freshBooks);
       }
     }
   } catch (e: unknown) {
     if (requestToken === booksRequestToken) {
       booksError.value = e instanceof Error ? e.message : String(e);
-      message.error(`加载 ${category} 失败: ${booksError.value}`);
+      message.error(`加载 ${label} 失败: ${booksError.value}`);
     }
   } finally {
     if (requestToken === booksRequestToken) {
@@ -322,7 +380,7 @@ async function ensureLoadedWhenEligible() {
   ) {
     // 分类已预加载完毕，刚切换到此 tab，补加载书籍内容
     pendingBooksLoad.value = false;
-    await loadBooks(activeCategory.value || categories.value[0]);
+    await loadBooks(activeCategory.value || firstCategoryKey());
   }
 }
 
@@ -407,13 +465,14 @@ watch(
     >
       <div v-if="categories.length > 0" class="ses__cats">
         <button
-          v-for="cat in categories"
-          :key="cat"
+          v-for="(cat, index) in categories"
+          :key="`${cat.url}:${index}`"
           class="ses__cat-btn"
-          :class="{ 'ses__cat-btn--active': cat === activeCategory }"
+          :class="{ 'ses__cat-btn--active': categoryKey(cat) === activeCategory }"
+          :style="categoryMobileStyle(cat)"
           @click="loadBooks(cat)"
         >
-          {{ cat }}
+          {{ cat.name }}
         </button>
       </div>
 
@@ -541,6 +600,10 @@ watch(
   flex-wrap: wrap;
 }
 .ses__cat-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   padding: 4px var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-1);
@@ -553,6 +616,14 @@ watch(
     color var(--dur-fast) var(--ease-standard),
     background var(--dur-fast) var(--ease-standard);
   white-space: nowrap;
+}
+@media (pointer: coarse), (max-width: 640px) {
+  .ses__cat-btn {
+    flex: var(--ses-cat-flex-grow, 0) 0 var(--ses-cat-flex-basis, auto);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 @media (hover: hover) and (pointer: fine) {
   .ses__cat-btn:hover {

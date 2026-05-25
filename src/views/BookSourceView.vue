@@ -187,10 +187,17 @@ const newSourceOptions = [
   { label: "视频书源", key: "new-video" },
 ];
 
+const legacyJsonImportOptions = [
+  { label: "选择文件导入", key: "import-legacy-file" },
+  { label: "输入 URL 导入", key: "import-legacy-url" },
+];
+
 const mobileMenuOptions = computed(() => [
   { label: "目录管理", key: "dir" },
   { label: "导入本地", key: "import-file" },
   { label: "导入在线", key: "import-online" },
+  { label: "阅读源文件导入", key: "import-legacy-file" },
+  { label: "阅读源 URL 导入", key: "import-legacy-url" },
   { label: "导出书源", key: "export-file" },
   { label: "新建书源", key: "new", children: newSourceOptions },
   { label: "全部重载", key: "reload", disabled: loading.value },
@@ -223,6 +230,12 @@ function handleMobileMenuSelect(key: string) {
       break;
     case "import-online":
       installedRef.value?.importFromUrl();
+      break;
+    case "import-legacy-file":
+      installedRef.value?.importLegacyJsonFromFile();
+      break;
+    case "import-legacy-url":
+      installedRef.value?.importLegacyJsonFromUrl();
       break;
     case "export-file":
       void installedRef.value?.exportSources();
@@ -389,6 +402,13 @@ onUnmounted(() => {
               @click="installedRef?.importFromUrl()"
               >导入在线</n-button
             >
+            <n-dropdown
+              trigger="click"
+              :options="legacyJsonImportOptions"
+              @select="handleMobileMenuSelect"
+            >
+              <n-button size="small" quaternary>导入开源阅读书源</n-button>
+            </n-dropdown>
             <n-dropdown
               trigger="click"
               :options="newSourceOptions"

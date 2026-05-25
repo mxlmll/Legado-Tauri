@@ -608,8 +608,9 @@ onMounted(async () => {
       showDisclaimer.value = true;
     }
     await bookSourceStore.loadSources();
-    // 等待能力检测完成后 explorableSources 才有数据，再恢复上次选中的书源
-    await bookSourceStore.detectAllCapabilities();
+    // loadSources 完成后 explorableSources 已通过 hasExplore 元数据立即可用，
+    // 无需 await detectAllCapabilities（已在 loadSources 内后台启动）。
+    // 恢复上次选中的书源 tab
     if (
       !bookSourceStore.explorableSources.some(
         (s) => s.fileName === activeSourceTab.value,

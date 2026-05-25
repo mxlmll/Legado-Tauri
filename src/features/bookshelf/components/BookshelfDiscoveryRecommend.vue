@@ -24,8 +24,10 @@ import {
   isUrlExploreResult,
 } from "@/composables/useExploreBridge";
 import {
+  type ExploreCategoryItem,
   getCachedExploreBooks,
   getCachedExploreCategories,
+  normalizeExploreCategories,
   preloadExploreBooksCache,
   preloadExploreCategoryCache,
   setCachedExploreBooks,
@@ -159,7 +161,7 @@ let moduleIdSeed = 0;
 const showSettings = ref(false);
 const editingModuleId = ref<string | null>(null);
 const draft = reactive<RecommendationConfig>({ ...DEFAULT_CONFIG });
-const draftCategories = ref<string[]>([]);
+const draftCategories = ref<ExploreCategoryItem[]>([]);
 const draftCategoriesLoading = ref(false);
 const draftCategoriesError = ref("");
 let categoryRequestToken = 0;
@@ -557,19 +559,17 @@ async function refreshRecommendation(module: RecommendationModule) {
   }
 }
 
-function normalizeCategoriesResult(raw: unknown): string[] | null {
+function normalizeCategoriesResult(raw: unknown): ExploreCategoryItem[] | null {
   if (isUrlExploreResult(raw) || isHtmlExploreResult(raw)) {
     return null;
   }
   if (!Array.isArray(raw)) {
     return [];
   }
-  const categories = raw.filter(
-    (value): value is string => typeof value === "string",
-  );
+  const categories = normalizeExploreCategories(raw);
   if (
     categories.length === 0 ||
-    (categories.length === 1 && categories[0] === "")
+    (categories.length === 1 && categories[0].url === "")
   ) {
     return [];
   }
@@ -577,7 +577,7 @@ function normalizeCategoriesResult(raw: unknown): string[] | null {
 }
 
 function applyDraftCategories(
-  categories: string[],
+  categories: ExploreCategoryItem[],
   preferredCategory?: string,
 ) {
   draftCategories.value = categories;
@@ -585,14 +585,20 @@ function applyDraftCategories(
     draft.category = "";
     return;
   }
-  if (draft.category && categories.includes(draft.category)) {
+  if (
+    draft.category &&
+    categories.some((category) => category.url === draft.category)
+  ) {
     return;
   }
-  if (preferredCategory && categories.includes(preferredCategory)) {
+  if (
+    preferredCategory &&
+    categories.some((category) => category.url === preferredCategory)
+  ) {
     draft.category = preferredCategory;
     return;
   }
-  draft.category = categories[0];
+  draft.category = categories[0].url;
 }
 
 async function loadDraftCategories(
@@ -1426,17 +1432,17 @@ defineExpose({ openSettings });
               默认发现
             </button>
             <button
-              v-for="category in draftCategories"
-              :key="category"
+              v-for="(category, index) in draftCategories"
+              :key="`${category.url}:${index}`"
               class="bs-rec-settings__cat"
               :class="{
-                'bs-rec-settings__cat--active': draft.category === category,
+                'bs-rec-settings__cat--active': draft.category === category.url,
               }"
               type="button"
-              @click="selectCategory(category)"
+              @click="selectCategory(category.url)"
             >
-              <Check v-if="draft.category === category" :size="13" />
-              {{ category }}
+              <Check v-if="draft.category === category.url" :size="13" />
+              {{ category.name }}
             </button>
             <span v-if="!draft.fileName" class="bs-rec-settings__empty"
               >先选择书源</span

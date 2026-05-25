@@ -1,5 +1,5 @@
-import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { defineStore } from "pinia";
+import { computed, ref, shallowReactive } from "vue";
 import {
   applyBookSourceUpdate,
   checkBookSourceUpdate,
@@ -11,8 +11,8 @@ import {
   toggleBookSource,
   type BookSourceMeta,
   type UpdateCheckResult,
-} from '@/composables/useBookSource';
-import { eventListenSync } from '@/composables/useEventBus';
+} from "@/composables/useBookSource";
+import { eventListenSync } from "@/composables/useEventBus";
 import {
   ensureFrontendNamespaceLoaded,
   getFrontendStorageItem,
@@ -23,23 +23,23 @@ import {
   removeFrontendStorageItem,
   setFrontendStorageItem,
   setFrontendStorageJson,
-} from '@/composables/useFrontendStorage';
-import { safeRandomUUID } from '@/utils/uuid';
+} from "@/composables/useFrontendStorage";
+import { safeRandomUUID } from "@/utils/uuid";
 
 // ── 书源能力存储键（继承自 useSourceCapabilities）────────────────────────
-const STORAGE_NAMESPACE = 'source.capabilities';
+const STORAGE_NAMESPACE = "source.capabilities";
 /** 能力缓存条目前缀：cap_{fileName} → 逗号分隔函数名列表 */
-const CAP_KEY_PREFIX = 'cap_';
+const CAP_KEY_PREFIX = "cap_";
 
 // ── 书源更新检查 ─────────────────────────────────────────────────────────
-const UPDATE_NS = 'source.updates';
-const LAST_CHECK_KEY = 'lastCheckedAt';
+const UPDATE_NS = "source.updates";
+const LAST_CHECK_KEY = "lastCheckedAt";
 /** 最短检查间隔：1 小时 */
 const MIN_CHECK_INTERVAL_MS = 60 * 60 * 1000;
-const LS_EXPLORE_KEY = 'source-explore-disabled';
-const LS_SEARCH_KEY = 'source-search-disabled';
-const EXPLORE_KEY = 'exploreDisabled';
-const SEARCH_KEY = 'searchDisabled';
+const LS_EXPLORE_KEY = "source-explore-disabled";
+const LS_SEARCH_KEY = "source-search-disabled";
+const EXPLORE_KEY = "exploreDisabled";
+const SEARCH_KEY = "searchDisabled";
 
 function parseDisabledSet(raw: string | null): Set<string> {
   if (!raw) {
@@ -67,16 +67,16 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
-  if (typeof error === 'string') {
+  if (typeof error === "string") {
     return error;
   }
-  if (typeof error === 'object' && error !== null) {
-    const message = Reflect.get(error, 'message');
-    if (typeof message === 'string') {
+  if (typeof error === "object" && error !== null) {
+    const message = Reflect.get(error, "message");
+    if (typeof message === "string") {
       return message;
     }
-    const content = Reflect.get(error, 'content');
-    if (typeof content === 'string') {
+    const content = Reflect.get(error, "content");
+    if (typeof content === "string") {
       return content;
     }
   }
@@ -87,15 +87,15 @@ function isStreamingListUnsupported(error: unknown): boolean {
   const message = getErrorMessage(error);
   const normalized = message.toLowerCase();
   return (
-    message.includes('booksource_list_streaming') &&
-    (message.includes('未知命令') ||
-      message.includes('未实现命令') ||
-      normalized.includes('unknown command') ||
-      normalized.includes('not implemented'))
+    message.includes("booksource_list_streaming") &&
+    (message.includes("未知命令") ||
+      message.includes("未实现命令") ||
+      normalized.includes("unknown command") ||
+      normalized.includes("not implemented"))
   );
 }
 
-export const useBookSourceStore = defineStore('bookSource', () => {
+export const useBookSourceStore = defineStore("bookSource", () => {
   // ── 书源列表状态 ─────────────────────────────────────────────────────
   const sources = ref<BookSourceMeta[]>([]);
   const sourceDirs = ref<string[]>([]);
@@ -106,13 +106,15 @@ export const useBookSourceStore = defineStore('bookSource', () => {
   let _loadInFlight: Promise<void> | null = null;
   let _detectAllInFlight: Promise<void> | null = null;
   /** 当前活跃的流式加载请求 ID，用于过滤过期事件 */
-  let _streamRequestId = '';
+  let _streamRequestId = "";
   // ── 更新检查结果 ─────────────────────────────────────────────────────────
   /** 上次检查发现有可用更新的书源列表（含版本对比信息） */
   const pendingUpdates = ref<UpdateCheckResult[]>([]);
   let updatesCheckedAt = 0;
   // ── 能力检测缓存 ─────────────────────────────────────────────────────
-  const fnsCache = ref<Record<string, Set<string>>>({});
+  // shallowReactive：fnsCache[key]=val 只通知访问了该 key 的 computed，
+  // 实现 buffer-append 语义——新书源逐条追加进发现列表，而非全量重渲染。
+  const fnsCache = shallowReactive<Record<string, Set<string>>>({});
 
   // ── 用户开关（探索/搜索禁用集合）────────────────────────────────────
   const exploreDisabled = ref(loadDisabledSet(LS_EXPLORE_KEY));
@@ -124,7 +126,9 @@ export const useBookSourceStore = defineStore('bookSource', () => {
   const explorableSources = computed(() =>
     enabledSources.value.filter(
       (s) =>
-        (s.sourceType === 'webpage' || fnsCache.value[s.fileName]?.has('explore')) &&
+        (s.sourceType === "webpage" ||
+          s.hasExplore === true ||
+          fnsCache[s.fileName]?.has("explore")) &&
         !exploreDisabled.value.has(s.fileName),
     ),
   );
@@ -132,14 +136,15 @@ export const useBookSourceStore = defineStore('bookSource', () => {
   const searchableSources = computed(() =>
     enabledSources.value.filter(
       (s) =>
-        s.sourceType !== 'webpage' &&
-        fnsCache.value[s.fileName]?.has('search') &&
+        s.sourceType !== "webpage" &&
+        fnsCache[s.fileName]?.has("search") &&
         !searchDisabled.value.has(s.fileName),
     ),
   );
 
   const getSourceByFileName = computed(
-    () => (fileName: string) => sources.value.find((s) => s.fileName === fileName),
+    () => (fileName: string) =>
+      sources.value.find((s) => s.fileName === fileName),
   );
 
   // ── Actions ──────────────────────────────────────────────────────────
@@ -151,7 +156,9 @@ export const useBookSourceStore = defineStore('bookSource', () => {
    */
   function applySourcesBatch(next: BookSourceMeta[]): void {
     const nextByFileName = new Map(next.map((s) => [s.fileName, s]));
-    const currentByFileName = new Map(sources.value.map((s) => [s.fileName, s]));
+    const currentByFileName = new Map(
+      sources.value.map((s) => [s.fileName, s]),
+    );
 
     // 移除已删除的项（逆序遍历避免索引偏移）
     for (let i = sources.value.length - 1; i >= 0; i--) {
@@ -191,7 +198,10 @@ export const useBookSourceStore = defineStore('bookSource', () => {
         _streamRequestId = requestId;
 
         // 先并发获取目录信息
-        const [dir, dirs] = await Promise.all([getBookSourceDir(), getBookSourceDirs()]);
+        const [dir, dirs] = await Promise.all([
+          getBookSourceDir(),
+          getBookSourceDirs(),
+        ]);
         sourceDirs.value = [dir, ...dirs.filter((d) => d !== dir)];
 
         // 设置流式事件监听（必须在调用命令前注册，避免错过首批）
@@ -202,7 +212,7 @@ export const useBookSourceStore = defineStore('bookSource', () => {
             done: boolean;
             total?: number;
             error?: string;
-          }>('booksource:batch', (event) => {
+          }>("booksource:batch", (event) => {
             const { requestId: id, items, done, error } = event.payload;
 
             // 非当前请求的批次（过期流）：等 done 时自动清理监听
@@ -220,9 +230,11 @@ export const useBookSourceStore = defineStore('bookSource', () => {
 
             if (done) {
               // 全部到达后按名称排序后增量合并，不清空现有列表
-              applySourcesBatch(freshItems.toSorted((a, b) => a.name.localeCompare(b.name)));
+              applySourcesBatch(
+                freshItems.toSorted((a, b) => a.name.localeCompare(b.name)),
+              );
               unlisten();
-              if (typeof error === 'string' && error.length > 0) {
+              if (typeof error === "string" && error.length > 0) {
                 reject(new Error(error));
               } else {
                 resolve();
@@ -236,14 +248,18 @@ export const useBookSourceStore = defineStore('bookSource', () => {
               unlisten();
               listBookSources()
                 .then((items) => {
-                  const sorted = items.toSorted((a, b) => a.name.localeCompare(b.name));
+                  const sorted = items.toSorted((a, b) =>
+                    a.name.localeCompare(b.name),
+                  );
                   applySourcesBatch(sorted);
                   streamingLoaded.value = sources.value.length;
                   resolve();
                 })
                 .catch((fallbackErr: unknown) => {
                   reject(
-                    fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr)),
+                    fallbackErr instanceof Error
+                      ? fallbackErr
+                      : new Error(String(fallbackErr)),
                   );
                 });
               return;
@@ -255,7 +271,9 @@ export const useBookSourceStore = defineStore('bookSource', () => {
 
         // 加载完书源列表后自动触发能力检测与更新检查（非阻塞，后台跑）
         void detectAllCapabilities();
-        void ensureFrontendNamespaceLoaded(UPDATE_NS).then(() => checkUpdatesIfStale());
+        void ensureFrontendNamespaceLoaded(UPDATE_NS).then(() =>
+          checkUpdatesIfStale(),
+        );
       } finally {
         loading.value = false;
         _loadInFlight = null;
@@ -277,67 +295,103 @@ export const useBookSourceStore = defineStore('bookSource', () => {
   async function ensureCapsLoaded(): Promise<void> {
     await ensureFrontendNamespaceLoaded(STORAGE_NAMESPACE);
     const stored = listFrontendStorageNamespaceSync(STORAGE_NAMESPACE);
-    const patch: Record<string, Set<string>> = {};
     for (const [key, val] of Object.entries(stored)) {
       if (!key.startsWith(CAP_KEY_PREFIX)) {
         continue;
       }
       const fn = key.slice(CAP_KEY_PREFIX.length);
-      if (!fnsCache.value[fn]) {
-        patch[fn] = new Set(val ? val.split(',').filter(Boolean) : []);
+      if (!fnsCache[fn]) {
+        // 逐条写入 shallowReactive，每条只触发读了该 key 的 computed
+        fnsCache[fn] = new Set(val ? val.split(",").filter(Boolean) : []);
       }
-    }
-    if (Object.keys(patch).length > 0) {
-      fnsCache.value = { ...fnsCache.value, ...patch };
     }
   }
 
   /** 检测单个书源的函数能力（带缓存，结果持久化到存储） */
   async function detectCapabilities(fileName: string): Promise<Set<string>> {
-    if (fnsCache.value[fileName]) {
-      return fnsCache.value[fileName];
+    if (fnsCache[fileName]) {
+      return fnsCache[fileName];
     }
     try {
       const raw = await evalBookSource(fileName);
       const fns = new Set(
-        (raw ?? '')
-          .split(',')
+        (raw ?? "")
+          .split(",")
           .map((s) => s.trim())
           .filter(Boolean),
       );
-      fnsCache.value = { ...fnsCache.value, [fileName]: fns };
-      // 仅当检测结果与已存储值不同时才持久化（避免缓存数据的冗余写入）
-      const newVal = [...fns].join(',');
-      const storedVal = getFrontendStorageItem(STORAGE_NAMESPACE, CAP_KEY_PREFIX + fileName);
+      // shallowReactive 直接赋值，只触发读了该 fileName key 的 computed
+      fnsCache[fileName] = fns;
+      const newVal = [...fns].join(",");
+      const storedVal = getFrontendStorageItem(
+        STORAGE_NAMESPACE,
+        CAP_KEY_PREFIX + fileName,
+      );
       if (storedVal !== newVal) {
-        setFrontendStorageItem(STORAGE_NAMESPACE, CAP_KEY_PREFIX + fileName, newVal);
+        setFrontendStorageItem(
+          STORAGE_NAMESPACE,
+          CAP_KEY_PREFIX + fileName,
+          newVal,
+        );
       }
       return fns;
     } catch {
       const empty = new Set<string>();
-      fnsCache.value = { ...fnsCache.value, [fileName]: empty };
+      fnsCache[fileName] = empty;
       return empty;
     }
   }
 
-  /** 批量检测所有启用书源的能力（5 并发，重复调用复用同一个 Promise） */
+  /** 批量检测所有启用书源的能力（5 并发，重复调用复用同一 Promise）
+   * fnsCache 是 shallowReactive：每次 fnsCache[fileName]=fns 只通知
+   * 读了该 key 的 computed，实现逐条追加（buffer-append）而非整页刷新。
+   */
   function detectAllCapabilities(): Promise<void> {
     if (_detectAllInFlight) {
       return _detectAllInFlight;
     }
     const enabled = sources.value.filter((s) => s.enabled);
-    const pending = enabled.filter((src) => !fnsCache.value[src.fileName]);
+    const pending = enabled.filter((src) => !fnsCache[src.fileName]);
     if (pending.length === 0) {
       return Promise.resolve();
     }
-    // 此处 pending 已排除了缓存命中的书源，ensureCapsLoaded 由 ExploreView 提前调用
     _detectAllInFlight = (async () => {
       capabilityDetecting.value = true;
       const CONCURRENCY = 5;
       try {
         for (let i = 0; i < pending.length; i += CONCURRENCY) {
           await Promise.all(
-            pending.slice(i, i + CONCURRENCY).map((src) => detectCapabilities(src.fileName)),
+            pending.slice(i, i + CONCURRENCY).map(async (src) => {
+              // 并发的单片检测已完成则复用（不重复 eval）
+              if (fnsCache[src.fileName]) return;
+              try {
+                const raw = await evalBookSource(src.fileName);
+                const fns = new Set(
+                  (raw ?? "")
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                );
+                const newVal = [...fns].join(",");
+                const storedVal = getFrontendStorageItem(
+                  STORAGE_NAMESPACE,
+                  CAP_KEY_PREFIX + src.fileName,
+                );
+                if (storedVal !== newVal) {
+                  setFrontendStorageItem(
+                    STORAGE_NAMESPACE,
+                    CAP_KEY_PREFIX + src.fileName,
+                    newVal,
+                  );
+                }
+                // 直接写入 shallowReactive：只通知依赖了 src.fileName 这条 key
+                // 的 computed（如 explorableSources / searchableSources），
+                // 该书源对应的 tab 单独追加，其他 tab 不受影响。
+                fnsCache[src.fileName] = fns;
+              } catch {
+                fnsCache[src.fileName] = new Set<string>();
+              }
+            }),
           );
         }
       } finally {
@@ -352,9 +406,8 @@ export const useBookSourceStore = defineStore('bookSource', () => {
 
   /** 使单个书源的能力缓存失效（同时删除持久化条目） */
   function invalidateCapability(fileName: string) {
-    const cache = { ...fnsCache.value };
-    delete cache[fileName];
-    fnsCache.value = cache;
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete fnsCache[fileName];
     removeFrontendStorageItem(STORAGE_NAMESPACE, CAP_KEY_PREFIX + fileName);
   }
 
@@ -366,12 +419,15 @@ export const useBookSourceStore = defineStore('bookSource', () => {
         removeFrontendStorageItem(STORAGE_NAMESPACE, key);
       }
     }
-    fnsCache.value = {};
+    for (const key of Object.keys(fnsCache)) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete fnsCache[key];
+    }
   }
 
   /** 获取书源已缓存的能力集合（未检测则返回 undefined） */
   function getCachedCapabilities(fileName: string): Set<string> | undefined {
-    return fnsCache.value[fileName];
+    return fnsCache[fileName];
   }
 
   /** 切换书源启用/禁用状态（包含 API 调用 + 本地状态同步）*/
@@ -434,7 +490,10 @@ export const useBookSourceStore = defineStore('bookSource', () => {
       updatesCheckedAt,
       Number.isNaN(lastChecked) ? 0 : lastChecked,
     );
-    if (pendingUpdates.value.length > 0 && now - effectiveLastChecked < MIN_CHECK_INTERVAL_MS) {
+    if (
+      pendingUpdates.value.length > 0 &&
+      now - effectiveLastChecked < MIN_CHECK_INTERVAL_MS
+    ) {
       return;
     }
 
@@ -455,7 +514,7 @@ export const useBookSourceStore = defineStore('bookSource', () => {
         batch.map((src) => checkBookSourceUpdate(src.fileName)),
       );
       for (const r of batchResults) {
-        if (r.status === 'fulfilled' && r.value.hasUpdate) {
+        if (r.status === "fulfilled" && r.value.hasUpdate) {
           results.push(r.value);
         }
       }
@@ -471,9 +530,13 @@ export const useBookSourceStore = defineStore('bookSource', () => {
     await applyBookSourceUpdate(fileName);
     const source = sources.value.find((item) => item.fileName === fileName);
     if (source) {
-      pendingUpdates.value = pendingUpdates.value.filter((item) => item.uuid !== source.uuid);
+      pendingUpdates.value = pendingUpdates.value.filter(
+        (item) => item.uuid !== source.uuid,
+      );
     } else {
-      pendingUpdates.value = pendingUpdates.value.filter((item) => item.fileName !== fileName);
+      pendingUpdates.value = pendingUpdates.value.filter(
+        (item) => item.fileName !== fileName,
+      );
     }
     invalidateCapability(fileName);
   }

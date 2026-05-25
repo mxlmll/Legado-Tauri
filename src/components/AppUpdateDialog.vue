@@ -132,6 +132,8 @@ async function openExternalUrl(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+const MIN_AUTO_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 小时
+
 async function runStartupCheck() {
   if (checking.value) {
     return;
@@ -146,7 +148,13 @@ async function runStartupCheck() {
       return;
     }
 
+    const lastAt = prefStore.appUpdate.lastAutoCheckAt ?? 0;
+    if (Date.now() - lastAt < MIN_AUTO_CHECK_INTERVAL_MS) {
+      return;
+    }
+
     checking.value = true;
+    prefStore.patchAppUpdate({ lastAutoCheckAt: Date.now() });
     await initPlatformFromRust().catch(() => undefined);
     const result = await checkAppUpdate({
       channel: prefStore.appUpdate.channel,

@@ -17,7 +17,11 @@ import {
   type BookSourceMeta,
   readBookSource,
   saveBookSource,
+  importLegacyJsonText,
+  importLegacyJsonUrl,
+  type LegacyJsonImportResult,
   deleteBookSource,
+  deleteBookSources,
   toggleBookSource,
   toSafeFileName,
   formatValidationIssues,
@@ -116,6 +120,7 @@ const filtered = computed(() => {
 // ---- 批量管理 ----
 const batchMode = ref(false);
 const selectedKeys = ref(new Set<string>());
+const batchDeleting = ref(false);
 
 const allSelected = computed(
   () =>
@@ -216,6 +221,9 @@ async function batchExport() {
 }
 
 function confirmBatchDelete() {
+  if (batchDeleting.value) {
+    return;
+  }
   const selected = filtered.value.filter((s) =>
     selectedKeys.value.has(s.sourceKey),
   );
@@ -229,19 +237,33 @@ function confirmBatchDelete() {
     positiveText: "删除",
     negativeText: "取消",
     onPositiveClick: async () => {
-      let ok = 0;
-      for (const src of selected) {
-        try {
-          await deleteBookSource(src.fileName, src.sourceDir);
-          ok++;
-        } catch {
-          // skip
+      batchDeleting.value = true;
+      try {
+        const result = await deleteBookSources(
+          selected.map((src) => ({
+            fileName: src.fileName,
+            sourceDir: src.sourceDir,
+          })),
+        );
+        const ok = result.deleted.length;
+        if (ok > 0) {
+          message.success(`已删除 ${ok} 个书源`);
+          selectedKeys.value = new Set();
         }
-      }
-      if (ok) {
-        message.success(`已删除 ${ok} 个书源`);
+        if (result.errors.length > 0) {
+          message.warning(
+            `有 ${result.errors.length} 个书源删除失败：${result.errors[0].message}`,
+          );
+        } else if (ok === 0) {
+          message.info("没有可删除的书源");
+        }
+      } catch (e: unknown) {
+        message.error(
+          `批量删除失败: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      } finally {
+        batchDeleting.value = false;
         selectedKeys.value = new Set();
-        emits("reload");
       }
     },
   });
@@ -329,6 +351,9 @@ const showUrlInputModal = ref(false);
 const urlInputValue = ref("");
 const showInstallDialog = ref(false);
 const installDialogUrl = ref("");
+const showLegacyUrlInputModal = ref(false);
+const legacyUrlInputValue = ref("");
+const legacyImporting = ref(false);
 
 const { triggerClose: closeUrlInputModal } = useOverlay(
   () => showUrlInputModal.value,
@@ -377,6 +402,132 @@ function confirmUrlInput() {
   closeUrlInputModal();
   installDialogUrl.value = downloadUrl;
   showInstallDialog.value = true;
+}
+
+const { triggerClose: closeLegacyUrlInputModal } = useOverlay(
+  () => showLegacyUrlInputModal.value,
+  () => {
+    showLegacyUrlInputModal.value = false;
+  },
+);
+
+function updateLegacyUrlInputModalShow(value: boolean) {
+  if (value) {
+    showLegacyUrlInputModal.value = true;
+    return;
+  }
+  closeLegacyUrlInputModal();
+}
+
+function normalizeImportHttpUrl(url: string) {
+  try {
+    const parsed = new URL(url.trim());
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.href;
+  } catch {
+    return "";
+  }
+}
+
+function mergeLegacyImportResult(
+  target: LegacyJsonImportResult,
+  next: LegacyJsonImportResult,
+) {
+  target.imported += next.imported;
+  target.skipped += next.skipped;
+  target.files.push(...next.files);
+  target.errors.push(...next.errors);
+}
+
+function showLegacyImportResult(result: LegacyJsonImportResult) {
+  if (result.imported > 0) {
+    message.success(`已导入 ${result.imported} 个开源阅读书源`);
+    emits("reload");
+  }
+  if (result.skipped > 0 || result.errors.length > 0) {
+    const visible = result.errors.slice(0, 3).join("；");
+    const more =
+      result.errors.length > 3 ? `；另有 ${result.errors.length - 3} 项` : "";
+    message.warning(
+      `有 ${result.skipped || result.errors.length} 个书源未导入${visible ? `：${visible}${more}` : ""}`,
+    );
+  }
+  if (!result.imported && !result.errors.length) {
+    message.warning("未找到可导入的开源阅读书源");
+  }
+}
+
+function importLegacyJsonFromFile() {
+  if (legacyImporting.value) {
+    return;
+  }
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json,text/json,text/plain,.json";
+  input.multiple = true;
+  input.addEventListener("change", async () => {
+    if (!input.files?.length) {
+      return;
+    }
+    const files = Array.from(input.files);
+    const merged: LegacyJsonImportResult = {
+      imported: 0,
+      skipped: 0,
+      files: [],
+      errors: [],
+    };
+    legacyImporting.value = true;
+    message.info(`正在导入 ${files.length} 个开源阅读书源文件...`);
+    try {
+      for (const file of files) {
+        try {
+          const result = await importLegacyJsonText(await file.text());
+          mergeLegacyImportResult(merged, result);
+        } catch (e: unknown) {
+          merged.skipped += 1;
+          merged.errors.push(
+            `${file.name}: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+      showLegacyImportResult(merged);
+    } finally {
+      legacyImporting.value = false;
+    }
+  });
+  input.click();
+}
+
+function importLegacyJsonFromUrl() {
+  if (legacyImporting.value) {
+    return;
+  }
+  legacyUrlInputValue.value = "";
+  showLegacyUrlInputModal.value = true;
+}
+
+async function confirmLegacyUrlInput() {
+  if (legacyImporting.value) {
+    return;
+  }
+  const url = normalizeImportHttpUrl(legacyUrlInputValue.value);
+  if (!url) {
+    message.warning("请输入 http:// 或 https:// 开头的 JSON 地址");
+    return;
+  }
+  closeLegacyUrlInputModal();
+  legacyImporting.value = true;
+  message.info("正在下载并转换开源阅读书源...");
+  try {
+    const result = await importLegacyJsonUrl(url);
+    showLegacyImportResult(result);
+  } catch (e: unknown) {
+    message.error(`导入失败: ${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    legacyImporting.value = false;
+  }
 }
 
 async function addExternalDir() {
@@ -813,6 +964,8 @@ defineExpose({
   openDirManager,
   importFromFile,
   importFromUrl,
+  importLegacyJsonFromFile,
+  importLegacyJsonFromUrl,
   exportSources,
   openEditor,
   reloadAllSources,
@@ -866,7 +1019,13 @@ defineExpose({
         <n-button size="tiny" @click="batchSetEnabled(true)">启用</n-button>
         <n-button size="tiny" @click="batchSetEnabled(false)">禁用</n-button>
         <n-button size="tiny" @click="batchExport">导出</n-button>
-        <n-button size="tiny" type="error" ghost @click="confirmBatchDelete"
+        <n-button
+          size="tiny"
+          type="error"
+          ghost
+          :loading="batchDeleting"
+          :disabled="batchDeleting"
+          @click="confirmBatchDelete"
           >删除</n-button
         >
       </div>
@@ -1025,6 +1184,27 @@ defineExpose({
       clearable
       autofocus
       @keyup.enter="confirmUrlInput"
+    />
+  </n-modal>
+
+  <!-- 导入开源阅读书源：URL 输入弹窗 -->
+  <n-modal
+    :show="showLegacyUrlInputModal"
+    preset="dialog"
+    title="导入开源阅读书源"
+    positive-text="导入"
+    negative-text="取消"
+    @update:show="updateLegacyUrlInputModalShow"
+    @positive-click="confirmLegacyUrlInput"
+    @negative-click="closeLegacyUrlInputModal"
+  >
+    <n-input
+      v-model:value="legacyUrlInputValue"
+      placeholder="输入开源阅读 JSON 地址（https://...）"
+      clearable
+      autofocus
+      :disabled="legacyImporting"
+      @keyup.enter="confirmLegacyUrlInput"
     />
   </n-modal>
 

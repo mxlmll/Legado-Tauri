@@ -20,13 +20,96 @@ import {
 
 const CATS_NS = 'explore.cats';
 
+export interface ExploreCategoryItem {
+  name: string;
+  url: string;
+  style?: ExploreCategoryStyle;
+}
+
+export interface ExploreCategoryStyle {
+  layout_flexGrow?: number;
+  layout_flexBasisPercent?: number;
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') {
+    return undefined;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function normalizeExploreCategoryStyle(
+  record: Record<string, unknown>,
+): ExploreCategoryStyle | undefined {
+  const rawStyle =
+    record.style && typeof record.style === 'object'
+      ? (record.style as Record<string, unknown>)
+      : {};
+  const layout_flexGrow = toFiniteNumber(
+    rawStyle.layout_flexGrow ??
+      rawStyle.flexGrow ??
+      rawStyle.layoutFlexGrow ??
+      record.layout_flexGrow ??
+      record.flexGrow ??
+      record.layoutFlexGrow,
+  );
+  const layout_flexBasisPercent = toFiniteNumber(
+    rawStyle.layout_flexBasisPercent ??
+      rawStyle.flexBasisPercent ??
+      rawStyle.layoutFlexBasisPercent ??
+      record.layout_flexBasisPercent ??
+      record.flexBasisPercent ??
+      record.layoutFlexBasisPercent,
+  );
+  const style: ExploreCategoryStyle = {};
+  if (layout_flexGrow !== undefined) {
+    style.layout_flexGrow = layout_flexGrow;
+  }
+  if (layout_flexBasisPercent !== undefined) {
+    style.layout_flexBasisPercent = layout_flexBasisPercent;
+  }
+  return style.layout_flexGrow !== undefined || style.layout_flexBasisPercent !== undefined
+    ? style
+    : undefined;
+}
+
+function normalizeExploreCategoryItem(item: unknown): ExploreCategoryItem | null {
+  if (typeof item === 'string') {
+    const text = item.trim();
+    return text ? { name: text, url: text } : null;
+  }
+  if (!item || typeof item !== 'object') {
+    return null;
+  }
+  const record = item as Record<string, unknown>;
+  const rawName = record.name ?? record.title ?? record.label ?? record.text;
+  const rawUrl = record.url ?? record.href ?? record.link ?? record.value ?? record.id ?? rawName;
+  const name = typeof rawName === 'string' ? rawName.trim() : '';
+  const url = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (!name || !url) {
+    return null;
+  }
+  const style = normalizeExploreCategoryStyle(record);
+  return style ? { name, url, style } : { name, url };
+}
+
+export function normalizeExploreCategories(raw: unknown): ExploreCategoryItem[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .map(normalizeExploreCategoryItem)
+    .filter((item): item is ExploreCategoryItem => !!item);
+}
+
 /** 预热命名空间（ExploreView mount 时调用一次） */
 export async function preloadExploreCategoryCache(): Promise<void> {
   await ensureFrontendNamespaceLoaded(CATS_NS);
 }
 
 /** 同步读取缓存的分类列表，若不存在返回 null */
-export function getCachedExploreCategories(fileName: string): string[] | null {
+export function getCachedExploreCategories(fileName: string): ExploreCategoryItem[] | null {
   const raw = getFrontendStorageItem(CATS_NS, fileName);
   if (!raw) {
     return null;
@@ -36,14 +119,14 @@ export function getCachedExploreCategories(fileName: string): string[] | null {
     if (!Array.isArray(parsed)) {
       return null;
     }
-    return parsed.filter((v): v is string => typeof v === 'string');
+    return normalizeExploreCategories(parsed);
   } catch {
     return null;
   }
 }
 
 /** 持久化分类列表（fire-and-forget） */
-export function setCachedExploreCategories(fileName: string, cats: string[]): void {
+export function setCachedExploreCategories(fileName: string, cats: ExploreCategoryItem[]): void {
   setFrontendStorageItem(CATS_NS, fileName, JSON.stringify(cats));
 }
 
