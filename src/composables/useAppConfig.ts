@@ -92,6 +92,12 @@ export interface AppConfig {
   web_server_port: number;
   /** Web 服务器静态文件目录（Vue 构建产物），空字符串表示不提供静态文件服务 */
   web_server_dist_path: string;
+  /** 是否在前端页面注入 Chii 远程调试脚本 */
+  web_remote_debug_enabled: boolean;
+  /** Chii 调试服务主机名或 IP */
+  web_remote_debug_host: string;
+  /** Chii 调试服务端口 */
+  web_remote_debug_port: number;
   /** 全局最小请求间隔（毫秒），0 = 不限制 */
   request_min_delay_ms: number;
   /** 自动预缓存章节数，0 = 关闭，-1 = 全部缓存 */
@@ -184,6 +190,9 @@ const config = ref<AppConfig>({
   web_server_enabled: false,
   web_server_port: 7688,
   web_server_dist_path: '',
+  web_remote_debug_enabled: false,
+  web_remote_debug_host: '',
+  web_remote_debug_port: 8080,
   request_min_delay_ms: 300,
   cache_prefetch_count: 3,
   cache_prefetch_concurrency: 2,

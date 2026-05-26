@@ -2,7 +2,7 @@
  * useAiAgent — AI 自动写书源 Agent
  *
  * 架构：
- *   前端 → Vercel AI SDK streamText（OpenAI 兼容 API）→ 多步工具调用循环
+ *   前端 → Vercel AI SDK streamText → Rust HTTP 后端（OpenAI 兼容 API）→ 多步工具调用循环
  *   工具调用 → 现有 Tauri 命令（listBookSources / readBookSource / saveBookSource /
  *              evalBookSource / booksource_search / booksource_book_info 等）
  *
@@ -626,7 +626,149 @@ function safeJsonStringify(value: unknown): string {
 type JsonRecord = Record<string, unknown>;
 type NativeFetch = typeof fetch;
 
+interface BackendHttpResponse {
+  status: number;
+  headers: Array<[string, string]>;
+  body: string;
+}
+
 const LEGADO_REASONING_PROVIDER = "legadoReasoning";
+
+function abortError(): Error {
+  return new Error("AI 请求已取消");
+}
+
+function isAbortSignal(value: unknown): value is AbortSignal {
+  return typeof AbortSignal !== "undefined" && value instanceof AbortSignal;
+}
+
+function isAborted(signal: AbortSignal, init: Parameters<NativeFetch>[1]): boolean {
+  return signal.aborted || (isAbortSignal(init?.signal) && init.signal.aborted);
+}
+
+function waitForAbort(signal: AbortSignal, init: Parameters<NativeFetch>[1]): Promise<never> {
+  return new Promise((_, reject) => {
+    const initSignal = isAbortSignal(init?.signal) ? init.signal : undefined;
+    const cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+      initSignal?.removeEventListener("abort", onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(abortError());
+    };
+
+    if (signal.aborted || initSignal?.aborted) {
+      onAbort();
+      return;
+    }
+
+    signal.addEventListener("abort", onAbort, { once: true });
+    initSignal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function requestUrl(input: Parameters<NativeFetch>[0]): string {
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
+  if (typeof Request !== "undefined" && input instanceof Request) {
+    return input.url;
+  }
+  return String(input);
+}
+
+function requestMethod(
+  input: Parameters<NativeFetch>[0],
+  init: Parameters<NativeFetch>[1],
+): string {
+  return (
+    init?.method ??
+    (typeof Request !== "undefined" && input instanceof Request
+      ? input.method
+      : "GET")
+  );
+}
+
+function requestHeaders(
+  input: Parameters<NativeFetch>[0],
+  init: Parameters<NativeFetch>[1],
+): Array<[string, string]> {
+  const headers = new Headers(
+    typeof Request !== "undefined" && input instanceof Request
+      ? input.headers
+      : undefined,
+  );
+  new Headers(init?.headers).forEach((value, key) => {
+    headers.set(key, value);
+  });
+  return [...headers.entries()];
+}
+
+async function requestBody(
+  input: Parameters<NativeFetch>[0],
+  init: Parameters<NativeFetch>[1],
+): Promise<string | null> {
+  const body = init?.body;
+  if (body === null) {
+    return null;
+  }
+  if (typeof body === "string") {
+    return body;
+  }
+  if (body !== undefined) {
+    return await new Response(body).text();
+  }
+  if (typeof Request !== "undefined" && input instanceof Request) {
+    const method = input.method.toUpperCase();
+    if (method !== "GET" && method !== "HEAD") {
+      return await input.clone().text();
+    }
+  }
+  return null;
+}
+
+function createBackendHttpFetch(signal: AbortSignal): NativeFetch {
+  return async (input, init) => {
+    if (isAborted(signal, init)) {
+      throw abortError();
+    }
+
+    const url = requestUrl(input);
+    const method = requestMethod(input, init);
+    const body = await requestBody(input, init);
+    const headers = requestHeaders(input, init);
+    const timeoutSecs = 300;
+    const response = await Promise.race([
+      invokeWithTimeout<BackendHttpResponse>(
+        "frontend_plugin_http_request",
+        {
+          request: {
+            url,
+            method,
+            headers,
+            body,
+            timeoutSecs,
+          },
+        },
+        timeoutSecs * 1000 + 5_000,
+      ),
+      waitForAbort(signal, init),
+    ]);
+
+    if (isAborted(signal, init)) {
+      throw abortError();
+    }
+
+    return new Response(response.body, {
+      status: response.status,
+      headers: response.headers,
+    });
+  };
+}
 
 function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -689,8 +831,7 @@ function withStoredReasoningContent(
   };
 }
 
-function createChatReasoningContentBridge() {
-  const nativeFetch: NativeFetch = globalThis.fetch.bind(globalThis);
+function createChatReasoningContentBridge(nativeFetch: NativeFetch) {
   const reasoningByToolCallId = new Map<string, string>();
   const reasoningByText = new Map<string, string>();
   const pendingCaptures = new Set<Promise<void>>();
@@ -1142,8 +1283,9 @@ export async function runAiAgent(
   );
 
   const useChatCompletions = (config.apiMode ?? "chat") === "chat";
+  const backendFetch = createBackendHttpFetch(_abortController.signal);
   const reasoningBridge = useChatCompletions
-    ? createChatReasoningContentBridge()
+    ? createChatReasoningContentBridge(backendFetch)
     : undefined;
   if (reasoningBridge) {
     reasoningBridge.preloadFromMessages(prevMessages);
@@ -1160,7 +1302,7 @@ export async function runAiAgent(
     const openaiProvider = createOpenAI({
       apiKey: config.apiKey || "placeholder",
       baseURL: config.apiUrl.replace(/\/$/, ""),
-      ...(reasoningBridge ? { fetch: reasoningBridge.fetch } : {}),
+      fetch: reasoningBridge?.fetch ?? backendFetch,
     });
 
     // 根据 apiMode 选择请求路径：

@@ -42,6 +42,7 @@ import { eventEmit } from "./composables/useEventBus";
 import { installGlobalFocusNavigation } from "./composables/useFocusNavigation";
 import { useInputMode } from "./composables/useInputMode";
 import { useLogZonePref } from "./composables/useLogZonePref";
+import { useRemoteDebug } from "./composables/useRemoteDebug";
 import { installSyncClientStateListener, useSync } from "./composables/useSync";
 import { useTts } from "./composables/useTts";
 import { useVConsole } from "./composables/useVConsole";
@@ -592,6 +593,8 @@ const naiveTheme = computed<GlobalTheme | null>(() =>
 
 // vConsole 调试面板（由开发设置开关控制）
 useVConsole(effectiveDark);
+// Chii 远程调试注入（由开发设置开关控制，覆盖 Tauri 与服务模式）
+useRemoteDebug();
 
 const naiveThemeOverrides = computed<GlobalThemeOverrides>(() => {
   if (effectiveDark.value) {
