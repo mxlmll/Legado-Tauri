@@ -184,8 +184,15 @@ jobs:
       - name: Build Tauri App
         shell: bash
         env:
-          CARGO_BUILD_JOBS: 1
           RUSTFLAGS: -C debuginfo=0
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_LTO: "thin"
+          CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
+          CARGO_PROFILE_RELEASE_DEBUG: "false"
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "false"
+          CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "false"
+          CARGO_PROFILE_RELEASE_STRIP: "symbols"
         run: |
           cd build
           pnpm tauri build
@@ -338,12 +345,15 @@ jobs:
       - name: Build Tauri App
         shell: bash
         env:
-          CARGO_BUILD_JOBS: 1
           RUSTFLAGS: -C debuginfo=0
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: 0
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
-          CARGO_PROFILE_RELEASE_LTO: "false"
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_LTO: "thin"
           CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
+          CARGO_PROFILE_RELEASE_DEBUG: "false"
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "false"
+          CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "false"
+          CARGO_PROFILE_RELEASE_STRIP: "symbols"
         run: |
           cd build
           pnpm tauri build
@@ -465,8 +475,15 @@ jobs:
         shell: bash
         env:
           NODE_OPTIONS: --max-old-space-size=6144
-          CARGO_BUILD_JOBS: 1
           RUSTFLAGS: -C debuginfo=0
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_LTO: "thin"
+          CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
+          CARGO_PROFILE_RELEASE_DEBUG: "false"
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "false"
+          CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "false"
+          CARGO_PROFILE_RELEASE_STRIP: "symbols"
         run: |
           cd build
           pnpm tauri build
@@ -659,8 +676,15 @@ jobs:
         shell: bash
         env:
           NODE_OPTIONS: --max-old-space-size=6144
-          CARGO_BUILD_JOBS: 1
           RUSTFLAGS: -C debuginfo=0
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_LTO: "thin"
+          CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
+          CARGO_PROFILE_RELEASE_DEBUG: "false"
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "false"
+          CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "false"
+          CARGO_PROFILE_RELEASE_STRIP: "symbols"
         run: |
           cd build
           pnpm tauri android build --apk --target aarch64
@@ -813,11 +837,18 @@ jobs:
       - name: Build Tauri App
         shell: bash
         env:
-          CARGO_BUILD_JOBS: 1
           RUSTFLAGS: -C debuginfo=0
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_LTO: "thin"
+          CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
+          CARGO_PROFILE_RELEASE_DEBUG: "false"
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "false"
+          CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "false"
+          CARGO_PROFILE_RELEASE_STRIP: "symbols"
         run: |
           cd build
-          # 在主项目根目录
+          #在主项目根目录
           pnpm build:harmony
 
       - name: Pack binary with dist
@@ -967,8 +998,15 @@ jobs:
           TAURI_ENV_PLATFORM: ios
           TAURI_ENV_PLATFORM_VERSION: ios
           NODE_OPTIONS: --max-old-space-size=6144
-          CARGO_BUILD_JOBS: 1
           RUSTFLAGS: -C debuginfo=0
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_LTO: "thin"
+          CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
+          CARGO_PROFILE_RELEASE_DEBUG: "false"
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "false"
+          CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "false"
+          CARGO_PROFILE_RELEASE_STRIP: "symbols"
           # Signing env is intentionally disabled.
           # APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           # APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
