@@ -28,6 +28,9 @@ import {
   getBookMetaBadges,
   getLatestChapterText,
   getNormalizedLastChapter,
+  sanitizeBookDetail,
+  sanitizeChapterList,
+  type BookSourceFieldError,
 } from "../../utils/bookMeta";
 import { getChapterPriceLabel, isVipChapter } from "../../utils/chapter";
 import { getCoverImageUrl } from "../../utils/coverImage";
@@ -73,6 +76,11 @@ const loading = ref(false);
 const error = ref("");
 const detail = ref<BookDetail | null>(null);
 const chapters = ref<ChapterItem[]>([]);
+const fieldErrors = ref<BookSourceFieldError[]>([]);
+const chapterWarnings = ref<{ skipped: number; messages: string[] }>({
+  skipped: 0,
+  messages: [],
+});
 const addingToShelf = ref(false);
 const onShelf = ref(false);
 
@@ -197,7 +205,10 @@ const drawerBodyContentStyle = computed((): CSSProperties | undefined =>
       },
 );
 const mobileHeaderTitle = computed(
-  () => detail.value?.name?.trim() || "书籍详情",
+  () =>
+    (typeof detail.value?.name === "string"
+      ? detail.value.name.trim()
+      : null) || "书籍详情",
 );
 const mobileHeaderSubtitle = computed(() => `来自 ${props.sourceName}`);
 const detailBadges = computed(() =>
@@ -213,8 +224,9 @@ const detailMetaRows = computed(() => {
   if (detailLatestChapter.value) {
     rows.push({ label: "最新章节", value: detailLatestChapter.value });
   }
-  if (d.wordCount?.trim()) {
-    rows.push({ label: "字数", value: d.wordCount.trim() });
+  const wordCount = typeof d.wordCount === "string" ? d.wordCount.trim() : "";
+  if (wordCount) {
+    rows.push({ label: "字数", value: wordCount });
   }
   if (
     typeof d.chapterCount === "number" &&
@@ -223,11 +235,21 @@ const detailMetaRows = computed(() => {
   ) {
     rows.push({ label: "章节总数", value: `${Math.floor(d.chapterCount)} 章` });
   }
-  if (d.updateTime?.trim()) {
-    rows.push({ label: "更新时间", value: d.updateTime.trim() });
+  const updateTime =
+    typeof d.updateTime === "string" ? d.updateTime.trim() : "";
+  if (updateTime) {
+    rows.push({ label: "更新时间", value: updateTime });
   }
   return rows;
 });
+
+/** 书源 bookInfo 字段错误摘要（供 UI 提示） */
+const fieldErrorSummary = computed(() =>
+  fieldErrors.value.map(
+    (e) =>
+      `${e.field}: 期望 ${e.expected}, 实际 ${e.actual}=${String(e.rawValue).slice(0, 60)}`,
+  ),
+);
 
 function doCloseDrawer() {
   emit("update:show", false);
@@ -260,6 +282,8 @@ watch(
     activeGroupIndex.value = 0;
     sortOrder.value = "asc";
     onShelf.value = false;
+    fieldErrors.value = [];
+    chapterWarnings.value = { skipped: 0, messages: [] };
     try {
       await ensureLoaded();
       onShelf.value = isOnShelf(props.bookUrl, props.fileName);
@@ -267,10 +291,21 @@ watch(
       // 先获取书籍详情，拿到 tocUrl（目录专属 URL），再用它加载章节列表
       // bookInfo 返回的 tocUrl 可能与 bookUrl 不同（如番茄小说使用独立目录接口）
       const infoRaw = await runBookInfo(props.fileName, props.bookUrl);
-      detail.value = infoRaw as BookDetail;
+      const sanitized = sanitizeBookDetail(
+        infoRaw,
+        props.fileName,
+        props.bookUrl,
+      );
+      detail.value = sanitized.data;
+      fieldErrors.value = sanitized.fieldErrors;
       const tocUrl = detail.value.tocUrl ?? props.bookUrl;
       const listRaw = await runChapterList(props.fileName, tocUrl);
-      chapters.value = Array.isArray(listRaw) ? (listRaw as ChapterItem[]) : [];
+      const chSanitized = sanitizeChapterList(listRaw, props.fileName);
+      chapters.value = chSanitized.data;
+      chapterWarnings.value = {
+        skipped: chSanitized.skipped,
+        messages: chSanitized.warnings,
+      };
 
       // 视频多线路分组
       chapterGroups.value = groupChapters(chapters.value);
@@ -436,6 +471,28 @@ async function handleAddToShelf() {
               type="error"
               :title="error"
               style="margin-bottom: 16px"
+            />
+
+            <!-- 书源数据字段异常警告（非必需字段类型错误，已自动修复，仅提示） -->
+            <n-alert
+              v-if="!error && fieldErrorSummary.length"
+              type="warning"
+              title="书源数据字段异常（已自动修复，可继续使用）"
+              :bordered="false"
+              style="margin-bottom: 12px; font-size: 12px"
+            >
+              <ul style="margin: 4px 0 0; padding-left: 16px; line-height: 1.6">
+                <li v-for="msg in fieldErrorSummary" :key="msg">{{ msg }}</li>
+              </ul>
+            </n-alert>
+
+            <!-- 章节列表数据异常提示 -->
+            <n-alert
+              v-if="chapterWarnings.skipped > 0"
+              type="warning"
+              :title="`章节列表有 ${chapterWarnings.skipped} 条无效数据已跳过`"
+              :bordered="false"
+              style="margin-bottom: 12px; font-size: 12px"
             />
 
             <!-- 详情头部 -->

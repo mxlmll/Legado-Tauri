@@ -550,7 +550,10 @@ async function confirmLegacyUrlInput() {
   legacyImporting.value = true;
   message.info("正在下载并转换开源阅读书源...");
   try {
-    const result = await importLegacyJsonUrl(url, legacySmartSubCategories.value);
+    const result = await importLegacyJsonUrl(
+      url,
+      legacySmartSubCategories.value,
+    );
     showLegacyImportResult(result);
   } catch (e: unknown) {
     message.error(`导入失败: ${e instanceof Error ? e.message : String(e)}`);
@@ -1227,6 +1230,9 @@ defineExpose({
     @positive-click="confirmLegacyFileImport"
     @negative-click="closeLegacyFileOptionsModal"
   >
+    <n-alert type="warning" :show-icon="true" style="margin-bottom: 10px">
+      一次性导入书源过多（数百个以上）可能导致界面卡顿甚至卡死，建议分批导入。
+    </n-alert>
     <n-checkbox
       v-model:checked="legacySmartSubCategories"
       :disabled="legacyImporting"
@@ -1254,6 +1260,9 @@ defineExpose({
       :disabled="legacyImporting"
       @keyup.enter="confirmLegacyUrlInput"
     />
+    <n-alert type="warning" :show-icon="true" style="margin-top: 10px">
+      一次性导入书源过多（数百个以上）可能导致界面卡顿甚至卡死，建议使用包含少量书源的链接分批导入。
+    </n-alert>
     <n-checkbox
       v-model:checked="legacySmartSubCategories"
       class="legacy-import-option"

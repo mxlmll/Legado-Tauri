@@ -14,7 +14,8 @@ export function getChapterPriceLabel(chapter?: ChapterVipLike | null): string {
   if (!price) {
     return "";
   }
-  const currency = chapter.currency?.trim();
+  const currency =
+    typeof chapter.currency === "string" ? chapter.currency.trim() : "";
   return currency ? `${price} ${currency}` : price;
 }
 
