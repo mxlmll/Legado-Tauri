@@ -351,8 +351,10 @@ const showUrlInputModal = ref(false);
 const urlInputValue = ref("");
 const showInstallDialog = ref(false);
 const installDialogUrl = ref("");
+const showLegacyFileOptionsModal = ref(false);
 const showLegacyUrlInputModal = ref(false);
 const legacyUrlInputValue = ref("");
+const legacySmartSubCategories = ref(false);
 const legacyImporting = ref(false);
 
 const { triggerClose: closeUrlInputModal } = useOverlay(
@@ -411,6 +413,21 @@ const { triggerClose: closeLegacyUrlInputModal } = useOverlay(
   },
 );
 
+const { triggerClose: closeLegacyFileOptionsModal } = useOverlay(
+  () => showLegacyFileOptionsModal.value,
+  () => {
+    showLegacyFileOptionsModal.value = false;
+  },
+);
+
+function updateLegacyFileOptionsModalShow(value: boolean) {
+  if (value) {
+    showLegacyFileOptionsModal.value = true;
+    return;
+  }
+  closeLegacyFileOptionsModal();
+}
+
 function updateLegacyUrlInputModalShow(value: boolean) {
   if (value) {
     showLegacyUrlInputModal.value = true;
@@ -463,6 +480,15 @@ function importLegacyJsonFromFile() {
   if (legacyImporting.value) {
     return;
   }
+  showLegacyFileOptionsModal.value = true;
+}
+
+function confirmLegacyFileImport() {
+  if (legacyImporting.value) {
+    return;
+  }
+  closeLegacyFileOptionsModal();
+  const smartExploreSubCategories = legacySmartSubCategories.value;
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "application/json,text/json,text/plain,.json";
@@ -483,7 +509,10 @@ function importLegacyJsonFromFile() {
     try {
       for (const file of files) {
         try {
-          const result = await importLegacyJsonText(await file.text());
+          const result = await importLegacyJsonText(
+            await file.text(),
+            smartExploreSubCategories,
+          );
           mergeLegacyImportResult(merged, result);
         } catch (e: unknown) {
           merged.skipped += 1;
@@ -521,7 +550,7 @@ async function confirmLegacyUrlInput() {
   legacyImporting.value = true;
   message.info("正在下载并转换开源阅读书源...");
   try {
-    const result = await importLegacyJsonUrl(url);
+    const result = await importLegacyJsonUrl(url, legacySmartSubCategories.value);
     showLegacyImportResult(result);
   } catch (e: unknown) {
     message.error(`导入失败: ${e instanceof Error ? e.message : String(e)}`);
@@ -1187,6 +1216,25 @@ defineExpose({
     />
   </n-modal>
 
+  <!-- 导入开源阅读书源：文件选项弹窗 -->
+  <n-modal
+    :show="showLegacyFileOptionsModal"
+    preset="dialog"
+    title="导入开源阅读书源"
+    positive-text="选择文件"
+    negative-text="取消"
+    @update:show="updateLegacyFileOptionsModalShow"
+    @positive-click="confirmLegacyFileImport"
+    @negative-click="closeLegacyFileOptionsModal"
+  >
+    <n-checkbox
+      v-model:checked="legacySmartSubCategories"
+      :disabled="legacyImporting"
+    >
+      智能识别二级分类（宽度为 1 的分类作为一级分类）
+    </n-checkbox>
+  </n-modal>
+
   <!-- 导入开源阅读书源：URL 输入弹窗 -->
   <n-modal
     :show="showLegacyUrlInputModal"
@@ -1206,6 +1254,13 @@ defineExpose({
       :disabled="legacyImporting"
       @keyup.enter="confirmLegacyUrlInput"
     />
+    <n-checkbox
+      v-model:checked="legacySmartSubCategories"
+      class="legacy-import-option"
+      :disabled="legacyImporting"
+    >
+      智能识别二级分类（宽度为 1 的分类作为一级分类）
+    </n-checkbox>
   </n-modal>
 
   <!-- 书源安装确认弹窗 -->
@@ -1358,6 +1413,10 @@ defineExpose({
 .dir-mgr__hint {
   font-size: 0.75rem;
   color: var(--color-text-muted);
+}
+
+.legacy-import-option {
+  margin-top: 10px;
 }
 
 /* ---- 移动端 ---- */

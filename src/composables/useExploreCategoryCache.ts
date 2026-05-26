@@ -24,6 +24,7 @@ export interface ExploreCategoryItem {
   name: string;
   url: string;
   style?: ExploreCategoryStyle;
+  children?: ExploreCategoryItem[];
 }
 
 export interface ExploreCategoryStyle {
@@ -91,7 +92,15 @@ function normalizeExploreCategoryItem(item: unknown): ExploreCategoryItem | null
     return null;
   }
   const style = normalizeExploreCategoryStyle(record);
-  return style ? { name, url, style } : { name, url };
+  const rawChildren =
+    record.children ?? record.subCategories ?? record.subcategories ?? record.categories;
+  const children = Array.isArray(rawChildren) ? normalizeExploreCategories(rawChildren) : [];
+  return {
+    name,
+    url,
+    ...(style ? { style } : {}),
+    ...(children.length ? { children } : {}),
+  };
 }
 
 export function normalizeExploreCategories(raw: unknown): ExploreCategoryItem[] {

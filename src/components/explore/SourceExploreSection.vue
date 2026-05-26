@@ -59,7 +59,8 @@ function categoryArraysEqual(a: ExploreCategoryItem[], b: ExploreCategoryItem[])
       (v, i) =>
         v.name === b[i].name &&
         v.url === b[i].url &&
-        categoryStyleKey(v) === categoryStyleKey(b[i]),
+        categoryStyleKey(v) === categoryStyleKey(b[i]) &&
+        categoryArraysEqual(v.children ?? [], b[i].children ?? []),
     )
   );
 }
@@ -74,6 +75,7 @@ let forceRefreshBooksFlag = false;
 
 // ── 当前选中分类的书籍 ──────────────────────────────────────────────────
 const activeCategory = ref('');
+const openCategoryKey = ref('');
 const books = ref<BookItem[]>([]);
 const booksLoading = ref(false);
 const booksError = ref('');
@@ -102,11 +104,94 @@ function categoryLabel(category: ExploreCategoryItem | string): string {
 }
 
 function findCategoryByKey(key: string): ExploreCategoryItem | undefined {
-  return categories.value.find((cat) => cat.url === key || cat.name === key);
+  return findCategoryByKeyIn(categories.value, key);
+}
+
+function findParentCategoryKey(key: string): string {
+  return findParentCategoryKeyIn(categories.value, key) ?? '';
+}
+
+function findCategoryByKeyIn(
+  items: ExploreCategoryItem[],
+  key: string,
+): ExploreCategoryItem | undefined {
+  for (const cat of items) {
+    if (cat.url === key || cat.name === key) {
+      return cat;
+    }
+    const child = cat.children?.find((item) => item.url === key || item.name === key);
+    if (child) {
+      return child;
+    }
+    const deepChild = cat.children ? findCategoryByKeyIn(cat.children, key) : undefined;
+    if (deepChild) {
+      return deepChild;
+    }
+  }
+  return undefined;
+}
+
+function findParentCategoryKeyIn(
+  items: ExploreCategoryItem[],
+  key: string,
+  parentKey = '',
+): string | undefined {
+  for (const cat of items) {
+    const currentKey = categoryKey(cat);
+    if (currentKey === key || cat.name === key) {
+      return parentKey || undefined;
+    }
+    const found = findParentCategoryKeyIn(cat.children ?? [], key, currentKey);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+function firstSelectableCategory(items = categories.value): ExploreCategoryItem | undefined {
+  return items[0];
 }
 
 function firstCategoryKey(): string {
-  return categories.value.length ? categoryKey(categories.value[0]) : '';
+  const first = firstSelectableCategory();
+  return first ? categoryKey(first) : '';
+}
+
+const openCategoryDrawer = computed(() => {
+  if (!openCategoryKey.value) {
+    return null;
+  }
+  const category = categories.value.find((cat) => categoryKey(cat) === openCategoryKey.value);
+  return category && (category.children?.length ?? 0) > 0 ? category : null;
+});
+
+const hasNestedCategories = computed(() =>
+  categories.value.some((cat) => (cat.children?.length ?? 0) > 0),
+);
+
+function categoryContainsKey(category: ExploreCategoryItem, key: string): boolean {
+  if (!key) {
+    return false;
+  }
+  return (
+    category.children?.some(
+      (child) => categoryKey(child) === key || categoryContainsKey(child, key),
+    ) ?? false
+  );
+}
+
+function isTopCategoryActive(category: ExploreCategoryItem): boolean {
+  return (
+    categoryKey(category) === activeCategory.value ||
+    categoryContainsKey(category, activeCategory.value) ||
+    categoryKey(category) === openCategoryKey.value
+  );
+}
+
+function selectTopCategory(category: ExploreCategoryItem) {
+  openCategoryKey.value = category.children?.length ? categoryKey(category) : '';
+  void loadBooks(category);
 }
 
 function categoryStyleKey(category: ExploreCategoryItem): string {
@@ -168,11 +253,12 @@ async function loadCategories(restoreCategory?: string, skipBooks = false) {
         void loadBooks('');
       } else {
         const target =
-          restoreCategory &&
-          cached.some((cat) => cat.url === restoreCategory || cat.name === restoreCategory)
+          restoreCategory && findCategoryByKeyIn(cached, restoreCategory)
             ? restoreCategory
-            : cached[0];
-        void loadBooks(target);
+            : firstSelectableCategory(cached);
+        if (target) {
+          void loadBooks(target);
+        }
       }
     }
     // 后台刷新（静默，失败不报错）
@@ -192,7 +278,10 @@ async function loadCategories(restoreCategory?: string, skipBooks = false) {
           setCachedExploreCategories(props.source.fileName, fresh);
           // 当前分类不在新列表中，切换到首个分类
           if (fresh.length && !findCategoryByKey(activeCategory.value)) {
-            void loadBooks(fresh[0]);
+            const target = firstSelectableCategory(fresh);
+            if (target) {
+              void loadBooks(target);
+            }
           }
         }
       } catch {
@@ -221,11 +310,12 @@ async function loadCategories(restoreCategory?: string, skipBooks = false) {
           await loadBooks('');
         } else if (cats.length) {
           const target =
-            restoreCategory &&
-            cats.some((cat) => cat.url === restoreCategory || cat.name === restoreCategory)
+            restoreCategory && findCategoryByKeyIn(cats, restoreCategory)
               ? restoreCategory
-              : cats[0];
-          await loadBooks(target);
+              : firstSelectableCategory(cats);
+          if (target) {
+            await loadBooks(target);
+          }
         }
       }
     } else if (isUrlExploreResult(raw) || isHtmlExploreResult(raw)) {
@@ -261,6 +351,10 @@ async function loadBooks(category: ExploreCategoryItem | string, page = 1) {
   const key = categoryKey(category);
   const label = categoryLabel(category);
   activeCategory.value = key;
+  const selectedCategory = typeof category === 'string' ? findCategoryByKey(key) : category;
+  openCategoryKey.value = selectedCategory?.children?.length
+    ? categoryKey(selectedCategory)
+    : findParentCategoryKey(key);
   currentPage.value = page;
   booksError.value = '';
   booksEverLoaded.value = true;
@@ -468,13 +562,50 @@ watch(
           v-for="(cat, index) in categories"
           :key="`${cat.url}:${index}`"
           class="ses__cat-btn"
-          :class="{ 'ses__cat-btn--active': categoryKey(cat) === activeCategory }"
+          :class="{
+            'ses__cat-btn--active': hasNestedCategories
+              ? isTopCategoryActive(cat)
+              : categoryKey(cat) === activeCategory,
+            'ses__cat-btn--parent': (cat.children?.length ?? 0) > 0,
+          }"
           :style="categoryMobileStyle(cat)"
-          @click="loadBooks(cat)"
+          @click="hasNestedCategories ? selectTopCategory(cat) : loadBooks(cat)"
         >
           {{ cat.name }}
         </button>
       </div>
+      <Transition name="ses-drawer">
+        <div v-if="openCategoryDrawer" class="ses__cat-drawer">
+          <div class="ses__cat-drawer-head">
+            <span class="ses__cat-drawer-title">{{ openCategoryDrawer.name }}</span>
+            <span class="ses__cat-drawer-count"
+              >{{ openCategoryDrawer.children?.length ?? 0 }} 项</span
+            >
+          </div>
+          <div class="ses__cat-drawer-grid">
+            <button
+              class="ses__cat-btn ses__cat-btn--sub"
+              :class="{
+                'ses__cat-btn--active': categoryKey(openCategoryDrawer) === activeCategory,
+              }"
+              :style="categoryMobileStyle(openCategoryDrawer)"
+              @click="loadBooks(openCategoryDrawer)"
+            >
+              全部
+            </button>
+            <button
+              v-for="(cat, index) in openCategoryDrawer.children"
+              :key="`${cat.url}:${index}`"
+              class="ses__cat-btn ses__cat-btn--sub"
+              :class="{ 'ses__cat-btn--active': categoryKey(cat) === activeCategory }"
+              :style="categoryMobileStyle(cat)"
+              @click="loadBooks(cat)"
+            >
+              {{ cat.name }}
+            </button>
+          </div>
+        </div>
+      </Transition>
 
       <!-- 书籍区域：overlay loading，不改变高度 -->
       <div
@@ -635,6 +766,59 @@ watch(
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: #fff;
+}
+.ses__cat-btn--parent::after {
+  content: '';
+  width: 0;
+  height: 0;
+  margin-left: 6px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  opacity: 0.78;
+}
+.ses__cat-btn--sub {
+  font-size: var(--fs-12);
+}
+.ses__cat-drawer {
+  margin: 0 0 8px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-1);
+  background: var(--color-surface-raised);
+}
+.ses__cat-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 6px;
+}
+.ses__cat-drawer-title {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+.ses__cat-drawer-count {
+  font-size: var(--fs-12);
+  color: var(--color-text-muted);
+}
+.ses__cat-drawer-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ses-drawer-enter-active,
+.ses-drawer-leave-active {
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
+}
+.ses-drawer-enter-from,
+.ses-drawer-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .ses__books-wrap {

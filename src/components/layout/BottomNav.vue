@@ -1,3 +1,4 @@
+<!-- BottomNav.vue：移动端底部主导航，负责六个主视图入口与 iOS/Android 底部安全区避让。 -->
 <script setup lang="ts">
 import type { Component } from 'vue';
 import { BookOpen, Compass, Search, LayoutGrid, Package, SlidersHorizontal } from 'lucide-vue-next';
@@ -75,7 +76,8 @@ const ICON_COMPONENTS: Record<string, Component> = {
   display: flex;
   align-items: stretch;
   justify-content: space-around;
-  min-height: calc(var(--bottom-bar-height) + var(--safe-bottom));
+  height: 100%;
+  min-height: calc(var(--bottomnav-h) + var(--safe-bottom));
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
   user-select: none;

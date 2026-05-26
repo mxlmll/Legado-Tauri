@@ -1,3 +1,4 @@
+<!-- App.vue：应用根组件，负责全局 Provider、主视图保活、桌面/移动主布局与顶层返回事件派发。 -->
 <script setup lang="ts">
 import {
   darkTheme,
@@ -836,6 +837,7 @@ const latestLogMessage = computed(
   grid-template-rows: var(--topbar-height) 1fr var(--bottom-bar-height);
   grid-template-columns: var(--sidebar-w) 1fr;
   height: 100vh;
+  height: 100dvh;
   /* 全局底层背景：纹理渐变 + 基色，侧边栏/顶栏/底栏透明后透出此层 */
   background-color: var(--color-sidebar-bg);
   background-image: var(--app-bg-texture);
@@ -848,10 +850,9 @@ const latestLogMessage = computed(
     "main"
     "bottomnav";
   grid-template-rows:
-    var(--safe-area-inset-top, env(safe-area-inset-top, 0px))
+    var(--safe-top)
     1fr calc(
-      var(--bottomnav-h) +
-        var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
+      var(--bottomnav-h) + var(--safe-bottom)
     );
   grid-template-columns: 1fr;
 }

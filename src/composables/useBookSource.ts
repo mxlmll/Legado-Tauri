@@ -405,10 +405,11 @@ export async function saveBookSource(
 /** 将开源阅读/Legado Android JSON 书源内容转换为 Tauri JS 书源并安装。 */
 export async function importLegacyJsonText(
   content: string,
+  smartExploreSubCategories = false,
 ): Promise<LegacyJsonImportResult> {
   return invokeWithTimeout<LegacyJsonImportResult>(
     "booksource_import_legacy_json_text",
-    { content },
+    { content, smartExploreSubCategories },
     70000,
   );
 }
@@ -416,10 +417,11 @@ export async function importLegacyJsonText(
 /** 从远程 URL 下载开源阅读/Legado Android JSON 书源，转换为 Tauri JS 书源并安装。 */
 export async function importLegacyJsonUrl(
   url: string,
+  smartExploreSubCategories = false,
 ): Promise<LegacyJsonImportResult> {
   return invokeWithTimeout<LegacyJsonImportResult>(
     "booksource_import_legacy_json_url",
-    { url },
+    { url, smartExploreSubCategories },
     70000,
   );
 }

@@ -166,6 +166,34 @@ const draftCategoriesLoading = ref(false);
 const draftCategoriesError = ref("");
 let categoryRequestToken = 0;
 
+function flattenExploreCategories(
+  categories: ExploreCategoryItem[],
+  parentName = "",
+): ExploreCategoryItem[] {
+  const out: ExploreCategoryItem[] = [];
+  for (const category of categories) {
+    out.push({
+      ...category,
+      children: undefined,
+      name: parentName ? `${parentName} / ${category.name}` : category.name,
+    });
+    const children = category.children ?? [];
+    if (children.length) {
+      out.push(
+        ...flattenExploreCategories(
+          children,
+          parentName ? `${parentName} / ${category.name}` : category.name,
+        ),
+      );
+    }
+  }
+  return out;
+}
+
+const draftSelectableCategories = computed(() =>
+  flattenExploreCategories(draftCategories.value),
+);
+
 const moduleBooks = reactive<Record<string, BookItem[]>>({});
 const moduleLoading = reactive<Record<string, boolean>>({});
 const moduleRefreshing = reactive<Record<string, boolean>>({});
@@ -581,24 +609,25 @@ function applyDraftCategories(
   preferredCategory?: string,
 ) {
   draftCategories.value = categories;
-  if (!categories.length) {
+  const selectableCategories = flattenExploreCategories(categories);
+  if (!selectableCategories.length) {
     draft.category = "";
     return;
   }
   if (
     draft.category &&
-    categories.some((category) => category.url === draft.category)
+    selectableCategories.some((category) => category.url === draft.category)
   ) {
     return;
   }
   if (
     preferredCategory &&
-    categories.some((category) => category.url === preferredCategory)
+    selectableCategories.some((category) => category.url === preferredCategory)
   ) {
     draft.category = preferredCategory;
     return;
   }
-  draft.category = categories[0].url;
+  draft.category = selectableCategories[0].url;
 }
 
 async function loadDraftCategories(
@@ -1432,7 +1461,7 @@ defineExpose({ openSettings });
               默认发现
             </button>
             <button
-              v-for="(category, index) in draftCategories"
+              v-for="(category, index) in draftSelectableCategories"
               :key="`${category.url}:${index}`"
               class="bs-rec-settings__cat"
               :class="{
