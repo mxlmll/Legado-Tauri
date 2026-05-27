@@ -124,10 +124,15 @@ onMounted(async () => {
         action-label="编辑 UA"
       >
         <template #summary>
-          <div class="panel-summary">
-            <div class="panel-summary__label">当前生效</div>
-            <div class="ua-current" :title="config.http_user_agent">
-              {{ config.http_user_agent }}
+          <div class="panel-summary panel-summary--compact">
+            <div class="summary-row summary-row--stacked">
+              <span class="summary-row__label">当前生效</span>
+              <span
+                class="summary-row__value summary-row__value--ua"
+                :title="config.http_user_agent"
+              >
+                {{ config.http_user_agent }}
+              </span>
             </div>
           </div>
         </template>
@@ -187,10 +192,28 @@ onMounted(async () => {
         action-label="打开探测配置"
       >
         <template #summary>
-          <div class="panel-summary">
-            <div>启用：{{ config.browser_probe_enabled ? '是' : '否' }}</div>
-            <div>探测 UA：{{ config.browser_probe_user_agent || '跟随 HTTP UA' }}</div>
-            <div>默认超时：{{ config.browser_probe_timeout_secs || 0 }} 秒</div>
+          <div class="panel-summary panel-summary--compact">
+            <div class="summary-row">
+              <span class="summary-row__label">启用</span>
+              <span class="summary-row__value">
+                {{ config.browser_probe_enabled ? '是' : '否' }}
+              </span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-row__label">探测 UA</span>
+              <span
+                class="summary-row__value summary-row__value--ua"
+                :title="config.browser_probe_user_agent || '跟随 HTTP UA'"
+              >
+                {{ config.browser_probe_user_agent || '跟随 HTTP UA' }}
+              </span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-row__label">默认超时</span>
+              <span class="summary-row__value">
+                {{ config.browser_probe_timeout_secs || 0 }} 秒
+              </span>
+            </div>
           </div>
         </template>
 
@@ -636,15 +659,51 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  width: 100%;
+  min-width: 0;
 }
 
-.panel-summary__label {
+.panel-summary--compact {
+  gap: 6px;
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.summary-row--stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panel-summary__label,
+.summary-row__label {
+  flex: none;
   font-size: var(--fs-12);
   font-weight: var(--fw-semibold);
   color: var(--color-text-soft);
 }
 
-.ua-current {
+.summary-row__label::after {
+  content: '：';
+}
+
+.summary-row--stacked .summary-row__label::after {
+  content: '';
+}
+
+.summary-row__value {
+  min-width: 0;
+  color: var(--color-text-soft);
+}
+
+.ua-current,
+.summary-row__value--ua {
   display: block;
   font-size: var(--fs-12);
   color: var(--color-text);
@@ -654,6 +713,14 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   opacity: 0.96;
+}
+
+.summary-row__value--ua {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .probe-panel {
@@ -761,5 +828,31 @@ onMounted(async () => {
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .panel-summary--compact {
+    gap: 5px;
+  }
+
+  .summary-row {
+    grid-template-columns: minmax(4.5em, auto) minmax(0, 1fr);
+  }
+
+  .summary-row__value--ua {
+    font-size: var(--fs-11);
+    line-height: 1.45;
+  }
+
+  .ua-current-card,
+  .ua-panel,
+  .probe-panel {
+    padding: var(--space-2);
+  }
+
+  .probe-row {
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
 }
 </style>

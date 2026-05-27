@@ -1,8 +1,15 @@
+<!-- TestSourcesTab — 书源批量测试、日志查看与按测试失败类型清理入口。 -->
 <script setup lang="ts">
 import { ref, nextTick, watch, computed, onMounted, onUnmounted } from 'vue';
+import { useMessage } from 'naive-ui';
+import { storeToRefs } from 'pinia';
+import { useBackAwareDialog as useDialog } from '@/composables/useBackAwareDialog';
+import { useBookSourceStore } from '@/stores';
+import { usePreferencesStore } from '@/stores/preferences';
 import {
   type BookSourceMeta,
   type TestStepResult,
+  deleteBookSources,
   runBookSourceTests,
 } from '../../composables/useBookSource';
 import { eventListen } from '../../composables/useEventBus';
@@ -10,6 +17,12 @@ import { eventListen } from '../../composables/useEventBus';
 const props = defineProps<{
   sources: BookSourceMeta[];
 }>();
+
+const message = useMessage();
+const dialog = useDialog();
+const bookSourceStore = useBookSourceStore();
+const prefStore = usePreferencesStore();
+const { devTools } = storeToRefs(prefStore);
 
 // ---- 测试状态 ----
 interface TestSourceState {
@@ -29,6 +42,7 @@ const batchLogs = ref<string[]>([]);
 const logFilter = ref<'all' | 'pass' | 'fail'>('all');
 const testProgress = ref({ current: 0, total: 0 });
 const testLogContainer = ref<HTMLDivElement | null>(null);
+const batchDeleting = ref(false);
 
 // ---- 设置 ----
 /** 单书源超时（秒），传给引擎 */
@@ -187,6 +201,43 @@ const failCount = computed(
   () => [...testStates.value.values()].filter((s) => s.allPassed === false).length,
 );
 
+const fullModeEnabled = computed(() => devTools.value.fullModeEnabled);
+
+type FailedDeleteMode = 'search' | 'explore' | 'any';
+
+function getFailedSources(mode: FailedDeleteMode): BookSourceMeta[] {
+  return props.sources.filter((src) => {
+    const state = testStates.value.get(src.fileName);
+    if (!state || state.status !== 'done') {
+      return false;
+    }
+    if (mode === 'any') {
+      return state.allPassed === false;
+    }
+    return state.steps.some((step) => step.step === mode && step.passed === false);
+  });
+}
+
+const failedDeleteCounts = computed<Record<FailedDeleteMode, number>>(() => ({
+  search: getFailedSources('search').length,
+  explore: getFailedSources('explore').length,
+  any: getFailedSources('any').length,
+}));
+
+const failedDeleteOptions = computed(() => [
+  { label: `删除搜索失败 (${failedDeleteCounts.value.search})`, key: 'search' },
+  { label: `删除发现失败 (${failedDeleteCounts.value.explore})`, key: 'explore' },
+  { label: `删除任意错误 (${failedDeleteCounts.value.any})`, key: 'any' },
+]);
+
+const canDeleteFailedSources = computed(
+  () =>
+    fullModeEnabled.value &&
+    !testRunning.value &&
+    !batchDeleting.value &&
+    failedDeleteCounts.value.any > 0,
+);
+
 /** 按日志过滤器生成当前应显示的日志行 */
 const filteredLogs = computed(() => {
   const lines: string[] = [];
@@ -248,6 +299,10 @@ async function runSingleTest(fileName: string) {
 }
 
 async function runAllTests() {
+  if (!fullModeEnabled.value) {
+    message.warning('完全体模式激活后才能使用全部测试');
+    return;
+  }
   testRunning.value = true;
   batchLogs.value = [];
   initTestStates();
@@ -302,6 +357,74 @@ function clearLogs() {
     state.logs = [];
   }
 }
+
+function getFailedDeleteLabel(mode: FailedDeleteMode) {
+  switch (mode) {
+    case 'search':
+      return '搜索失败';
+    case 'explore':
+      return '发现失败';
+    default:
+      return '任意错误';
+  }
+}
+
+function handleFailedDeleteSelect(key: string | number) {
+  if (key !== 'search' && key !== 'explore' && key !== 'any') {
+    return;
+  }
+  confirmDeleteFailedSources(key);
+}
+
+function confirmDeleteFailedSources(mode: FailedDeleteMode) {
+  if (!fullModeEnabled.value) {
+    message.warning('完全体模式激活后才能删除未通过书源');
+    return;
+  }
+  if (testRunning.value || batchDeleting.value) {
+    return;
+  }
+  const targets = getFailedSources(mode);
+  if (targets.length === 0) {
+    message.info(`没有已测试且${getFailedDeleteLabel(mode)}的书源`);
+    return;
+  }
+  dialog.warning({
+    title: `删除${getFailedDeleteLabel(mode)}书源`,
+    content: `确认删除 ${targets.length} 个${getFailedDeleteLabel(mode)}的书源？此操作将删除磁盘文件，不可恢复。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      batchDeleting.value = true;
+      try {
+        const result = await deleteBookSources(
+          targets.map((src) => ({
+            fileName: src.fileName,
+            sourceDir: src.sourceDir,
+          })),
+        );
+        for (const item of result.deleted) {
+          testStates.value.delete(item.fileName);
+        }
+        if (result.deleted.length > 0) {
+          message.success(`已删除 ${result.deleted.length} 个书源`);
+          await bookSourceStore.reloadSources();
+        }
+        if (result.errors.length > 0) {
+          message.warning(
+            `有 ${result.errors.length} 个书源删除失败：${result.errors[0].message}`,
+          );
+        } else if (result.deleted.length === 0) {
+          message.info('没有可删除的书源');
+        }
+      } catch (e: unknown) {
+        message.error(`删除失败: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        batchDeleting.value = false;
+      }
+    },
+  });
+}
 </script>
 
 <template>
@@ -312,16 +435,34 @@ function clearLogs() {
         type="primary"
         size="small"
         :loading="testRunning"
-        :disabled="testRunning"
+        :disabled="testRunning || !fullModeEnabled"
         @click="runAllTests"
       >
         {{ testRunning ? '测试中...' : '全部测试' }}
       </n-button>
+      <n-dropdown
+        trigger="click"
+        :options="failedDeleteOptions"
+        :disabled="!canDeleteFailedSources"
+        @select="handleFailedDeleteSelect"
+      >
+        <n-button
+          type="error"
+          size="small"
+          :loading="batchDeleting"
+          :disabled="!canDeleteFailedSources"
+        >
+          删除未通过
+        </n-button>
+      </n-dropdown>
       <span v-if="testRunning" class="bv-test__progress">
         {{ testProgress.current }} / {{ testProgress.total }}
       </span>
       <span v-else-if="testStates.size > 0" class="bv-test__progress">
         ✅ {{ passCount }} ❌ {{ failCount }}
+      </span>
+      <span v-if="!fullModeEnabled" class="bv-test__progress">
+        完全体模式未激活
       </span>
 
       <!-- 设置区 -->

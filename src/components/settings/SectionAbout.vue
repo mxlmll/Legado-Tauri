@@ -32,6 +32,7 @@ import {
 } from "@/utils/appUpdate";
 import packageJson from "../../../package.json";
 import tauriConfig from "../../../src-tauri/tauri.conf.json";
+import FullModeUnlockDialog from "./FullModeUnlockDialog.vue";
 import SettingItem from "./SettingItem.vue";
 import SettingSection from "./SettingSection.vue";
 
@@ -49,6 +50,7 @@ const rawUserAgent = ref("读取中");
 const updateChecking = ref(false);
 const updateResult = ref<AppUpdateCheckResult | null>(null);
 const updateError = ref("");
+const showFullModeUnlockDialog = ref(false);
 
 const updateChannelOptions = [
   { label: "正式", value: "stable" },
@@ -571,13 +573,18 @@ onMounted(async () => {
           </div>
           <div class="about-badge-row">
             <span class="about-badge-row__label">完全体模式</span>
-            <n-tag
-              size="small"
-              :type="devTools.fullModeEnabled ? 'success' : 'default'"
-              :bordered="false"
-            >
-              {{ devTools.fullModeEnabled ? "已激活" : "未激活" }}
-            </n-tag>
+            <div class="about-badge-row__actions">
+              <n-tag
+                size="small"
+                :type="devTools.fullModeEnabled ? 'success' : 'default'"
+                :bordered="false"
+              >
+                {{ devTools.fullModeEnabled ? "已激活" : "未激活" }}
+              </n-tag>
+              <n-button size="tiny" quaternary @click="showFullModeUnlockDialog = true">
+                {{ devTools.fullModeEnabled ? "管理" : "解锁" }}
+              </n-button>
+            </div>
           </div>
         </div>
       </div>
@@ -599,6 +606,7 @@ onMounted(async () => {
       </div>
     </div>
   </SettingSection>
+  <FullModeUnlockDialog v-model:show="showFullModeUnlockDialog" />
 </template>
 
 <style scoped>
@@ -736,6 +744,12 @@ onMounted(async () => {
 .about-badge-row__label {
   font-size: var(--fs-13);
   color: var(--color-text-soft);
+}
+
+.about-badge-row__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .about-update-actions {

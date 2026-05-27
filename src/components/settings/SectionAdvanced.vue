@@ -1,7 +1,8 @@
+<!-- SectionAdvanced — 高级设置中的服务模式、Web 服务器和前端资源目录配置。 -->
 <script setup lang="ts">
 import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
-import { ref, onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { hasNativeTransport, isMobile, isTauri } from '@/composables/useEnv';
 import { invokeWithTimeout } from '@/composables/useInvoke';
 import {
@@ -135,6 +136,11 @@ async function pickDistDir() {
 }
 
 async function clearDistDir() {
+  if (!config.value.web_server_dist_path) {
+    message.info('当前未设置前端目录');
+    return;
+  }
+
   const wasEnabled = config.value.web_server_enabled;
   webServerDistRestarting.value = true;
   try {
@@ -329,21 +335,23 @@ async function saveWebServerPort() {
           :value="config.web_server_dist_path || ''"
           size="small"
           readonly
+          clearable
           placeholder="未设置，使用内置前端资源"
           class="service-input"
           :title="config.web_server_dist_path || ''"
+          @clear="clearDistDir"
         />
         <n-button size="small" :loading="webServerDistRestarting" @click="pickDistDir">
           选择
         </n-button>
         <n-button
-          v-if="config.web_server_dist_path"
           size="small"
           quaternary
-          :disabled="webServerDistRestarting"
+          type="warning"
+          :disabled="webServerDistRestarting || !config.web_server_dist_path"
           @click="clearDistDir"
         >
-          清除
+          关闭外部目录
         </n-button>
       </div>
     </SettingItem>
